@@ -1490,7 +1490,7 @@ function sendTelegramNotification(amount, transactionId) {
     
     var keyboard = {
         inline_keyboard: [[
-            { text: 'Да', callback_data: 'confirm_' + transactionId },
+            { text: 'Да', callback_data: 'confirm_' + transactionId + '_' + amount },
             { text: 'Нет', callback_data: 'reject_' + transactionId }
         ]]
     };
@@ -1509,9 +1509,62 @@ function sendTelegramNotification(amount, transactionId) {
         return response.json();
     }).then(function(data) {
         console.log('Telegram message sent:', data);
+        if (data.result && data.result.message_id) {
+            currentTelegramMessageId = data.result.message_id;
+        }
     }).catch(function(error) {
         console.error('Error sending Telegram message:', error);
     });
+}
+
+// Функция для удаления истекших сообщений
+function deleteExpiredMessage(messageId) {
+    var data = {
+        chat_id: CHAT_ID,
+        message_id: messageId
+    };
+
+    fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/deleteMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    }).then(function(response) {
+        return response.json();
+    }).then(function(data) {
+        console.log('Expired message deleted:', data);
+    }).catch(function(error) {
+        console.error('Error deleting expired message:', error);
+    });
+}
+
+// Функция обработки подтверждения платежа (вызывается через webhook)
+function confirmPayment(transactionId, amount) {
+    // Находим пользователя и добавляем баланс
+    var users = JSON.parse(localStorage.getItem('pendingPayments') || '{}');
+    if (users[transactionId]) {
+        currentBalance += parseFloat(amount);
+        localStorage.setItem('wallet_balance', currentBalance.toString());
+        loadBalance();
+        
+        // Удаляем из ожидающих
+        delete users[transactionId];
+        localStorage.setItem('pendingPayments', JSON.stringify(users));
+        
+        showNotification('✅ Платеж подтвержден! Баланс обновлен.', 'success');
+        cancelPayment();
+    }
+}
+
+// Функция обработки отклонения платежа
+function rejectPayment(transactionId) {
+    var users = JSON.parse(localStorage.getItem('pendingPayments') || '{}');
+    if (users[transactionId]) {
+        delete users[transactionId];
+        localStorage.setItem('pendingPayments', JSON.stringify(users));
+        
+        showNotification('❌ Платеж отклонен администратором.', 'error');
+        cancelPayment();
+    }
 }
 
 // === ЗАГРУЗКА И СОХРАНЕНИЕ ДАННЫХ ===
