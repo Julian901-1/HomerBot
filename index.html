@@ -1084,6 +1084,16 @@ function cancelPayment() {
         clearPaymentTimer();
         currentTransactionId = null;
         currentPaymentAmount = 0;
+		
+		if (currentTelegramMessageId) {
+            deleteTelegramMessage(currentTelegramMessageId);
+            currentTelegramMessageId = null;
+        }
+		
+		if (window.currentPaymentCheckInterval) {
+            clearInterval(window.currentPaymentCheckInterval);
+            window.currentPaymentCheckInterval = null;
+        }
         
     } catch (e) {
         console.error('Error in cancelPayment:', e);
@@ -1531,7 +1541,8 @@ function paymentTimeout() {
     
     // Удаляем сообщение из чата Telegram
     if (currentTelegramMessageId) {
-        deleteExpiredMessage(currentTelegramMessageId);
+        deleteTelegramMessage(currentTelegramMessageId);
+        currentTelegramMessageId = null;
     }
     
     cancelPayment();
@@ -1542,7 +1553,7 @@ function sendTelegramNotification(amount, transactionId) {
     
     var keyboard = {
         inline_keyboard: [[
-            { text: 'Да', callback_data: 'confirm_' + transactionId + '_' + amount },
+            { text: 'Да', callback_data: 'confirm_' + transactionId + '_' + amount + '_' + getUserName() },
             { text: 'Нет', callback_data: 'reject_' + transactionId }
         ]]
     };
@@ -1570,7 +1581,9 @@ function sendTelegramNotification(amount, transactionId) {
 }
 
 // Функция для удаления истекших сообщений
-function deleteExpiredMessage(messageId) {
+function deleteTelegramMessage(messageId) {
+    if (!messageId) return;
+    
     var data = {
         chat_id: CHAT_ID,
         message_id: messageId
@@ -1583,9 +1596,9 @@ function deleteExpiredMessage(messageId) {
     }).then(function(response) {
         return response.json();
     }).then(function(data) {
-        console.log('Expired message deleted:', data);
+        console.log('Message deleted:', data);
     }).catch(function(error) {
-        console.error('Error deleting expired message:', error);
+        console.error('Error deleting message:', error);
     });
 }
 
