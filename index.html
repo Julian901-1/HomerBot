@@ -412,14 +412,7 @@
         }
 
         .strategy-option.balanced {
-            background: linear-gradient(135deg, #e3f2fd, #bbdefb, #90caf9);
-            animation: shimmer 3s infinite;
-        }
 
-        @keyframes shimmer {
-            0% { opacity: 0.8; }
-            50% { opacity: 1; }
-            100% { opacity: 0.8; }
         }
 
         .strategy-option:hover {
@@ -501,32 +494,27 @@
         }
 
         /* Pop-up уведомление */
-        .popup-notification {
-            position: fixed;
-            top: -100px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #4CAF50;
-            color: white;
-            padding: 16px 24px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            z-index: 1001;
-            font-size: 14px;
-            font-weight: 500;
-            text-align: center;
-            max-width: 90%;
-            transition: all 0.3s ease;
-        }
+ .popup-notification {
+    position: fixed;
+    top: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #4CAF50;
+    color: white;
+    padding: 16px 24px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 1001;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    max-width: 90%;
+    /* transition перенесен в .show */
+}
 
-        .popup-notification.show {
-            top: 20px;
-        }
-
-        .popup-notification.hide {
-            top: -100px;
-            opacity: 0;
-        }
+.popup-notification.show {
+    transition: all 0.3s ease;
+}
 
         .popup-notification.error {
             background: #f44336;
@@ -822,7 +810,7 @@ var currentTelegramMessageId = null;
 var BOT_TOKEN = '7631840452:AAH4O93qQ6J914x5FhPTQX7YhJC3bTiJ_XA';
 var CHAT_ID = '487525838';
 
-// URL Google Apps Script - ЗАМЕНИТЕ НА ВАШ РЕАЛЬНЫЙ URL
+// URL Google Apps Script
 var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxJAGSaUY4K8F6NbZ23ExyZ0ksvZTn372d1zrFyk4MMrsdxSbcnKSquNEjuTmqmIdGq/exec';
 
 // Настройки процентных ставок
@@ -929,8 +917,9 @@ function showNotification(message, type, duration) {
         var notification = document.getElementById('popupNotification');
         if (!notification) return;
         
-        // Сбрасываем все классы
+        // Сбрасываем все классы и стили
         notification.className = 'popup-notification';
+        notification.style.top = '-100px'; // Явно устанавливаем начальную позицию
         notification.textContent = message;
         
         if (type === 'error') {
@@ -940,17 +929,20 @@ function showNotification(message, type, duration) {
         // Показываем уведомление
         setTimeout(function() {
             notification.classList.add('show');
+            notification.style.top = '20px'; // Явно устанавливаем видимую позицию
         }, 100);
         
-        // Скрываем через указанное время (по умолчанию 3 секунды)
+        // Скрываем через указанное время
         var hideDelay = duration || 3000;
         setTimeout(function() {
             notification.classList.remove('show');
-            notification.classList.add('hide');
+            notification.style.top = '-100px'; // Явно возвращаем в скрытую позицию
             
-            // Полностью убираем через время анимации
+            // Полностью сбрасываем через время анимации
             setTimeout(function() {
-                notification.classList.remove('hide');
+                notification.className = 'popup-notification';
+                notification.style.top = '-100px';
+                notification.textContent = '';
             }, 300);
         }, hideDelay);
         
@@ -960,6 +952,31 @@ function showNotification(message, type, duration) {
 }
 
 // === ФУНКЦИИ ОБРАБОТКИ СУММ И ПЛАТЕЖЕЙ ===
+function checkPaymentConfirmation() {
+    if (!currentTransactionId || !currentPaymentAmount) return;
+    
+    // Проверяем статус платежа через Google Sheets
+    fetch(SCRIPT_URL + '?action=checkPayment&transactionId=' + currentTransactionId)
+    .then(function(response) {
+        return response.json();
+    })
+    .then(function(result) {
+        if (result.confirmed) {
+            // Платеж подтвержден - обновляем баланс
+            currentBalance += currentPaymentAmount;
+            localStorage.setItem('wallet_balance', currentBalance.toString());
+            updateBalanceDisplay();
+            showNotification('✅ Платеж подтвержден! Баланс обновлен.', 'success');
+            
+            // Очищаем данные о платеже
+            cancelPayment();
+        }
+    })
+    .catch(function(error) {
+        console.error('Error checking payment:', error);
+    });
+}
+
 function selectAmount(amount) {
     console.log('selectAmount called with:', amount);
     try {
@@ -1019,7 +1036,16 @@ function generatePayment() {
         startPaymentTimer();
 
         // Отправляем уведомление в Telegram бот
-        sendTelegramNotification(amount, transactionId);
+   sendTelegramNotification(amount, transactionId);
+    
+    // Запускаем проверку статуса платежа каждые 5 секунд
+    var paymentCheckInterval = setInterval(function() {
+        checkPaymentConfirmation();
+    }, 5000);
+    
+    // Сохраняем интервал для очистки при отмене
+    window.currentPaymentCheckInterval = paymentCheckInterval;
+		
         
     } catch (e) {
         console.error('Error in generatePayment:', e);
@@ -1047,6 +1073,12 @@ function cancelPayment() {
         for (var i = 0; i < btns.length; i++) {
             btns[i].classList.remove('selected');
         }
+		
+		// Очищаем интервал проверки платежа
+    if (window.currentPaymentCheckInterval) {
+        clearInterval(window.currentPaymentCheckInterval);
+        window.currentPaymentCheckInterval = null;
+    }
         
         selectedAmount = 0;
         clearPaymentTimer();
