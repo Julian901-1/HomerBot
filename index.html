@@ -1481,50 +1481,11 @@ function sendStrategyChangeNotification(strategy) {
         console.error('Error sending strategy notification:', error);
     });
 }
-    
-    var userId = getUserName();
-var message = 'Пользователь ' + (userId.startsWith('@') ? userId : '@' + userId) + ' сменил стратегию на "' + strategyNames[strategy] + '"';
-    
-    var data = {
-        chat_id: CHAT_ID,
-        text: message
-    };
-
-    fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    }).then(function(response) {
-        return response.json();
-    }).then(function(data) {
-        console.log('Strategy change notification sent:', data);
-    }).catch(function(error) {
-        console.error('Error sending strategy notification:', error);
-    });
-}
 
 function sendWithdrawNotification(amount, phone, commission, finalAmount) {
     var userId = getUserName();
     var message = 'Новая заявка на вывод\n\nПользователь: ' + userId + '\nЗапрошенная сумма: ' + formatNumber(amount.toString()) + ' ✧\nКомиссия: ' + commission.toFixed(2) + ' ✧\nТелефон: +' + phone + '\n\nК выводу: ' + formatNumber(finalAmount.toFixed(2)) + ' ✧';
     
-    var data = {
-        chat_id: CHAT_ID,
-        text: message
-    };
-
-    fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    }).then(function(response) {
-        return response.json();
-    }).then(function(data) {
-        console.log('Withdraw notification sent:', data);
-    }).catch(function(error) {
-        console.error('Error sending withdraw notification:', error);
-    });
-}
-
     var data = {
         chat_id: CHAT_ID,
         text: message
