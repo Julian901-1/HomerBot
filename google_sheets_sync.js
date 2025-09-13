@@ -671,6 +671,59 @@ function createResponse(data) {
 }
 
 /**
+ * ИСПРАВЛЕНИЕ WEBHOOK URL - запускать из редактора
+ */
+function fixWebhookUrl() {
+  Logger.log('=== ИСПРАВЛЕНИЕ WEBHOOK URL ===');
+  
+  // Правильный URL вашего развернутого веб-приложения
+  const correctWebhookUrl = 'https://script.google.com/macros/s/AKfycby63juAkVub8oT0LZT2K8bpQ8l4FzfOTPWdeEYRSvTQXqiO5mfCj3Qz07r-4Cx276WePQ/exec';
+  
+  try {
+    Logger.log('Текущий webhook перед исправлением:');
+    const currentInfo = getWebhookInfo();
+    Logger.log(JSON.stringify(currentInfo));
+    
+    Logger.log('Устанавливаем правильный webhook URL: ' + correctWebhookUrl);
+    
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`;
+    const payload = {
+      url: correctWebhookUrl,
+      allowed_updates: ['callback_query', 'message']
+    };
+    
+    const response = UrlFetchApp.fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      payload: JSON.stringify(payload)
+    });
+    
+    const result = JSON.parse(response.getContentText());
+    Logger.log('Результат установки webhook: ' + JSON.stringify(result));
+    
+    if (result.ok) {
+      Logger.log('✅ Webhook успешно исправлен!');
+      
+      // Проверяем исправленный webhook
+      Logger.log('Проверяем исправленный webhook:');
+      const newInfo = getWebhookInfo();
+      Logger.log(JSON.stringify(newInfo));
+      
+      // Отправляем уведомление админу
+      sendAdminNotification('🔗 Webhook URL исправлен!\n\nНовый URL: ' + correctWebhookUrl + '\n\nКнопки теперь должны работать!');
+      
+    } else {
+      Logger.log('❌ Ошибка установки webhook: ' + result.description);
+    }
+    
+  } catch (error) {
+    Logger.log('❌ Ошибка исправления webhook: ' + error.toString());
+  }
+  
+  Logger.log('=== ИСПРАВЛЕНИЕ ЗАВЕРШЕНО ===');
+}
+
+/**
  * Тестовая функция для запуска из редактора Google Apps Script
  */
 function testFromEditor() {
