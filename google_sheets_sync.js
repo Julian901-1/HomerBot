@@ -76,6 +76,7 @@ function doGet(e) {
     Logger.log('Full event object: ' + JSON.stringify(e));
     Logger.log('Parameters object: ' + JSON.stringify(e.parameter || {}));
     Logger.log('Parameter keys: ' + Object.keys(e.parameter || {}));
+    Logger.log('Parameter values: ' + Object.values(e.parameter || {}));
     
     if (!e.parameter) {
       Logger.log('No parameters found in request');
@@ -89,6 +90,7 @@ function doGet(e) {
     const action = e.parameter.action;
     Logger.log('Extracted action: "' + action + '"');
     Logger.log('Action type: ' + typeof action);
+    Logger.log('Action equals "sendNotification": ' + (action === 'sendNotification'));
     
     switch(action) {
       case 'getBalance':

@@ -1680,6 +1680,8 @@ function sendTelegramNotification(amount, transactionId) {
                  '&timestamp=' + Date.now();
     
     console.log('🌐 Отправляем GET запрос:', getUrl);
+    console.log('🔍 URL длина:', getUrl.length);
+    console.log('🔍 URL части:', getUrl.split('&'));
 
     fetch(getUrl, {
         method: 'GET'
@@ -1872,26 +1874,50 @@ function testNotification() {
     console.log('🧪 Тестируем отправку уведомления...');
     showNotification('🧪 Отправляем тестовое уведомление...', 'info');
     
-    var testAmount = 1000;
-    var testTransactionId = 'TEST' + Date.now().toString().slice(-6);
+    var testAmount = 100;
+    var testTransactionId = 'TEST123';
+    var testUserId = '@test';
+    var testMessage = 'Test deposit message';
     
     console.log('🔍 ДИАГНОСТИКА:');
     console.log('SCRIPT_URL:', SCRIPT_URL);
     console.log('Test amount:', testAmount);
     console.log('Test transaction ID:', testTransactionId);
-    console.log('User name:', getUserName());
+    console.log('User name:', testUserId);
     
-    // Проверим доступность Google Apps Script
-    console.log('🌐 Проверяем доступность Google Apps Script...');
-    fetch(SCRIPT_URL + '?action=test&timestamp=' + Date.now())
+    // Прямо тестируем sendNotification с простыми параметрами
+    var testUrl = SCRIPT_URL + '?action=sendNotification&' + 
+                  'type=deposit&' +
+                  'userId=' + encodeURIComponent(testUserId) +
+                  '&amount=' + encodeURIComponent(testAmount) +
+                  '&transactionId=' + encodeURIComponent(testTransactionId) +
+                  '&message=' + encodeURIComponent(testMessage) +
+                  '&timestamp=' + Date.now();
+    
+    console.log('🌐 Тестовый URL:', testUrl);
+    console.log('🔍 URL длина:', testUrl.length);
+    
+    fetch(testUrl)
     .then(function(response) {
-        console.log('✅ GAS доступен, статус:', response.status);
-        console.log('🚀 Отправляем тестовое уведомление...');
-        sendTelegramNotification(testAmount, testTransactionId);
+        console.log('✅ Response получен, статус:', response.status);
+        return response.text();
+    })
+    .then(function(text) {
+        console.log('📄 Response text:', text);
+        try {
+            const json = JSON.parse(text);
+            if (json.success) {
+                showNotification('✅ Тестовое уведомление отправлено!', 'success');
+            } else {
+                showNotification('❌ Ошибка: ' + JSON.stringify(json), 'error');
+            }
+        } catch (e) {
+            showNotification('❌ Неправильный JSON: ' + text, 'error');
+        }
     })
     .catch(function(error) {
-        console.error('❌ GAS недоступен:', error);
-        showNotification('❌ Ошибка подключения к серверу: ' + error.message, 'error');
+        console.error('❌ Ошибка тестирования:', error);
+        showNotification('❌ Ошибка подключения: ' + error.message, 'error');
     });
 }
 
