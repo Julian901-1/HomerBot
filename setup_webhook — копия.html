@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройка Webhook</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; color: #0c5460; }
+        button { padding: 12px 24px; margin: 10px 0; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .danger { background-color: #dc3545; }
+        .danger:hover { background-color: #c82333; }
+        code { background-color: #f8f9fa; padding: 2px 4px; border-radius: 3px; font-family: monospace; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 4px; font-family: monospace; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Настройка Telegram Webhook для HomerBot</h1>
+
+    <div class="section info">
+        <h3>ℹ️ Что такое Webhook?</h3>
+        <p>Webhook нужен для того, чтобы Telegram мог отправлять уведомления о нажатии кнопок "Да/Нет" 
+        напрямую в ваш Google Apps Script. Без него кнопки в уведомлениях работать не будут.</p>
+    </div>
+
+    <div class="section">
+        <h3>1. Проверка текущего состояния</h3>
+        <button onclick="checkWebhookInfo()">Проверить текущий webhook</button>
+        <div id="webhookInfo" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h3>2. Настройка webhook</h3>
+        <p>URL Google Apps Script: <code id="scriptUrl">Загружается...</code></p>
+        <button onclick="setupWebhook()">Настроить webhook</button>
+        <div id="setupResult" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h3>3. Тестирование</h3>
+        <button onclick="testWebhook()">Тест webhook (отправить сообщение с кнопками)</button>
+        <div id="testResult" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h3>4. Удаление webhook (если нужно)</h3>
+        <button class="danger" onclick="deleteWebhook()">Удалить webhook</button>
+        <div id="deleteResult" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h3>5. Прямая настройка (альтернативный способ)</h3>
+        <p>Если автоматическая настройка не работает, выполните эти команды в Google Apps Script:</p>
+        <ol>
+            <li>Откройте ваш Google Apps Script проект</li>
+            <li>Нажмите на функцию <code>setupTelegramWebhook</code></li>
+            <li>Нажмите "Выполнить"</li>
+            <li>Проверьте логи выполнения</li>
+        </ol>
+    </div>
+
+<script>
+// Конфигурация (должна совпадать с вашими настройками)
+var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby63juAkVub8oT0LZT2K8bpQ8l4FzfOTPWdeEYRSvTQXqiO5mfCj3Qz07r-4Cx276WePQ/exec';
+var BOT_TOKEN = '7631840452:AAH4O93qQ6J914x5FhPTQX7YhJC3bTiJ_XA';
+var CHAT_ID = '487525838';
+
+// Показываем URL скрипта
+document.getElementById('scriptUrl').textContent = SCRIPT_URL;
+
+function showResult(elementId, text, type = 'info') {
+    const element = document.getElementById(elementId);
+    element.textContent = text;
+    element.className = 'result ' + type;
+}
+
+function checkWebhookInfo() {
+    showResult('webhookInfo', 'Проверяем webhook через Google Apps Script...', 'info');
+    
+    // Используем Google Apps Script как прокси
+    fetch(SCRIPT_URL + '?action=getWebhookInfo&timestamp=' + Date.now())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Webhook info:', data);
+        
+        if (data.result && data.result.ok) {
+            const info = data.result.result;
+            let resultText = `Статус: ${info.url ? 'Установлен' : 'Не установлен'}\n`;
+            if (info.url) {
+                resultText += `URL: ${info.url}\n`;
+                resultText += `Ожидающих обновлений: ${info.pending_update_count}\n`;
+                if (info.last_error_date) {
+                    resultText += `Последняя ошибка: ${new Date(info.last_error_date * 1000).toLocaleString()}\n`;
+                    resultText += `Сообщение ошибки: ${info.last_error_message}\n`;
+                }
+            }
+            
+            const type = info.url === SCRIPT_URL ? 'success' : (info.url ? 'error' : 'info');
+            showResult('webhookInfo', resultText, type);
+        } else if (data.error) {
+            showResult('webhookInfo', `Ошибка: ${data.error}`, 'error');
+        } else {
+            showResult('webhookInfo', 'Неожиданный ответ от сервера', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error checking webhook:', error);
+        showResult('webhookInfo', `❌ ОШИБКА: Не удается подключиться к Google Apps Script\n\nВозможные причины:\n1. Google Apps Script не развернут\n2. Неправильный URL: ${SCRIPT_URL}\n3. Нет прав доступа\n\n💡 РЕШЕНИЕ: Настройте webhook вручную в Google Apps Script`, 'error');
+    });
+}
+
+function setupWebhook() {
+    showResult('setupResult', 'Настраиваем webhook...', 'info');
+    
+    // Отправляем запрос на настройку webhook через Google Apps Script
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setupWebhook' })
+    })
+    .then(response => response.json())
+    .then(result => {
+        console.log('Setup result:', result);
+        
+        if (result.success) {
+            showResult('setupResult', '✅ Webhook настроен успешно!', 'success');
+            // Проверяем результат
+            setTimeout(checkWebhookInfo, 2000);
+        } else {
+            showResult('setupResult', `❌ Ошибка настройки: ${result.error || 'Неизвестная ошибка'}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Setup error:', error);
+        
+        // Fallback: прямая настройка через Telegram API
+        fallbackSetupWebhook();
+    });
+}
+
+function fallbackSetupWebhook() {
+    showResult('setupResult', '💡 ИНСТРУКЦИЯ: Настройте webhook вручную в Google Apps Script', 'info');
+    
+    const instructions = `
+❌ Автоматическая настройка недоступна из браузера
+
+✅ РЕШЕНИЕ - выполните в Google Apps Script:
+
+1. Откройте ваш Google Apps Script проект
+2. Найдите функцию: setupTelegramWebhook  
+3. Нажмите "Выполнить" (▶️)
+4. Дайте разрешения при первом запуске
+5. Проверьте логи - должно быть "ok: true"
+
+🔗 URL для webhook: ${SCRIPT_URL}
+
+После настройки обновите эту страницу и проверьте статус.
+    `;
+    
+    showResult('setupResult', instructions, 'info');
+}
+
+function testWebhook() {
+    showResult('testResult', 'Отправляем тестовое сообщение через Google Apps Script...', 'info');
+    
+    // Отправляем через Google Apps Script
+    const testData = {
+        action: 'sendTestMessage',
+        chatId: CHAT_ID,
+        message: '🧪 Тест webhook - нажмите любую кнопку'
+    };
+    
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testData)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(result => {
+        console.log('Test result:', result);
+        
+        if (result.success) {
+            showResult('testResult', '✅ Тестовое сообщение отправлено! Проверьте Telegram чат и нажмите кнопку.\n\n📱 Если кнопки работают - webhook настроен правильно!', 'success');
+        } else {
+            showResult('testResult', `❌ Ошибка отправки: ${result.error || 'Неизвестная ошибка'}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Test error:', error);
+        showResult('testResult', `❌ Не удается отправить тест через Google Apps Script\n\nОшибка: ${error.toString()}\n\n💡 Убедитесь что Google Apps Script развернут правильно`, 'error');
+    });
+}
+
+function deleteWebhook() {
+    if (!confirm('Вы уверены, что хотите удалить webhook? Кнопки в уведомлениях перестанут работать.')) {
+        return;
+    }
+    
+    showResult('deleteResult', 'Удаляем webhook...', 'info');
+    
+    fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteWebhook`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.ok) {
+            showResult('deleteResult', '✅ Webhook удален', 'success');
+            setTimeout(checkWebhookInfo, 2000);
+        } else {
+            showResult('deleteResult', `❌ Ошибка удаления: ${data.description}`, 'error');
+        }
+    })
+    .catch(error => {
+        showResult('deleteResult', `❌ Ошибка сети: ${error.toString()}`, 'error');
+    });
+}
+
+// Автоматическая проверка при загрузке
+window.addEventListener('load', function() {
+    console.log('Webhook setup tool loaded');
+    setTimeout(checkWebhookInfo, 1000);
+});
+</script>
+
+</body>
+</html>
