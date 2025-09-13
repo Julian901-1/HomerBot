@@ -792,6 +792,14 @@
     </div>
 
 <script>
+// Дополнительная инициализация для Telegram
+if (window.Telegram && window.Telegram.WebApp) {
+    window.Telegram.WebApp.ready();
+    window.Telegram.WebApp.expand();
+    console.log('Telegram WebApp initialized');
+} else {
+    console.log('Not in Telegram environment - using test data');
+}
 // Глобальные переменные
 var currentBalance = 0;
 var selectedAmount = 0;
@@ -810,7 +818,7 @@ var BOT_TOKEN = '7631840452:AAH4O93qQ6J914x5FhPTQX7YhJC3bTiJ_XA';
 var CHAT_ID = '487525838';
 
 // URL Google Apps Script
-var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxJAGSaUY4K8F6NbZ23ExyZ0ksvZTn372d1zrFyk4MMrsdxSbcnKSquNEjuTmqmIdGq/exec';
+var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby63juAkVub8oT0LZT2K8bpQ8l4FzfOTPWdeEYRSvTQXqiO5mfCj3Qz07r-4Cx276WePQ/exec';
 
 // Настройки процентных ставок
 var INTEREST_RATES = {
@@ -1726,15 +1734,21 @@ function initApp() {
         console.log('App initialized successfully');
         
         // Тестовый баланс для демонстрации
-        setTimeout(function() {
-            if (currentBalance === 0) {
-                console.log('Setting test balance for demonstration');
-                currentBalance = 1000;
-                localStorage.setItem('wallet_balance', currentBalance.toString());
-                updateBalanceDisplay();
-                startInterestAccrual();
-            }
-        }, 2000);
+setTimeout(function() {
+    if (currentBalance === 0) {
+        console.log('Setting test balance for demonstration');
+        currentBalance = 1000;
+        localStorage.setItem('wallet_balance', currentBalance.toString());
+        updateBalanceDisplay();
+        startInterestAccrual();
+    }
+    
+    // Принудительно обновляем отображение
+    updateBalanceDisplay();
+    
+    // Пробуем загрузить с сервера
+    loadBalanceFromSheet();
+}, 1000); // Уменьшил время ожидания
         
     } catch (e) {
         console.error('Error in initApp:', e);
