@@ -411,10 +411,6 @@
             transition: all 0.2s ease;
         }
 
-        .strategy-option.balanced {
-
-        }
-
         .strategy-option:hover {
             transform: translateX(4px);
         }
@@ -458,10 +454,11 @@
             flex: 1;
         }
 
-        .strategy-name {
-            font-weight: 500;
-            margin-bottom: 4px;
-        }
+.strategy-name {
+    font-weight: 500;
+    margin-bottom: 4px;
+    color: var(--tg-theme-text-color, #000);
+}
 
         .strategy-desc {
             font-size: 13px;
@@ -494,7 +491,7 @@
         }
 
         /* Pop-up уведомление */
- .popup-notification {
+.popup-notification {
     position: fixed;
     top: -100px;
     left: 50%;
@@ -509,11 +506,13 @@
     font-weight: 500;
     text-align: center;
     max-width: 90%;
-    /* transition перенесен в .show */
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
 }
 
 .popup-notification.show {
-    transition: all 0.3s ease;
+    top: 20px;
+    opacity: 1;
 }
 
         .popup-notification.error {
@@ -589,7 +588,7 @@
 </head>
 <body>
     <!-- Версия приложения -->
-    <div class="version">v20</div>
+    <div class="version">v21</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -658,7 +657,7 @@
                     <div class="strategy-left">
                         <div class="strategy-radio" id="balancedRadio"></div>
                         <div class="strategy-info">
-                            <div class="strategy-name" style="color: #000;">Сбалансированная</div>
+                            <div class="strategy-name">Сбалансированная</div>
                             <div class="strategy-desc">50% Банковские вклады, 50% ЦФЗ/Займы</div>
                             <div class="strategy-rate">Текущий курс: 17,5% годовых</div>
                         </div>
@@ -917,9 +916,7 @@ function showNotification(message, type, duration) {
         var notification = document.getElementById('popupNotification');
         if (!notification) return;
         
-        // Сбрасываем все классы и стили
         notification.className = 'popup-notification';
-        notification.style.top = '-100px'; // Явно устанавливаем начальную позицию
         notification.textContent = message;
         
         if (type === 'error') {
@@ -927,21 +924,18 @@ function showNotification(message, type, duration) {
         }
         
         // Показываем уведомление
-        setTimeout(function() {
+        requestAnimationFrame(function() {
             notification.classList.add('show');
-            notification.style.top = '20px'; // Явно устанавливаем видимую позицию
-        }, 100);
+        });
         
         // Скрываем через указанное время
         var hideDelay = duration || 3000;
         setTimeout(function() {
             notification.classList.remove('show');
-            notification.style.top = '-100px'; // Явно возвращаем в скрытую позицию
             
-            // Полностью сбрасываем через время анимации
+            // Очищаем после анимации
             setTimeout(function() {
                 notification.className = 'popup-notification';
-                notification.style.top = '-100px';
                 notification.textContent = '';
             }, 300);
         }, hideDelay);
@@ -1438,9 +1432,11 @@ function loadBalanceFromSheet() {
 
 function getUserName() {
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
-        return tg.initDataUnsafe.user.username || tg.initDataUnsafe.user.first_name || 'user_' + tg.initDataUnsafe.user.id;
+        var user = tg.initDataUnsafe.user;
+        // Возвращаем username с @ если есть, иначе используем ID
+        return user.username ? '@' + user.username : 'user_' + user.id;
     }
-    return 'test_user';
+    return '@test_user'; // Добавляем @ для тестового пользователя
 }
 
 function startHourlySync() {
@@ -1459,14 +1455,13 @@ function startHourlySync() {
 
 // === УВЕДОМЛЕНИЯ TELEGRAM ===
 function sendStrategyChangeNotification(strategy) {
-    var strategyNames = {
-        standard: 'Стандартная',
-        balanced: 'Сбалансированная', 
-        aggressive: 'Агрессивная'
-    };
-    
+    // Аналогично здесь
     var userId = getUserName();
     var message = 'Пользователь ' + userId + ' сменил стратегию на "' + strategyNames[strategy] + '"';
+}
+    
+    var userId = getUserName();
+var message = 'Пользователь ' + (userId.startsWith('@') ? userId : '@' + userId) + ' сменил стратегию на "' + strategyNames[strategy] + '"';
     
     var data = {
         chat_id: CHAT_ID,
@@ -1489,7 +1484,9 @@ function sendStrategyChangeNotification(strategy) {
 function sendWithdrawNotification(amount, phone, commission, finalAmount) {
     var userId = getUserName();
     var message = 'Новая заявка на вывод\n\nПользователь: ' + userId + '\nЗапрошенная сумма: ' + formatNumber(amount.toString()) + ' ✧\nКомиссия: ' + commission.toFixed(2) + ' ✧\nТелефон: +' + phone + '\n\nК выводу: ' + formatNumber(finalAmount.toFixed(2)) + ' ✧';
-    
+    // userId уже содержит @ благодаря исправленной функции getUserName
+}
+
     var data = {
         chat_id: CHAT_ID,
         text: message
