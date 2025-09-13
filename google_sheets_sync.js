@@ -177,10 +177,13 @@ function handleTelegramCallback(callbackQuery) {
       
       Logger.log(`Processing payment for user: ${username}, amount: ${amount}`);
       
+      // ВАЖНО: Сначала отвечаем на callback query для предотвращения таймаута
+      answerCallbackQuery(callbackQuery.id, 'Обрабатываем платеж...');
+      
       // Проверяем, не был ли платеж уже обработан
       if (paymentStatuses[transactionId] && paymentStatuses[transactionId].processed) {
         Logger.log(`Payment ${transactionId} already processed, skipping`);
-        answerCallbackQuery(callbackQuery.id, 'Платеж уже был обработан ранее');
+        editMessageText(chatId, messageId, `⚠️ Платеж уже был обработан ранее\nID: ${transactionId}`);
         return createResponse({ success: true, message: 'Already processed' });
       }
       
@@ -234,19 +237,20 @@ function handleTelegramCallback(callbackQuery) {
         completedAt: new Date().toISOString()
       };
       
-      answerCallbackQuery(callbackQuery.id, 'Платеж подтвержден!');
       editMessageText(chatId, messageId, `✅ Платеж подтвержден!\nСумма: ${amount} ✧\nID: ${transactionId}\nПользователь: ${username}\nНовый баланс: ${newBalance} ✧`);
       
     } else if (callbackData.startsWith('reject_')) {
       const parts = callbackData.split('_');
       const transactionId = parts[1];
       
+      // ВАЖНО: Сначала отвечаем на callback query
+      answerCallbackQuery(callbackQuery.id, 'Платеж отклонен');
+      
       // Сохраняем статус отклонения
       paymentStatuses[transactionId] = { confirmed: false, rejected: true };
       
       Logger.log(`Payment rejected for transaction: ${transactionId}`);
       
-      answerCallbackQuery(callbackQuery.id, 'Платеж отклонен');
       editMessageText(chatId, messageId, `❌ Платеж отклонен\nID: ${transactionId}\nПричина: Отклонено администратором`);
       
     } else if (callbackData.startsWith('test_confirm_') || callbackData.startsWith('test_reject_')) {
@@ -271,18 +275,40 @@ function handleTelegramCallback(callbackQuery) {
  * Отправка ответа на callback query
  */
 function answerCallbackQuery(callbackQueryId, text) {
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`;
-  const payload = {
-    callback_query_id: callbackQueryId,
-    text: text,
-    show_alert: false
-  };
-  
-  UrlFetchApp.fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    payload: JSON.stringify(payload)
-  });
+  try {
+    Logger.log('=== ANSWERING CALLBACK QUERY ===');
+    Logger.log('Callback query ID: ' + callbackQueryId);
+    Logger.log('Response text: ' + text);
+    
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`;
+    const payload = {
+      callback_query_id: callbackQueryId,
+      text: text,
+      show_alert: false
+    };
+    
+    Logger.log('Sending answerCallbackQuery to: ' + url);
+    
+    const response = UrlFetchApp.fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      payload: JSON.stringify(payload)
+    });
+    
+    const result = JSON.parse(response.getContentText());
+    Logger.log('AnswerCallbackQuery result: ' + JSON.stringify(result));
+    
+    if (result.ok) {
+      Logger.log('✅ Callback query answered successfully');
+    } else {
+      Logger.log('❌ Failed to answer callback query: ' + result.description);
+    }
+    
+    return result.ok;
+  } catch (error) {
+    Logger.log('❌ Error in answerCallbackQuery: ' + error.toString());
+    return false;
+  }
 }
 
 /**
