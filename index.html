@@ -957,18 +957,39 @@ function showNotification(message, type, duration) {
 function checkPaymentConfirmation() {
     if (!currentTransactionId || !currentPaymentAmount) return;
     
+    console.log('Checking payment status for transaction:', currentTransactionId);
+    
     // Проверяем статус платежа через Google Sheets
     fetch(SCRIPT_URL + '?action=checkPayment&transactionId=' + currentTransactionId)
     .then(function(response) {
+        console.log('Payment check response status:', response.status);
         return response.json();
     })
     .then(function(result) {
+        console.log('Payment check result:', result);
+        
         if (result.confirmed) {
             // Платеж подтвержден - обновляем баланс
-            currentBalance += currentPaymentAmount;
+            if (result.newBalance !== undefined) {
+                // Используем баланс из сервера если доступен
+                currentBalance = result.newBalance;
+            } else {
+                // Fallback: добавляем сумму к текущему балансу
+                currentBalance += currentPaymentAmount;
+            }
+            
             localStorage.setItem('wallet_balance', currentBalance.toString());
             updateBalanceDisplay();
             showNotification('✅ Платеж подтвержден! Баланс обновлен.', 'success');
+            
+            // Обновляем баланс из таблицы для синхронизации
+            loadBalanceFromSheet();
+            
+            // Очищаем данные о платеже
+            cancelPayment();
+        } else if (result.rejected) {
+            // Платеж отклонен
+            showNotification('❌ Платеж отклонен администратором. Попробуйте еще раз.', 'error');
             
             // Очищаем данные о платеже
             cancelPayment();
