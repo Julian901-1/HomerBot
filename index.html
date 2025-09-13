@@ -588,7 +588,7 @@
 </head>
 <body>
     <!-- Версия приложения -->
-    <div class="version">v21</div>
+    <div class="version">v22-debug</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -1381,6 +1381,8 @@ function syncBalanceToSheet() {
             balance: currentBalance
         };
         
+        console.log('Syncing balance to sheet:', data);
+        
         fetch(SCRIPT_URL, {
             method: 'POST',
             headers: {
@@ -1389,13 +1391,22 @@ function syncBalanceToSheet() {
             body: JSON.stringify(data)
         })
         .then(function(response) {
+            console.log('Sync response status:', response.status);
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+            }
             return response.json();
         })
         .then(function(result) {
-            console.log('Balance synced to sheet:', result);
+            console.log('Balance synced to sheet successfully:', result);
+            if (result.error) {
+                console.error('Server returned error:', result.error);
+            }
         })
         .catch(function(error) {
             console.error('Error syncing to sheet:', error);
+            console.error('SCRIPT_URL:', SCRIPT_URL);
+            console.error('Data sent:', JSON.stringify(data));
         });
     } catch (e) {
         console.error('Error in syncBalanceToSheet:', e);
@@ -1407,31 +1418,43 @@ function loadBalanceFromSheet() {
         var username = getUserName();
         var url = SCRIPT_URL + '?action=getBalance&username=' + encodeURIComponent(username);
         
+        console.log('Loading balance from sheet for user:', username);
+        console.log('Request URL:', url);
+        
         fetch(url)
         .then(function(response) {
+            console.log('Load balance response status:', response.status);
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+            }
             return response.json();
         })
         .then(function(result) {
+            console.log('Balance loaded from sheet:', result);
             if (result.balance !== undefined) {
                 // Проверяем, была ли изменена сумма админом
                 var localBalance = parseFloat(localStorage.getItem('wallet_balance') || '0');
                 if (Math.abs(result.balance - localBalance) > 0.01) {
-                    console.log('Balance updated by admin:', result.balance);
+                    console.log('Balance updated by admin:', result.balance, 'local was:', localBalance);
                     currentBalance = result.balance;
                     localStorage.setItem('wallet_balance', currentBalance.toString());
                     updateBalanceDisplay();
                 }
                 
                 if (result.strategy && result.strategy !== currentStrategy) {
+                    console.log('Strategy updated by admin:', result.strategy, 'local was:', currentStrategy);
                     currentStrategy = result.strategy;
                     localStorage.setItem('investment_strategy', currentStrategy);
                     updateCurrentStrategyDisplay();
                     loadStrategy();
                 }
+            } else {
+                console.log('No balance data received from server');
             }
         })
         .catch(function(error) {
             console.error('Error loading from sheet:', error);
+            console.error('Request URL was:', url);
         });
     } catch (e) {
         console.error('Error in loadBalanceFromSheet:', e);
@@ -1489,11 +1512,20 @@ function sendStrategyChangeNotification(strategy) {
         body: JSON.stringify(data)
     }).then(function(response) {
         console.log('Strategy notification response status:', response.status);
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+        }
         return response.json();
     }).then(function(result) {
-        console.log('Strategy change notification sent:', result);
+        console.log('Strategy change notification sent successfully:', result);
+        if (result.error) {
+            console.error('Server returned error for strategy notification:', result.error);
+            // Fallback при ошибке сервера
+            sendDirectTelegramMessage(message);
+        }
     }).catch(function(error) {
         console.error('Error sending strategy notification:', error);
+        console.error('Notification data was:', JSON.stringify(data));
         // Fallback: прямая отправка в Telegram API
         sendDirectTelegramMessage(message);
     });
@@ -1772,11 +1804,48 @@ function initTelegram() {
     }
 }
 
+// === ТЕСТИРОВАНИЕ ПОДКЛЮЧЕНИЯ ===
+function testGoogleAppsScriptConnection() {
+    console.log('Testing Google Apps Script connection...');
+    
+    fetch(SCRIPT_URL + '?action=test&timestamp=' + Date.now())
+    .then(function(response) {
+        console.log('Google Apps Script test response status:', response.status);
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+        }
+        return response.json();
+    })
+    .then(function(result) {
+        console.log('Google Apps Script test successful:', result);
+        if (result.success) {
+            console.log('✅ Google Apps Script is working properly');
+        } else {
+            console.error('❌ Google Apps Script returned error:', result);
+        }
+    })
+    .catch(function(error) {
+        console.error('❌ Google Apps Script connection failed:', error);
+        console.error('This may cause issues with notifications and balance sync');
+        
+        // Показываем пользователю предупреждение
+        showNotification('⚠️ Проблемы с соединением с сервером. Некоторые функции могут не работать.', 'error', 5000);
+    });
+}
+
 // === ИНИЦИАЛИЗАЦИЯ ===
 function initApp() {
     console.log('initApp called');
+    console.log('SCRIPT_URL:', SCRIPT_URL);
+    console.log('BOT_TOKEN:', BOT_TOKEN ? BOT_TOKEN.substring(0, 10) + '...' : 'NOT SET');
+    console.log('CHAT_ID:', CHAT_ID);
+    
     try {
         initTelegram();
+        
+        // Тестируем подключение к Google Apps Script
+        testGoogleAppsScriptConnection();
+        
         loadBalance();
         loadStrategy();
         updateGreeting();
