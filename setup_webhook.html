@@ -80,15 +80,21 @@ function showResult(elementId, text, type = 'info') {
 }
 
 function checkWebhookInfo() {
-    showResult('webhookInfo', 'Проверяем webhook...', 'info');
+    showResult('webhookInfo', 'Проверяем webhook через Google Apps Script...', 'info');
     
-    fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`)
-    .then(response => response.json())
+    // Используем Google Apps Script как прокси
+    fetch(SCRIPT_URL + '?action=getWebhookInfo&timestamp=' + Date.now())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
     .then(data => {
         console.log('Webhook info:', data);
         
-        if (data.ok) {
-            const info = data.result;
+        if (data.result && data.result.ok) {
+            const info = data.result.result;
             let resultText = `Статус: ${info.url ? 'Установлен' : 'Не установлен'}\n`;
             if (info.url) {
                 resultText += `URL: ${info.url}\n`;
@@ -101,12 +107,15 @@ function checkWebhookInfo() {
             
             const type = info.url === SCRIPT_URL ? 'success' : (info.url ? 'error' : 'info');
             showResult('webhookInfo', resultText, type);
+        } else if (data.error) {
+            showResult('webhookInfo', `Ошибка: ${data.error}`, 'error');
         } else {
-            showResult('webhookInfo', `Ошибка: ${data.description}`, 'error');
+            showResult('webhookInfo', 'Неожиданный ответ от сервера', 'error');
         }
     })
     .catch(error => {
-        showResult('webhookInfo', `Ошибка сети: ${error.toString()}`, 'error');
+        console.error('Error checking webhook:', error);
+        showResult('webhookInfo', `❌ ОШИБКА: Не удается подключиться к Google Apps Script\n\nВозможные причины:\n1. Google Apps Script не развернут\n2. Неправильный URL: ${SCRIPT_URL}\n3. Нет прав доступа\n\n💡 РЕШЕНИЕ: Настройте webhook вручную в Google Apps Script`, 'error');
     });
 }
 
@@ -140,65 +149,60 @@ function setupWebhook() {
 }
 
 function fallbackSetupWebhook() {
-    showResult('setupResult', 'Пробуем прямую настройку...', 'info');
+    showResult('setupResult', '💡 ИНСТРУКЦИЯ: Настройте webhook вручную в Google Apps Script', 'info');
     
-    const payload = {
-        url: SCRIPT_URL
-    };
+    const instructions = `
+❌ Автоматическая настройка недоступна из браузера
+
+✅ РЕШЕНИЕ - выполните в Google Apps Script:
+
+1. Откройте ваш Google Apps Script проект
+2. Найдите функцию: setupTelegramWebhook  
+3. Нажмите "Выполнить" (▶️)
+4. Дайте разрешения при первом запуске
+5. Проверьте логи - должно быть "ok: true"
+
+🔗 URL для webhook: ${SCRIPT_URL}
+
+После настройки обновите эту страницу и проверьте статус.
+    `;
     
-    fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    })
-    .then(response => response.json())
-    .then(data => {
-        console.log('Direct setup result:', data);
-        
-        if (data.ok) {
-            showResult('setupResult', '✅ Webhook настроен успешно (прямой способ)!', 'success');
-            setTimeout(checkWebhookInfo, 2000);
-        } else {
-            showResult('setupResult', `❌ Ошибка прямой настройки: ${data.description}`, 'error');
-        }
-    })
-    .catch(error => {
-        showResult('setupResult', `❌ Ошибка сети: ${error.toString()}`, 'error');
-    });
+    showResult('setupResult', instructions, 'info');
 }
 
 function testWebhook() {
-    showResult('testResult', 'Отправляем тестовое сообщение...', 'info');
+    showResult('testResult', 'Отправляем тестовое сообщение через Google Apps Script...', 'info');
     
-    const testMessage = '🧪 Тест webhook - нажмите любую кнопку';
-    const keyboard = {
-        inline_keyboard: [[
-            { text: '✅ Да', callback_data: 'test_confirm_123' },
-            { text: '❌ Нет', callback_data: 'test_reject_123' }
-        ]]
+    // Отправляем через Google Apps Script
+    const testData = {
+        action: 'sendTestMessage',
+        chatId: CHAT_ID,
+        message: '🧪 Тест webhook - нажмите любую кнопку'
     };
     
-    const payload = {
-        chat_id: CHAT_ID,
-        text: testMessage,
-        reply_markup: JSON.stringify(keyboard)
-    };
-    
-    fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    fetch(SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(testData)
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.ok) {
-            showResult('testResult', '✅ Тестовое сообщение отправлено! Проверьте Telegram чат и нажмите кнопку.', 'success');
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(result => {
+        console.log('Test result:', result);
+        
+        if (result.success) {
+            showResult('testResult', '✅ Тестовое сообщение отправлено! Проверьте Telegram чат и нажмите кнопку.\n\n📱 Если кнопки работают - webhook настроен правильно!', 'success');
         } else {
-            showResult('testResult', `❌ Ошибка отправки: ${data.description}`, 'error');
+            showResult('testResult', `❌ Ошибка отправки: ${result.error || 'Неизвестная ошибка'}`, 'error');
         }
     })
     .catch(error => {
-        showResult('testResult', `❌ Ошибка сети: ${error.toString()}`, 'error');
+        console.error('Test error:', error);
+        showResult('testResult', `❌ Не удается отправить тест через Google Apps Script\n\nОшибка: ${error.toString()}\n\n💡 Убедитесь что Google Apps Script развернут правильно`, 'error');
     });
 }
 
