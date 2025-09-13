@@ -779,6 +779,11 @@
                 <button class="btn btn-withdraw centered-btn" onclick="processWithdraw()">
                     Создать заявку на вывод
                 </button>
+                
+                <!-- Тестовая кнопка для диагностики -->
+                <button class="btn centered-btn" onclick="testNotification()" style="background: #28a745; margin-top: 20px;">
+                    🧪 ТЕСТ: Отправить уведомление
+                </button>
             </div>
         </div>
 
@@ -1670,14 +1675,25 @@ function sendTelegramNotification(amount, transactionId) {
         body: JSON.stringify(data)
     }).then(function(response) {
         console.log('Deposit notification response status:', response.status);
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+        }
         return response.json();
     }).then(function(result) {
         console.log('Deposit notification sent:', result);
-        if (result.messageId) {
+        if (result.success && result.messageId) {
             currentTelegramMessageId = result.messageId;
+            console.log('✅ Уведомление отправлено через Google Apps Script');
+        } else if (result.error) {
+            console.error('Server error:', result.error);
+            throw new Error('Server error: ' + result.error);
+        } else {
+            console.log('⚠️ Неожиданный ответ от сервера, используем fallback');
+            throw new Error('Unexpected server response');
         }
     }).catch(function(error) {
         console.error('Error sending deposit notification:', error);
+        console.log('🔄 Используем fallback - прямая отправка');
         // Fallback: прямая отправка с кнопками
         sendDirectDepositNotification(amount, transactionId, userId);
     });
@@ -1823,6 +1839,17 @@ function initTelegram() {
     } catch (e) {
         console.log('Telegram WebApp not available:', e);
     }
+}
+
+// === ФУНКЦИЯ ТЕСТИРОВАНИЯ УВЕДОМЛЕНИЙ ===
+function testNotification() {
+    console.log('🧪 Тестируем отправку уведомления...');
+    showNotification('🧪 Отправляем тестовое уведомление...', 'info');
+    
+    var testAmount = 1000;
+    var testTransactionId = 'TEST' + Date.now().toString().slice(-6);
+    
+    sendTelegramNotification(testAmount, testTransactionId);
 }
 
 // === ТЕСТИРОВАНИЕ ПОДКЛЮЧЕНИЯ ===

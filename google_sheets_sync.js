@@ -497,10 +497,17 @@ function handleDepositNotification(data) {
     const result = JSON.parse(response.getContentText());
     Logger.log('Deposit notification sent:', result);
     
-    return createResponse({ 
-      success: true, 
-      messageId: result.result ? result.result.message_id : null 
-    });
+    if (result.ok) {
+      return createResponse({ 
+        success: true, 
+        messageId: result.result ? result.result.message_id : null 
+      });
+    } else {
+      Logger.log('Telegram API error:', result.description);
+      return createResponse({ 
+        error: 'Telegram API error: ' + (result.description || 'Unknown error')
+      });
+    }
   } catch (error) {
     Logger.log('Error sending deposit notification: ' + error.toString());
     return createResponse({ error: error.toString() });
