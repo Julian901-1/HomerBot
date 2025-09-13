@@ -14,11 +14,20 @@ const ADMIN_CHAT_ID = '487525838';
 var paymentStatuses = {};
 
 /**
+ * Обработка OPTIONS запросов для CORS
+ */
+function doOptions(e) {
+  return createResponse({ message: 'CORS preflight' });
+}
+
+/**
  * Обработка POST запросов
  */
 function doPost(e) {
   try {
-    Logger.log('POST request received');
+    Logger.log('=== POST REQUEST RECEIVED ===');
+    Logger.log('Request timestamp: ' + new Date().toISOString());
+    Logger.log('Request headers: ' + JSON.stringify(e.postData.headers || {}));
     Logger.log('Raw data: ' + e.postData.contents);
     
     const data = JSON.parse(e.postData.contents);
@@ -26,7 +35,8 @@ function doPost(e) {
     
     // Проверяем, является ли это Telegram webhook
     if (data.callback_query) {
-      Logger.log('Handling Telegram callback');
+      Logger.log('=== TELEGRAM CALLBACK DETECTED ===');
+      Logger.log('Callback data: ' + JSON.stringify(data.callback_query));
       return handleTelegramCallback(data.callback_query);
     }
     
@@ -639,7 +649,10 @@ function sendAdminNotification(message) {
 function createResponse(data) {
   return ContentService
     .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
+    .setMimeType(ContentService.MimeType.JSON)
+    .setHeader('Access-Control-Allow-Origin', '*')
+    .setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    .setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
 /**

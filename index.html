@@ -784,6 +784,11 @@
                 <button class="btn centered-btn" onclick="testNotification()" style="background: #28a745; margin-top: 20px;">
                     🧪 ТЕСТ: Отправить уведомление
                 </button>
+                
+                <!-- Кнопка проверки webhook -->
+                <button class="btn centered-btn" onclick="checkWebhookStatus()" style="background: #17a2b8; margin-top: 10px;">
+                    🔍 ПРОВЕРИТЬ: Webhook статус
+                </button>
             </div>
         </div>
 
@@ -1850,6 +1855,39 @@ function testNotification() {
     var testTransactionId = 'TEST' + Date.now().toString().slice(-6);
     
     sendTelegramNotification(testAmount, testTransactionId);
+}
+
+// === ФУНКЦИЯ ПРОВЕРКИ WEBHOOK ===
+function checkWebhookStatus() {
+    console.log('🔍 Проверяем статус webhook...');
+    showNotification('🔍 Проверяем webhook...', 'info');
+    
+    fetch(SCRIPT_URL + '?action=getWebhookInfo&timestamp=' + Date.now())
+    .then(function(response) {
+        console.log('Webhook info response status:', response.status);
+        return response.json();
+    })
+    .then(function(data) {
+        console.log('Webhook info:', data);
+        
+        if (data.result && data.result.result) {
+            const info = data.result.result;
+            if (info.url === SCRIPT_URL) {
+                showNotification('✅ Webhook настроен правильно!', 'success');
+                console.log('✅ Webhook URL correct:', info.url);
+            } else {
+                showNotification('❌ Webhook URL неправильный: ' + (info.url || 'не установлен'), 'error');
+                console.log('❌ Wrong webhook URL:', info.url, 'Expected:', SCRIPT_URL);
+            }
+        } else {
+            showNotification('❌ Ошибка получения информации о webhook', 'error');
+            console.log('❌ Failed to get webhook info:', data);
+        }
+    })
+    .catch(function(error) {
+        console.error('❌ Error checking webhook:', error);
+        showNotification('❌ Ошибка проверки webhook: ' + error.message, 'error');
+    });
 }
 
 // === ТЕСТИРОВАНИЕ ПОДКЛЮЧЕНИЯ ===
