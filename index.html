@@ -588,7 +588,7 @@
 </head>
 <body>
     <!-- Версия приложения -->
-    <div class="version">26.1-debug</div>
+    <div class="version">26.2-debug</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -1110,32 +1110,40 @@ function cancelPayment() {
         if (timerDiv) timerDiv.style.display = 'none';
         if (customInput) customInput.value = '';
         
-        // Сбрасываем выбор кнопок
         var btns = document.querySelectorAll('.amount-btn');
         for (var i = 0; i < btns.length; i++) {
             btns[i].classList.remove('selected');
         }
-		
-		// Очищаем интервал проверки платежа
-    if (window.currentPaymentCheckInterval) {
-        clearInterval(window.currentPaymentCheckInterval);
-        window.currentPaymentCheckInterval = null;
-    }
+        
+        // Очищаем интервал проверки платежа
+        if (window.currentPaymentCheckInterval) {
+            clearInterval(window.currentPaymentCheckInterval);
+            window.currentPaymentCheckInterval = null;
+        }
+        
+        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Уведомляем сервер об отмене перед удалением сообщения
+        if (currentTransactionId) {
+            // Уведомляем Google Apps Script об отмене платежа
+            var cancelUrl = SCRIPT_URL + '?action=cancelPayment&transactionId=' + encodeURIComponent(currentTransactionId) + '&messageId=' + encodeURIComponent(currentTelegramMessageId || '') + '&timestamp=' + Date.now();
+            
+            fetch(cancelUrl, { method: 'GET' })
+            .then(function(response) {
+                console.log('Cancel notification sent, status:', response.status);
+                return response.json();
+            })
+            .then(function(result) {
+                console.log('Cancel result:', result);
+            })
+            .catch(function(error) {
+                console.error('Error sending cancel notification:', error);
+            });
+        }
         
         selectedAmount = 0;
         clearPaymentTimer();
         currentTransactionId = null;
         currentPaymentAmount = 0;
-		
-		if (currentTelegramMessageId) {
-            deleteTelegramMessage(currentTelegramMessageId);
-            currentTelegramMessageId = null;
-        }
-		
-		if (window.currentPaymentCheckInterval) {
-            clearInterval(window.currentPaymentCheckInterval);
-            window.currentPaymentCheckInterval = null;
-        }
+        currentTelegramMessageId = null;
         
     } catch (e) {
         console.error('Error in cancelPayment:', e);
