@@ -144,8 +144,15 @@ function handleTelegramCallback(callbackQuery) {
       
       Logger.log(`Processing payment for user: ${username}, amount: ${amount}`);
       
+      // Проверяем, не был ли платеж уже обработан
+      if (paymentStatuses[transactionId] && paymentStatuses[transactionId].processed) {
+        Logger.log(`Payment ${transactionId} already processed, skipping`);
+        answerCallbackQuery(callbackQuery.id, 'Платеж уже был обработан ранее');
+        return createResponse({ success: true, message: 'Already processed' });
+      }
+      
       // Сохраняем статус платежа
-      paymentStatuses[transactionId] = { confirmed: true, amount: amount, username: username };
+      paymentStatuses[transactionId] = { confirmed: true, amount: amount, username: username, processed: true };
       
       // Находим пользователя по имени
       const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
@@ -182,7 +189,8 @@ function handleTelegramCallback(callbackQuery) {
         confirmed: true, 
         amount: amount, 
         username: username,
-        newBalance: newBalance
+        newBalance: newBalance,
+        processed: true
       };
       
       answerCallbackQuery(callbackQuery.id, 'Платеж подтвержден!');
@@ -721,6 +729,97 @@ function fixWebhookUrl() {
   }
   
   Logger.log('=== ИСПРАВЛЕНИЕ ЗАВЕРШЕНО ===');
+}
+
+/**
+ * ТЕСТ ОТПРАВКИ УВЕДОМЛЕНИЙ - запускать из редактора
+ */
+function testNotificationSending() {
+  Logger.log('=== ТЕСТ ОТПРАВКИ УВЕДОМЛЕНИЙ ===');
+  
+  try {
+    // Тест 1: Прямая отправка в Telegram API
+    Logger.log('Тест 1: Прямая отправка сообщения');
+    const testMessage = '🧪 ТЕСТ: Прямая отправка из Google Apps Script\n\nВремя: ' + new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+    
+    const directResult = UrlFetchApp.fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      payload: JSON.stringify({
+        chat_id: ADMIN_CHAT_ID,
+        text: testMessage
+      })
+    });
+    
+    const directResponse = JSON.parse(directResult.getContentText());
+    Logger.log('Результат прямой отправки: ' + JSON.stringify(directResponse));
+    
+    if (directResponse.ok) {
+      Logger.log('✅ Прямая отправка работает!');
+    } else {
+      Logger.log('❌ Прямая отправка не работает: ' + directResponse.description);
+    }
+    
+    // Тест 2: Отправка через handleDepositNotification
+    Logger.log('Тест 2: Отправка через handleDepositNotification');
+    const testData = {
+      type: 'deposit',
+      userId: '@test_user',
+      amount: 1000,
+      transactionId: 'TEST' + Date.now().toString().slice(-6),
+      message: '💰 ТЕСТ уведомления о пополнении\n\nПользователь: @test_user\nСумма: 1 000 ✧\nКомментарий: TEST123456\n\nПодтверждаете перевод?'
+    };
+    
+    const notificationResult = handleDepositNotification(testData);
+    Logger.log('Результат handleDepositNotification: ' + notificationResult.getContent());
+    
+    // Тест 3: Проверка константы ADMIN_CHAT_ID
+    Logger.log('Тест 3: Проверка настроек');
+    Logger.log('BOT_TOKEN: ' + (BOT_TOKEN ? 'установлен (' + BOT_TOKEN.substring(0, 10) + '...)' : 'НЕ УСТАНОВЛЕН'));
+    Logger.log('ADMIN_CHAT_ID: ' + ADMIN_CHAT_ID);
+    
+  } catch (error) {
+    Logger.log('❌ Ошибка тестирования: ' + error.toString());
+    Logger.log('Стек ошибки: ' + error.stack);
+  }
+  
+  Logger.log('=== ТЕСТ ЗАВЕРШЕН ===');
+}
+
+/**
+ * ОЧИСТКА ТЕСТОВЫХ ДАННЫХ - запускать из редактора
+ */
+function cleanupTestData() {
+  Logger.log('=== ОЧИСТКА ТЕСТОВЫХ ДАННЫХ ===');
+  
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
+    const data = sheet.getDataRange().getValues();
+    
+    // Ищем и удаляем тестовых пользователей
+    for (let i = data.length - 1; i >= 1; i--) {
+      const username = data[i][0];
+      if (username && (username.includes('test') || username.includes('TEST'))) {
+        Logger.log(`Удаляем тестового пользователя: ${username} из строки ${i + 1}`);
+        sheet.deleteRow(i + 1);
+      }
+    }
+    
+    // Очищаем тестовые статусы платежей
+    const testTransactions = Object.keys(paymentStatuses).filter(id => id.includes('TEST'));
+    testTransactions.forEach(id => {
+      Logger.log(`Очищаем тестовый платеж: ${id}`);
+      delete paymentStatuses[id];
+    });
+    
+    Logger.log('✅ Тестовые данные очищены');
+    sendAdminNotification('🧹 Тестовые данные очищены!\n\nУдалены все пользователи с "test" в имени и тестовые транзакции.');
+    
+  } catch (error) {
+    Logger.log('❌ Ошибка очистки: ' + error.toString());
+  }
+  
+  Logger.log('=== ОЧИСТКА ЗАВЕРШЕНА ===');
 }
 
 /**

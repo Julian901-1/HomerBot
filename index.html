@@ -978,8 +978,8 @@ function checkPaymentConfirmation() {
     .then(function(result) {
         console.log('Payment check result:', result);
         
-        if (result.confirmed) {
-            // Платеж подтвержден - обновляем баланс
+        if (result.confirmed && !result.processed) {
+            // Платеж подтвержден в первый раз - обновляем баланс
             if (result.newBalance !== undefined) {
                 // Используем баланс из сервера если доступен
                 currentBalance = result.newBalance;
@@ -996,6 +996,10 @@ function checkPaymentConfirmation() {
             loadBalanceFromSheet();
             
             // Очищаем данные о платеже
+            cancelPayment();
+        } else if (result.confirmed && result.processed) {
+            // Платеж уже был обработан ранее - просто очищаем
+            console.log('Payment already processed, cleaning up');
             cancelPayment();
         } else if (result.rejected) {
             // Платеж отклонен
