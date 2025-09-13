@@ -105,10 +105,21 @@ function doGet(e) {
         });
       case 'getWebhookInfo':
         return createResponse({ result: getWebhookInfo() });
+      case 'sendNotification':
+        // Обработка уведомлений через GET запрос (для избежания CORS)
+        const notificationData = {
+          type: e.parameter.type,
+          userId: e.parameter.userId,
+          amount: parseFloat(e.parameter.amount),
+          transactionId: e.parameter.transactionId,
+          message: e.parameter.message
+        };
+        Logger.log('GET notification request: ' + JSON.stringify(notificationData));
+        return handleNotification(notificationData);
       default:
         return createResponse({ 
           error: 'Unknown action: ' + action,
-          availableActions: ['getBalance', 'getAllUsers', 'checkPayment', 'test']
+          availableActions: ['getBalance', 'getAllUsers', 'checkPayment', 'test', 'sendNotification', 'getWebhookInfo']
         });
     }
   } catch (error) {
@@ -670,12 +681,14 @@ function sendAdminNotification(message) {
  * Создание ответа в формате JSON
  */
 function createResponse(data) {
-  const output = ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
+  // Для Google Apps Script используем HtmlService для правильной обработки CORS
+  const jsonString = JSON.stringify(data);
+  const htmlOutput = HtmlService.createHtmlOutput('');
   
-  // Google Apps Script автоматически добавляет CORS заголовки для веб-приложений
-  return output;
+  // Возвращаем через ContentService с правильным типом
+  return ContentService
+    .createTextOutput(jsonString)
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
@@ -820,6 +833,35 @@ function cleanupTestData() {
   }
   
   Logger.log('=== ОЧИСТКА ЗАВЕРШЕНА ===');
+}
+
+/**
+ * ТЕСТ GET УВЕДОМЛЕНИЙ - запускать из редактора
+ */
+function testGetNotification() {
+  Logger.log('=== ТЕСТ GET УВЕДОМЛЕНИЙ ===');
+  
+  try {
+    // Симулируем GET запрос sendNotification
+    const testParams = {
+      action: 'sendNotification',
+      type: 'deposit',
+      userId: '@test_user',
+      amount: '1000',
+      transactionId: 'TEST' + Date.now().toString().slice(-6),
+      message: '💰 ТЕСТ GET уведомления\n\nПользователь: @test_user\nСумма: 1 000 ✧'
+    };
+    
+    Logger.log('Тестируем GET notification с параметрами: ' + JSON.stringify(testParams));
+    
+    const result = doGet({parameter: testParams});
+    Logger.log('Результат GET notification: ' + result.getContent());
+    
+  } catch (error) {
+    Logger.log('❌ Ошибка тестирования GET: ' + error.toString());
+  }
+  
+  Logger.log('=== ТЕСТ GET ЗАВЕРШЕН ===');
 }
 
 /**

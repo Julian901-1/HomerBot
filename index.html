@@ -1668,20 +1668,19 @@ function sendTelegramNotification(amount, transactionId) {
     
     console.log('Sending deposit notification:', message);
     
-    // Отправляем через Google Apps Script для более надежной доставки
-    var data = {
-        action: 'sendNotification',
-        type: 'deposit',
-        userId: userId,
-        amount: amount,
-        transactionId: transactionId,
-        message: message
-    };
+    // Отправляем через Google Apps Script для более надежной доставки (используем GET для избежания CORS)
+    var getUrl = SCRIPT_URL + '?action=sendNotification&' + 
+                 'type=deposit&' +
+                 'userId=' + encodeURIComponent(userId) +
+                 '&amount=' + encodeURIComponent(amount) +
+                 '&transactionId=' + encodeURIComponent(transactionId) +
+                 '&message=' + encodeURIComponent(message) +
+                 '&timestamp=' + Date.now();
+    
+    console.log('Sending notification via GET:', getUrl);
 
-    fetch(SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+    fetch(getUrl, {
+        method: 'GET'
     }).then(function(response) {
         console.log('Deposit notification response status:', response.status);
         if (!response.ok) {
