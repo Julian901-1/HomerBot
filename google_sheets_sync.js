@@ -43,8 +43,6 @@ function doPost(e) {
     Logger.log('Handling action: ' + data.action);
     
     switch(data.action) {
-      case 'updateBalance':
-        return updateUserBalance(data.username, data.strategy, data.balance);
       case 'forceUpdateBalance':
         return forceUpdateBalance(data.username, data.newBalance);
       case 'sendNotification':
@@ -59,7 +57,7 @@ function doPost(e) {
         Logger.log('Unknown action: ' + data.action);
         return createResponse({ 
           error: 'Unknown action: ' + data.action,
-          availableActions: ['updateBalance', 'forceUpdateBalance', 'sendNotification']
+          availableActions: ['forceUpdateBalance', 'sendNotification', 'setupWebhook', 'forceSetupWebhook', 'sendTestMessage']
         });
     }
   } catch (error) {
@@ -74,24 +72,36 @@ function doPost(e) {
  */
 function doGet(e) {
   try {
-    Logger.log('GET request received');
-    Logger.log('Parameters: ' + JSON.stringify(e.parameter || {}));
+    Logger.log('=== GET REQUEST DEBUG ===');
+    Logger.log('Full event object: ' + JSON.stringify(e));
+    Logger.log('Parameters object: ' + JSON.stringify(e.parameter || {}));
+    Logger.log('Parameter keys: ' + Object.keys(e.parameter || {}));
     
     if (!e.parameter) {
+      Logger.log('No parameters found in request');
       return createResponse({ 
         error: 'No parameters provided',
-        usage: 'Add ?action=test to URL'
+        usage: 'Add ?action=test to URL',
+        receivedEvent: e
       });
     }
     
     const action = e.parameter.action;
-    Logger.log('GET request received with action: ' + action);
+    Logger.log('Extracted action: "' + action + '"');
+    Logger.log('Action type: ' + typeof action);
     
     switch(action) {
       case 'getBalance':
         return getBalanceByUsername(e.parameter.username);
       case 'getAllUsers':
         return getAllUsers();
+      case 'updateBalance':
+        // Обработка синхронизации баланса через GET запрос (для избежания CORS)
+        return updateUserBalance(
+          e.parameter.username,
+          e.parameter.strategy,
+          parseFloat(e.parameter.balance || 0)
+        );
       case 'checkPayment':
         const transactionId = e.parameter.transactionId;
         const status = paymentStatuses[transactionId] || { confirmed: false };
@@ -122,9 +132,14 @@ function doGet(e) {
         Logger.log('GET notification request: ' + JSON.stringify(notificationData));
         return handleNotification(notificationData);
       default:
+        Logger.log('Unknown action received: "' + action + '"');
+        Logger.log('Available actions: getBalance, getAllUsers, checkPayment, test, sendNotification, getWebhookInfo');
         return createResponse({ 
-          error: 'Unknown action: ' + action,
-          availableActions: ['getBalance', 'getAllUsers', 'checkPayment', 'test', 'sendNotification', 'getWebhookInfo']
+          error: 'Unknown action: "' + action + '"',
+          receivedAction: action,
+          actionType: typeof action,
+          allParameters: e.parameter,
+          availableActions: ['getBalance', 'getAllUsers', 'updateBalance', 'checkPayment', 'test', 'sendNotification', 'getWebhookInfo']
         });
     }
   } catch (error) {
@@ -973,6 +988,44 @@ function testAllNotificationTypes() {
   }
   
   Logger.log('=== ТЕСТ ВСЕХ ТИПОВ ЗАВЕРШЕН ===');
+}
+
+/**
+ * ТЕСТ doGet ФУНКЦИИ - запускать из редактора
+ */
+function testDoGetFunction() {
+  Logger.log('=== ТЕСТ doGet ФУНКЦИИ ===');
+  
+  try {
+    // Тест 1: Простой test action
+    Logger.log('1. Тестируем action=test');
+    const testResult1 = doGet({parameter: {action: 'test'}});
+    Logger.log('Результат test: ' + testResult1.getContent());
+    
+    // Тест 2: sendNotification action
+    Logger.log('2. Тестируем action=sendNotification');
+    const testResult2 = doGet({parameter: {
+      action: 'sendNotification',
+      type: 'deposit',
+      userId: '@test_user',
+      amount: '100',
+      transactionId: 'TEST123',
+      message: 'Test message'
+    }});
+    Logger.log('Результат sendNotification: ' + testResult2.getContent());
+    
+    // Тест 3: Неизвестный action
+    Logger.log('3. Тестируем неизвестный action');
+    const testResult3 = doGet({parameter: {action: 'unknown_action'}});
+    Logger.log('Результат unknown: ' + testResult3.getContent());
+    
+    Logger.log('✅ Все тесты doGet завершены');
+    
+  } catch (error) {
+    Logger.log('❌ Ошибка тестирования doGet: ' + error.toString());
+  }
+  
+  Logger.log('=== ТЕСТ doGet ЗАВЕРШЕН ===');
 }
 
 /**

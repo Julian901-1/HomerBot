@@ -1414,42 +1414,41 @@ function calculateMissedInterest() {
 function syncBalanceToSheet() {
     try {
         var username = getUserName();
-        var data = {
-            action: 'updateBalance',
-            username: username,
-            strategy: currentStrategy,
-            balance: currentBalance
-        };
         
-        console.log('Syncing balance to sheet:', data);
+        // Используем GET запрос для избежания CORS
+        var getUrl = SCRIPT_URL + '?action=updateBalance&' + 
+                     'username=' + encodeURIComponent(username) +
+                     '&strategy=' + encodeURIComponent(currentStrategy) +
+                     '&balance=' + encodeURIComponent(currentBalance) +
+                     '&timestamp=' + Date.now();
         
-        fetch(SCRIPT_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
+        console.log('🔄 Syncing balance to sheet via GET:', getUrl);
+        
+        fetch(getUrl, {
+            method: 'GET'
         })
         .then(function(response) {
-            console.log('Sync response status:', response.status);
+            console.log('📋 Sync response status:', response.status);
             if (!response.ok) {
                 throw new Error('HTTP ' + response.status + ': ' + response.statusText);
             }
             return response.json();
         })
         .then(function(result) {
-            console.log('Balance synced to sheet successfully:', result);
+            console.log('✅ Balance synced to sheet successfully:', result);
             if (result.error) {
-                console.error('Server returned error:', result.error);
+                console.error('❌ Server returned error:', result.error);
+            } else {
+                console.log('💾 Sync successful for user:', username, 'balance:', currentBalance);
             }
         })
         .catch(function(error) {
-            console.error('Error syncing to sheet:', error);
-            console.error('SCRIPT_URL:', SCRIPT_URL);
-            console.error('Data sent:', JSON.stringify(data));
+            console.error('❌ Error syncing to sheet:', error);
+            console.error('📍 SCRIPT_URL:', SCRIPT_URL);
+            console.error('👤 Username:', username, 'Balance:', currentBalance);
         });
     } catch (e) {
-        console.error('Error in syncBalanceToSheet:', e);
+        console.error('❌ Error in syncBalanceToSheet:', e);
     }
 }
 
