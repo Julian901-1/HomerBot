@@ -588,7 +588,7 @@
 </head>
 <body>
     <!-- Версия приложения -->
-    <div class="version">26.2-debug</div>
+    <div class="version">26.3-debug</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -1741,8 +1741,8 @@ function sendDirectDepositNotification(amount, transactionId, userId) {
     
     var keyboard = {
         inline_keyboard: [[
-            { text: 'Да', callback_data: 'confirm_' + transactionId + '_' + amount + '_' + userId },
-            { text: 'Нет', callback_data: 'reject_' + transactionId }
+            { text: '✅ Да', callback_data: 'confirm_' + transactionId + '_' + amount + '_' + userId },
+            { text: '❌ Нет', callback_data: 'reject_' + transactionId }
         ]]
     };
 
