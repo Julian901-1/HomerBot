@@ -978,28 +978,28 @@ function checkPaymentConfirmation() {
     .then(function(result) {
         console.log('Payment check result:', result);
         
-        if (result.confirmed && !result.processed) {
-            // Платеж подтвержден в первый раз - обновляем баланс
+        if (result.confirmed) {
             if (result.newBalance !== undefined) {
-                // Используем баланс из сервера если доступен
-                currentBalance = result.newBalance;
-            } else {
-                // Fallback: добавляем сумму к текущему балансу
-                currentBalance += currentPaymentAmount;
+                // Используем баланс из сервера как единственный источник истины
+                var serverBalance = result.newBalance;
+                var currentLocalBalance = parseFloat(localStorage.getItem('wallet_balance') || '0');
+                
+                // Обновляем только если серверный баланс отличается от локального
+                if (Math.abs(serverBalance - currentLocalBalance) > 0.01) {
+                    console.log('Updating balance from server:', serverBalance, 'was:', currentLocalBalance);
+                    currentBalance = serverBalance;
+                    localStorage.setItem('wallet_balance', currentBalance.toString());
+                    updateBalanceDisplay();
+                    showNotification('✅ Платеж подтвержден! Баланс обновлен.', 'success');
+                    
+                    // Обновляем баланс из таблицы для синхронизации
+                    loadBalanceFromSheet();
+                } else {
+                    console.log('Balance already up to date, no changes needed');
+                }
             }
             
-            localStorage.setItem('wallet_balance', currentBalance.toString());
-            updateBalanceDisplay();
-            showNotification('✅ Платеж подтвержден! Баланс обновлен.', 'success');
-            
-            // Обновляем баланс из таблицы для синхронизации
-            loadBalanceFromSheet();
-            
-            // Очищаем данные о платеже
-            cancelPayment();
-        } else if (result.confirmed && result.processed) {
-            // Платеж уже был обработан ранее - просто очищаем
-            console.log('Payment already processed, cleaning up');
+            // Очищаем данные о платеже в любом случае
             cancelPayment();
         } else if (result.rejected) {
             // Платеж отклонен

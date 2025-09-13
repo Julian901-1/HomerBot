@@ -162,8 +162,14 @@ function handleTelegramCallback(callbackQuery) {
         return createResponse({ success: true, message: 'Already processed' });
       }
       
-      // Сохраняем статус платежа
-      paymentStatuses[transactionId] = { confirmed: true, amount: amount, username: username, processed: true };
+      // Сначала помечаем как обрабатываемый для предотвращения дублирования
+      paymentStatuses[transactionId] = { 
+        confirmed: true, 
+        amount: amount, 
+        username: username, 
+        processed: true, 
+        processing: true 
+      };
       
       // Находим пользователя по имени
       const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
@@ -195,13 +201,15 @@ function handleTelegramCallback(callbackQuery) {
         Logger.log(`New user created: ${username} with payment: ${amount}`);
       }
       
-      // Обновляем статус платежа с новым балансом
+      // Обновляем статус платежа с новым балансом (обработка завершена)
       paymentStatuses[transactionId] = { 
         confirmed: true, 
         amount: amount, 
         username: username,
         newBalance: newBalance,
-        processed: true
+        processed: true,
+        processing: false,
+        completedAt: new Date().toISOString()
       };
       
       answerCallbackQuery(callbackQuery.id, 'Платеж подтвержден!');
@@ -833,6 +841,45 @@ function cleanupTestData() {
   }
   
   Logger.log('=== ОЧИСТКА ЗАВЕРШЕНА ===');
+}
+
+/**
+ * ЭКСТРЕННАЯ ОЧИСТКА ПОЛЬЗОВАТЕЛЯ @test_user - запускать из редактора
+ */
+function emergencyCleanupTestUser() {
+  Logger.log('=== ЭКСТРЕННАЯ ОЧИСТКА @test_user ===');
+  
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
+    const data = sheet.getDataRange().getValues();
+    
+    // Ищем @test_user и устанавливаем баланс 0
+    for (let i = 1; i < data.length; i++) {
+      const username = data[i][0];
+      if (username === '@test_user' || username === 'test_user') {
+        Logger.log(`Сбрасываем баланс пользователя ${username} в строке ${i + 1}`);
+        sheet.getRange(i + 1, 3).setValue(0); // Обнуляем баланс
+        sheet.getRange(i + 1, 4).setValue(new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })); // Обновляем время
+        break;
+      }
+    }
+    
+    // Очищаем все TEST статусы
+    Object.keys(paymentStatuses).forEach(id => {
+      if (id.includes('TEST')) {
+        Logger.log(`Удаляем статус платежа: ${id}`);
+        delete paymentStatuses[id];
+      }
+    });
+    
+    Logger.log('✅ Экстренная очистка завершена');
+    sendAdminNotification('🧹 Экстренная очистка!\n\nБаланс @test_user сброшен в 0\nВсе TEST транзакции удалены');
+    
+  } catch (error) {
+    Logger.log('❌ Ошибка экстренной очистки: ' + error.toString());
+  }
+  
+  Logger.log('=== ЭКСТРЕННАЯ ОЧИСТКА ЗАВЕРШЕНА ===');
 }
 
 /**
