@@ -1532,19 +1532,18 @@ function sendStrategyChangeNotification(strategy) {
     
     console.log('Sending strategy notification:', message);
     
-    // Отправляем через Google Apps Script для более надежной доставки
-    var data = {
-        action: 'sendNotification',
-        type: 'strategy_change',
-        userId: userId,
-        strategy: strategy,
-        message: message
-    };
+    // Отправляем через Google Apps Script для более надежной доставки (используем GET для избежания CORS)
+    var getUrl = SCRIPT_URL + '?action=sendNotification&' + 
+                 'type=strategy_change&' +
+                 'userId=' + encodeURIComponent(userId) +
+                 '&strategy=' + encodeURIComponent(strategy) +
+                 '&message=' + encodeURIComponent(message) +
+                 '&timestamp=' + Date.now();
+    
+    console.log('Sending strategy notification via GET:', getUrl);
 
-    fetch(SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+    fetch(getUrl, {
+        method: 'GET'
     }).then(function(response) {
         console.log('Strategy notification response status:', response.status);
         if (!response.ok) {
@@ -1594,22 +1593,21 @@ function sendWithdrawNotification(amount, phone, commission, finalAmount) {
     
     console.log('Sending withdraw notification:', message);
     
-    // Отправляем через Google Apps Script для более надежной доставки
-    var data = {
-        action: 'sendNotification',
-        type: 'withdraw',
-        userId: userId,
-        amount: amount,
-        phone: phone,
-        commission: commission,
-        finalAmount: finalAmount,
-        message: message
-    };
+    // Отправляем через Google Apps Script для более надежной доставки (используем GET для избежания CORS)
+    var getUrl = SCRIPT_URL + '?action=sendNotification&' + 
+                 'type=withdraw&' +
+                 'userId=' + encodeURIComponent(userId) +
+                 '&amount=' + encodeURIComponent(amount) +
+                 '&phone=' + encodeURIComponent(phone) +
+                 '&commission=' + encodeURIComponent(commission) +
+                 '&finalAmount=' + encodeURIComponent(finalAmount) +
+                 '&message=' + encodeURIComponent(message) +
+                 '&timestamp=' + Date.now();
+    
+    console.log('Sending withdraw notification via GET:', getUrl);
 
-    fetch(SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+    fetch(getUrl, {
+        method: 'GET'
     }).then(function(response) {
         console.log('Withdraw notification response status:', response.status);
         return response.json();

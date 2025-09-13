@@ -110,9 +110,14 @@ function doGet(e) {
         const notificationData = {
           type: e.parameter.type,
           userId: e.parameter.userId,
-          amount: parseFloat(e.parameter.amount),
+          amount: parseFloat(e.parameter.amount || 0),
           transactionId: e.parameter.transactionId,
-          message: e.parameter.message
+          message: e.parameter.message,
+          // Дополнительные параметры для разных типов уведомлений
+          strategy: e.parameter.strategy,
+          phone: e.parameter.phone,
+          commission: parseFloat(e.parameter.commission || 0),
+          finalAmount: parseFloat(e.parameter.finalAmount || 0)
         };
         Logger.log('GET notification request: ' + JSON.stringify(notificationData));
         return handleNotification(notificationData);
@@ -909,6 +914,65 @@ function testGetNotification() {
   }
   
   Logger.log('=== ТЕСТ GET ЗАВЕРШЕН ===');
+}
+
+/**
+ * ТЕСТ ВСЕХ ТИПОВ УВЕДОМЛЕНИЙ - запускать из редактора
+ */
+function testAllNotificationTypes() {
+  Logger.log('=== ТЕСТ ВСЕХ ТИПОВ УВЕДОМЛЕНИЙ ===');
+  
+  try {
+    // 1. Тест уведомления о депозите
+    Logger.log('1. Тестируем депозит уведомление');
+    const depositParams = {
+      action: 'sendNotification',
+      type: 'deposit',
+      userId: '@test_user',
+      amount: '500',
+      transactionId: 'TEST' + Date.now().toString().slice(-6),
+      message: '💰 ТЕСТ депозита'
+    };
+    
+    const depositResult = doGet({parameter: depositParams});
+    Logger.log('Депозит результат: ' + depositResult.getContent());
+    
+    // 2. Тест уведомления о стратегии
+    Logger.log('2. Тестируем стратегию уведомление');
+    const strategyParams = {
+      action: 'sendNotification',
+      type: 'strategy_change',
+      userId: '@test_user',
+      strategy: 'aggressive',
+      message: '🔄 ТЕСТ смены стратегии'
+    };
+    
+    const strategyResult = doGet({parameter: strategyParams});
+    Logger.log('Стратегия результат: ' + strategyResult.getContent());
+    
+    // 3. Тест уведомления о выводе
+    Logger.log('3. Тестируем вывод уведомление');
+    const withdrawParams = {
+      action: 'sendNotification',
+      type: 'withdraw',
+      userId: '@test_user',
+      amount: '1000',
+      phone: '79991234567',
+      commission: '5',
+      finalAmount: '995',
+      message: '💸 ТЕСТ вывода средств'
+    };
+    
+    const withdrawResult = doGet({parameter: withdrawParams});
+    Logger.log('Вывод результат: ' + withdrawResult.getContent());
+    
+    Logger.log('✅ Все типы уведомлений протестированы');
+    
+  } catch (error) {
+    Logger.log('❌ Ошибка тестирования: ' + error.toString());
+  }
+  
+  Logger.log('=== ТЕСТ ВСЕХ ТИПОВ ЗАВЕРШЕН ===');
 }
 
 /**
