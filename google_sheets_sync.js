@@ -74,6 +74,16 @@ function doPost(e) {
  */
 function doGet(e) {
   try {
+    Logger.log('GET request received');
+    Logger.log('Parameters: ' + JSON.stringify(e.parameter || {}));
+    
+    if (!e.parameter) {
+      return createResponse({ 
+        error: 'No parameters provided',
+        usage: 'Add ?action=test to URL'
+      });
+    }
+    
     const action = e.parameter.action;
     Logger.log('GET request received with action: ' + action);
     
@@ -103,7 +113,12 @@ function doGet(e) {
     }
   } catch (error) {
     Logger.log('Error in doGet: ' + error.toString());
-    return createResponse({ error: error.toString() });
+    Logger.log('Error stack: ' + error.stack);
+    return createResponse({ 
+      error: error.toString(),
+      stack: error.stack,
+      note: 'If running from editor, try: doGet({parameter: {action: "test"}})'
+    });
   }
 }
 
@@ -647,12 +662,37 @@ function sendAdminNotification(message) {
  * Создание ответа в формате JSON
  */
 function createResponse(data) {
-  return ContentService
+  const output = ContentService
     .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON)
-    .setHeader('Access-Control-Allow-Origin', '*')
-    .setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    .setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    .setMimeType(ContentService.MimeType.JSON);
+  
+  // Google Apps Script автоматически добавляет CORS заголовки для веб-приложений
+  return output;
+}
+
+/**
+ * Тестовая функция для запуска из редактора Google Apps Script
+ */
+function testFromEditor() {
+  Logger.log('=== ТЕСТ ИЗ РЕДАКТОРА ===');
+  
+  // Тест doGet
+  try {
+    const testGetResult = doGet({parameter: {action: 'test'}});
+    Logger.log('doGet test result: ' + testGetResult.getContent());
+  } catch (error) {
+    Logger.log('doGet test error: ' + error.toString());
+  }
+  
+  // Тест webhook info
+  try {
+    const webhookInfo = getWebhookInfo();
+    Logger.log('Webhook info: ' + JSON.stringify(webhookInfo));
+  } catch (error) {
+    Logger.log('Webhook info error: ' + error.toString());
+  }
+  
+  Logger.log('=== ТЕСТ ЗАВЕРШЕН ===');
 }
 
 /**
