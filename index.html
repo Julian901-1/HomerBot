@@ -1472,6 +1472,8 @@ function sendStrategyChangeNotification(strategy) {
     var userId = getUserName();
     var message = 'Пользователь ' + userId + ' сменил стратегию на "' + strategyNames[strategy] + '"';
     
+    console.log('Sending strategy notification:', message); // Добавлено для отладки
+    
     var data = {
         chat_id: CHAT_ID,
         text: message
@@ -1482,6 +1484,7 @@ function sendStrategyChangeNotification(strategy) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     }).then(function(response) {
+        console.log('Response status:', response.status); // Добавлено
         return response.json();
     }).then(function(data) {
         console.log('Strategy change notification sent:', data);
@@ -1494,6 +1497,8 @@ function sendWithdrawNotification(amount, phone, commission, finalAmount) {
     var userId = getUserName();
     var message = 'Новая заявка на вывод\n\nПользователь: ' + userId + '\nЗапрошенная сумма: ' + formatNumber(amount.toString()) + ' ✧\nКомиссия: ' + commission.toFixed(2) + ' ✧\nТелефон: +' + phone + '\n\nК выводу: ' + formatNumber(finalAmount.toFixed(2)) + ' ✧';
     
+    console.log('Sending withdraw notification:', message); // Добавлено
+    
     var data = {
         chat_id: CHAT_ID,
         text: message
@@ -1504,6 +1509,7 @@ function sendWithdrawNotification(amount, phone, commission, finalAmount) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     }).then(function(response) {
+        console.log('Withdraw response status:', response.status); // Добавлено
         return response.json();
     }).then(function(data) {
         console.log('Withdraw notification sent:', data);
