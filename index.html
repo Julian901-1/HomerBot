@@ -1447,12 +1447,12 @@ function getUserName() {
     return '@test_user'; // Добавляем @ для тестового пользователя
 }
 
-function startHourlySync() {
-    // Синхронизация каждый час
+function startFrequentSync() {
+    // Синхронизация каждую минуту
     syncTimer = setInterval(function() {
         syncBalanceToSheet();
         loadBalanceFromSheet();
-    }, 60 * 60 * 1000); // каждый час
+    }, 60 * 1000); // каждую минуту
     
     // Первая синхронизация через 30 секунд после загрузки
     setTimeout(function() {
@@ -1470,13 +1470,41 @@ function sendStrategyChangeNotification(strategy) {
     };
     
     var userId = getUserName();
-    var message = 'Пользователь ' + userId + ' сменил стратегию на "' + strategyNames[strategy] + '"';
+    var message = '🔄 Пользователь ' + userId + ' сменил стратегию на "' + strategyNames[strategy] + '"';
     
-    console.log('Sending strategy notification:', message); // Добавлено для отладки
+    console.log('Sending strategy notification:', message);
     
+    // Отправляем через Google Apps Script для более надежной доставки
+    var data = {
+        action: 'sendNotification',
+        type: 'strategy_change',
+        userId: userId,
+        strategy: strategy,
+        message: message
+    };
+
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    }).then(function(response) {
+        console.log('Strategy notification response status:', response.status);
+        return response.json();
+    }).then(function(result) {
+        console.log('Strategy change notification sent:', result);
+    }).catch(function(error) {
+        console.error('Error sending strategy notification:', error);
+        // Fallback: прямая отправка в Telegram API
+        sendDirectTelegramMessage(message);
+    });
+}
+
+// Fallback функция для прямой отправки в Telegram
+function sendDirectTelegramMessage(message) {
     var data = {
         chat_id: CHAT_ID,
-        text: message
+        text: message,
+        parse_mode: 'HTML'
     };
 
     fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
@@ -1484,37 +1512,46 @@ function sendStrategyChangeNotification(strategy) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     }).then(function(response) {
-        console.log('Response status:', response.status); // Добавлено
+        console.log('Direct Telegram response status:', response.status);
         return response.json();
     }).then(function(data) {
-        console.log('Strategy change notification sent:', data);
+        console.log('Direct Telegram notification sent:', data);
     }).catch(function(error) {
-        console.error('Error sending strategy notification:', error);
+        console.error('Error sending direct Telegram message:', error);
     });
 }
 
 function sendWithdrawNotification(amount, phone, commission, finalAmount) {
     var userId = getUserName();
-    var message = 'Новая заявка на вывод\n\nПользователь: ' + userId + '\nЗапрошенная сумма: ' + formatNumber(amount.toString()) + ' ✧\nКомиссия: ' + commission.toFixed(2) + ' ✧\nТелефон: +' + phone + '\n\nК выводу: ' + formatNumber(finalAmount.toFixed(2)) + ' ✧';
+    var message = '💸 Новая заявка на вывод\n\nПользователь: ' + userId + '\nЗапрошенная сумма: ' + formatNumber(amount.toString()) + ' ✧\nКомиссия: ' + commission.toFixed(2) + ' ✧\nТелефон: +' + phone + '\n\nК выводу: ' + formatNumber(finalAmount.toFixed(2)) + ' ✧';
     
-    console.log('Sending withdraw notification:', message); // Добавлено
+    console.log('Sending withdraw notification:', message);
     
+    // Отправляем через Google Apps Script для более надежной доставки
     var data = {
-        chat_id: CHAT_ID,
-        text: message
+        action: 'sendNotification',
+        type: 'withdraw',
+        userId: userId,
+        amount: amount,
+        phone: phone,
+        commission: commission,
+        finalAmount: finalAmount,
+        message: message
     };
 
-    fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
+    fetch(SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     }).then(function(response) {
-        console.log('Withdraw response status:', response.status); // Добавлено
+        console.log('Withdraw notification response status:', response.status);
         return response.json();
-    }).then(function(data) {
-        console.log('Withdraw notification sent:', data);
+    }).then(function(result) {
+        console.log('Withdraw notification sent:', result);
     }).catch(function(error) {
         console.error('Error sending withdraw notification:', error);
+        // Fallback: прямая отправка в Telegram API
+        sendDirectTelegramMessage(message);
     });
 }
 
@@ -1559,11 +1596,47 @@ function paymentTimeout() {
 }
 
 function sendTelegramNotification(amount, transactionId) {
-    var message = 'Новая заявка на пополнение\n\nСумма: ' + formatNumber(amount.toString()) + ' ✧\nКомментарий: ' + transactionId + '\n\nПодтверждаете перевод?';
+    var userId = getUserName();
+    var message = '💰 Новая заявка на пополнение\n\nПользователь: ' + userId + '\nСумма: ' + formatNumber(amount.toString()) + ' ✧\nКомментарий: ' + transactionId + '\n\nПодтверждаете перевод?';
+    
+    console.log('Sending deposit notification:', message);
+    
+    // Отправляем через Google Apps Script для более надежной доставки
+    var data = {
+        action: 'sendNotification',
+        type: 'deposit',
+        userId: userId,
+        amount: amount,
+        transactionId: transactionId,
+        message: message
+    };
+
+    fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    }).then(function(response) {
+        console.log('Deposit notification response status:', response.status);
+        return response.json();
+    }).then(function(result) {
+        console.log('Deposit notification sent:', result);
+        if (result.messageId) {
+            currentTelegramMessageId = result.messageId;
+        }
+    }).catch(function(error) {
+        console.error('Error sending deposit notification:', error);
+        // Fallback: прямая отправка с кнопками
+        sendDirectDepositNotification(amount, transactionId, userId);
+    });
+}
+
+// Fallback функция для прямой отправки уведомления о депозите с кнопками
+function sendDirectDepositNotification(amount, transactionId, userId) {
+    var message = '💰 Новая заявка на пополнение\n\nПользователь: ' + userId + '\nСумма: ' + formatNumber(amount.toString()) + ' ✧\nКомментарий: ' + transactionId + '\n\nПодтверждаете перевод?';
     
     var keyboard = {
         inline_keyboard: [[
-            { text: 'Да', callback_data: 'confirm_' + transactionId + '_' + amount + '_' + getUserName() },
+            { text: 'Да', callback_data: 'confirm_' + transactionId + '_' + amount + '_' + userId },
             { text: 'Нет', callback_data: 'reject_' + transactionId }
         ]]
     };
@@ -1581,12 +1654,12 @@ function sendTelegramNotification(amount, transactionId) {
     }).then(function(response) {
         return response.json();
     }).then(function(data) {
-        console.log('Telegram message sent:', data);
+        console.log('Direct Telegram deposit message sent:', data);
         if (data.result && data.result.message_id) {
             currentTelegramMessageId = data.result.message_id;
         }
     }).catch(function(error) {
-        console.error('Error sending Telegram message:', error);
+        console.error('Error sending direct Telegram deposit message:', error);
     });
 }
 
@@ -1707,7 +1780,7 @@ function initApp() {
         loadBalance();
         loadStrategy();
         updateGreeting();
-        startHourlySync();
+        startFrequentSync();
         
         var customAmountInput = document.getElementById('customAmount');
         if (customAmountInput) {
