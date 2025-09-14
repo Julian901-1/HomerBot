@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Кошелёк</title>
+  <title>Кошелёк v4</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     body {
@@ -26,6 +26,18 @@
       text-align: center;
       margin-bottom: 20px;
       box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      position: relative;
+      overflow: hidden;
+    }
+    .balance-container::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+      transform: rotate(30deg);
     }
     #balanceDisplay {
       font-size: 2.5em;
@@ -34,6 +46,10 @@
     }
     #balanceDisplay::after {
       content: " ✧";
+    }
+    .interest-info {
+      font-size: 0.9em;
+      opacity: 0.9;
     }
     button {
       background-color: var(--tg-theme-button-color, #0088cc);
@@ -45,9 +61,14 @@
       cursor: pointer;
       width: 100%;
       margin-top: 10px;
+      transition: opacity 0.2s;
     }
     button:hover {
       opacity: 0.9;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
     #status {
       margin-top: 20px;
@@ -59,6 +80,8 @@
     .success { background-color: #d4edda; color: #155724; }
     .error { background-color: #f8d7da; color: #721c24; }
     .info { background-color: #cce5ff; color: #004085; }
+    .warning { background-color: #fff3cd; color: #856404; }
+    .hidden { display: none; }
     input[type="number"] {
       width: 100%;
       padding: 10px;
@@ -67,7 +90,16 @@
       border-radius: 5px;
       box-sizing: border-box;
     }
-    .hidden { display: none; }
+    .section {
+      background: var(--tg-theme-secondary-bg-color, #f8f9fa);
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+    h3 {
+      margin-top: 0;
+      color: var(--tg-theme-text-color, #000000);
+    }
   </style>
 </head>
 <body>
@@ -75,27 +107,20 @@
     <div class="balance-container">
       <div>Ваш баланс</div>
       <div id="balanceDisplay">0.00</div>
+      <div class="interest-info">Начисление 16% годовых</div>
     </div>
 
-    <button id="syncBtn">🔄 Синхронизировать</button>
-    <button id="depositBtn">📥 Пополнить</button>
-    <button id="withdrawBtn">📤 Вывести</button>
-
-    <!-- Deposit Section -->
-    <div id="depositSection" class="hidden">
+    <button id="syncBtn">🔄 Обновить баланс</button>
+    
+    <div class="section">
       <h3>Пополнение</h3>
-      <input type="number" id="depositAmount" placeholder="Сумма" min="100">
-      <button id="generateDepositBtn">Создать заявку</button>
-      <button onclick="toggleSection('depositSection')">Назад</button>
+      <input type="number" id="depositAmount" placeholder="Сумма (мин. 100)" min="100" step="100">
+      <button id="depositBtn">📥 Создать заявку</button>
     </div>
 
-    <!-- Withdraw Section -->
-    <div id="withdrawSection" class="hidden">
-      <h3>Вывод</h3>
-      <input type="number" id="withdrawAmount" placeholder="Сумма" min="100">
-      <input type="text" id="withdrawPhone" placeholder="Телефон">
-      <button id="processWithdrawBtn">Вывести</button>
-      <button onclick="toggleSection('withdrawSection')">Назад</button>
+    <div class="section">
+      <h3>Информация</h3>
+      <button id="infoBtn">ℹ️ Как это работает</button>
     </div>
 
     <div id="status" class="hidden"></div>
@@ -104,6 +129,7 @@
   <script>
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec'; // <-- ЗАМЕНИТЕ НА ВАШ URL
     let currentBalance = 0;
+    let syncIntervalId = null;
     let tg = window.Telegram?.WebApp;
 
     if (tg) {
@@ -111,12 +137,15 @@
       tg.expand();
     }
 
-    function showStatus(message, type = 'info') {
+    // === UI ФУНКЦИИ ===
+    function showStatus(message, type = 'info', duration = 5000) {
       const statusEl = document.getElementById('status');
       statusEl.textContent = message;
       statusEl.className = type;
       statusEl.classList.remove('hidden');
-      setTimeout(() => statusEl.classList.add('hidden'), 5000);
+      if (duration > 0) {
+        setTimeout(() => statusEl.classList.add('hidden'), duration);
+      }
     }
 
     function updateBalanceDisplay() {
@@ -131,7 +160,9 @@
       return '@test_user';
     }
 
-    function jsonpRequest(url, callbackName, successCallback, errorCallback) {
+    // === СЕТЕВЫЕ ФУНКЦИИ (JSONP) ===
+    function jsonpRequest(url, successCallback, errorCallback) {
+      const callbackName = 'cb_' + Date.now() + Math.floor(Math.random() * 10000);
       let script = document.createElement('script');
       let timeoutId;
 
@@ -145,17 +176,17 @@
         cleanup();
         console.error('JSONP Timeout:', url);
         if (errorCallback) errorCallback('Request timeout');
-      }, 10000);
+      }, 15000); // Увеличил таймаут до 15 секунд
 
       window[callbackName] = (data) => {
         cleanup();
-        console.log('JSONP Success:', data);
+        console.log('JSONP Success:', url, data);
         if (successCallback) successCallback(data);
       };
 
       script.onerror = (err) => {
         cleanup();
-        console.error('JSONP Error:', err);
+        console.error('JSONP Error:', url, err);
         if (errorCallback) errorCallback('Script load error');
       };
 
@@ -163,30 +194,37 @@
       document.head.appendChild(script);
     }
 
+    // === ОСНОВНАЯ ЛОГИКА ===
     function syncBalance() {
       const username = getUserName();
       if (username === '@test_user') {
-        showStatus('Тестовый пользователь, синхронизация отключена.', 'info');
-        return;
+        showStatus('Тестовый пользователь.', 'info');
+        return Promise.resolve();
       }
 
-      const callbackName = 'sync_cb_' + Date.now() + Math.floor(Math.random() * 10000);
-      const url = `${GAS_URL}?action=getBalance&username=${encodeURIComponent(username)}&callback=${callbackName}&t=${Date.now()}`;
+      showStatus('🔄 Синхронизация...', 'info', 0); // 0 = не скрывать автоматически
+      const url = `${GAS_URL}?action=getBalance&username=${encodeURIComponent(username)}&t=${Date.now()}`;
 
-      jsonpRequest(url, callbackName,
-        (data) => {
-          if (data?.success) {
-            currentBalance = parseFloat(data.balance) || 0;
-            updateBalanceDisplay();
-            showStatus('✅ Баланс синхронизирован!', 'success');
-          } else {
-            showStatus(`⚠️ Ошибка синхронизации: ${data?.error || 'Неизвестная ошибка'}`, 'error');
+      return new Promise((resolve, reject) => {
+        jsonpRequest(url,
+          (data) => {
+            const statusEl = document.getElementById('status');
+            if (data?.success) {
+              currentBalance = parseFloat(data.balance) || 0;
+              updateBalanceDisplay();
+              statusEl.classList.add('hidden'); // Скрываем статус "Синхронизация..."
+              resolve(data);
+            } else {
+              showStatus(`⚠️ Ошибка: ${data?.error || 'Неизвестная ошибка'}`, 'error');
+              reject(new Error(data?.error || 'Unknown error'));
+            }
+          },
+          (error) => {
+            showStatus(`❌ Сеть: ${error}`, 'error');
+            reject(new Error(error));
           }
-        },
-        (error) => {
-          showStatus(`❌ Ошибка сети: ${error}`, 'error');
-        }
-      );
+        );
+      });
     }
 
     function generateDeposit() {
@@ -196,87 +234,58 @@
         return;
       }
       const username = getUserName();
-      const transactionId = 'TX_' + Date.now();
-      const callbackName = 'dep_cb_' + Date.now() + Math.floor(Math.random() * 10000);
-      const message = `💰 Пополнение\nПользователь: ${username}\nСумма: ${amount}\nID: ${transactionId}`;
+      const transactionId = 'DEP' + Date.now();
       
-      const url = `${GAS_URL}?action=sendNotification&type=deposit&userId=${encodeURIComponent(username)}&amount=${amount}&transactionId=${transactionId}&message=${encodeURIComponent(message)}&callback=${callbackName}&t=${Date.now()}`;
+      const message = `💰 Новая заявка\nПользователь: ${username}\nСумма: ${amount.toFixed(2)}\nID: ${transactionId}`;
 
-      jsonpRequest(url, callbackName,
+      showStatus('📤 Отправка заявки...', 'info', 0);
+      const url = `${GAS_URL}?action=sendNotification&type=deposit&userId=${encodeURIComponent(username)}&amount=${amount}&transactionId=${transactionId}&message=${encodeURIComponent(message)}&t=${Date.now()}`;
+
+      jsonpRequest(url,
         (data) => {
           if (data?.success) {
-            showStatus('✅ Заявка создана! Ожидайте подтверждения.', 'success');
+            showStatus('✅ Заявка отправлена!', 'success');
             document.getElementById('depositAmount').value = '';
-            toggleSection('depositSection');
           } else {
-            showStatus(`⚠️ Ошибка: ${data?.error || 'Не удалось создать заявку'}`, 'error');
+            showStatus(`⚠️ Ошибка: ${data?.error || 'Не удалось'}`, 'error');
           }
         },
         (error) => {
-          showStatus(`❌ Ошибка сети: ${error}`, 'error');
+          showStatus(`❌ Сеть: ${error}`, 'error');
         }
       );
     }
 
-    function processWithdrawal() {
-      const amount = parseFloat(document.getElementById('withdrawAmount').value);
-      const phone = document.getElementById('withdrawPhone').value.trim();
-      if (!amount || amount < 100) {
-        showStatus('❌ Минимальная сумма 100', 'error');
-        return;
-      }
-      if (amount > currentBalance) {
-        showStatus('❌ Недостаточно средств', 'error');
-        return;
-      }
-      if (!phone) {
-        showStatus('❌ Введите номер телефона', 'error');
-        return;
-      }
-      const username = getUserName();
-      const commission = amount * 0.05;
-      const finalAmount = amount - commission;
-      const callbackName = 'wd_cb_' + Date.now() + Math.floor(Math.random() * 10000);
-      const message = `📤 Вывод\nПользователь: ${username}\nСумма: ${amount}\nКомиссия: ${commission.toFixed(2)}\nК получению: ${finalAmount.toFixed(2)}\nТелефон: ${phone}`;
-      
-      const url = `${GAS_URL}?action=sendNotification&type=withdraw&userId=${encodeURIComponent(username)}&amount=${amount}&phone=${encodeURIComponent(phone)}&commission=${commission}&finalAmount=${finalAmount}&message=${encodeURIComponent(message)}&callback=${callbackName}&t=${Date.now()}`;
-
-      jsonpRequest(url, callbackName,
-        (data) => {
-          if (data?.success) {
-            currentBalance -= amount; // Снимаем локально
-            updateBalanceDisplay();
-            showStatus('✅ Заявка на вывод отправлена!', 'success');
-            document.getElementById('withdrawAmount').value = '';
-            document.getElementById('withdrawPhone').value = '';
-            toggleSection('withdrawSection');
-          } else {
-            showStatus(`⚠️ Ошибка: ${data?.error || 'Не удалось создать заявку'}`, 'error');
-          }
-        },
-        (error) => {
-          showStatus(`❌ Ошибка сети: ${error}`, 'error');
-        }
-      );
-    }
-
-    function toggleSection(sectionId) {
-      document.getElementById('depositSection').classList.add('hidden');
-      document.getElementById('withdrawSection').classList.add('hidden');
-      if (sectionId) {
-        document.getElementById(sectionId).classList.remove('hidden');
+    function showInfo() {
+      if (tg) {
+        tg.showAlert("Информация:\n\n- Баланс растет автоматически (16% годовых)\n- Проценты начисляются каждые несколько часов\n- При синхронизации вы видите актуальный баланс\n- Администратор может вручную изменить баланс в таблице");
+      } else {
+        alert("Информация:\n\n- Баланс растет автоматически (16% годовых)\n- Проценты начисляются каждые несколько часов\n- При синхронизации вы видите актуальный баланс\n- Администратор может вручную изменить баланс в таблице");
       }
     }
 
+    // === ИНИЦИАЛИЗАЦИЯ И ЗАПУСК ===
     document.getElementById('syncBtn').addEventListener('click', syncBalance);
-    document.getElementById('depositBtn').addEventListener('click', () => toggleSection('depositSection'));
-    document.getElementById('withdrawBtn').addEventListener('click', () => toggleSection('withdrawSection'));
-    document.getElementById('generateDepositBtn').addEventListener('click', generateDeposit);
-    document.getElementById('processWithdrawBtn').addEventListener('click', processWithdrawal);
+    document.getElementById('depositBtn').addEventListener('click', generateDeposit);
+    document.getElementById('infoBtn').addEventListener('click', showInfo);
 
-    // Инициализация
+    // Начальная синхронизация и запуск периодической
     updateBalanceDisplay();
-    syncBalance(); // Автоматическая синхронизация при запуске
+    syncBalance().finally(() => {
+        // Запускаем периодическую синхронизацию каждые 30 секунд
+        syncIntervalId = setInterval(() => {
+            console.log("⏰ Auto-sync triggered");
+            syncBalance().catch(err => console.log("Auto-sync error (background):", err));
+        }, 30000);
+    });
+    
+    // Синхронизация при возвращении на страницу
+    window.addEventListener('focus', syncBalance);
+    // Синхронизация перед закрытием
+    window.addEventListener('beforeunload', () => {
+        if (syncIntervalId) clearInterval(syncIntervalId);
+        // Тут можно было бы сделать syncBalance(), но это блокирует закрытие
+    });
   </script>
 </body>
 </html>
