@@ -588,7 +588,7 @@
 </head>
 <body>
     <!-- Версия приложения -->
-    <div class="version">27.2-debug</div>
+    <div class="version">27.3-debug</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -1556,112 +1556,116 @@ function loadBalanceFromSheet() {
     try {
         var username = getUserName();
         
-        // Добавляем timestamp для избежания кеширования
-        var url = SCRIPT_URL + '?action=getBalance&username=' + encodeURIComponent(username) + '&timestamp=' + Date.now() + '&nocache=' + Math.random();
-        
         console.log('Loading balance from sheet for user:', username);
-        console.log('Request URL:', url);
         
-        // Используем более надежный подход с обработкой ошибок
-        fetch(url, {
-            method: 'GET',
-            mode: 'cors', // Явно указываем CORS режим
-            cache: 'no-cache',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
-        })
-        .then(function(response) {
-            console.log('Load balance response status:', response.status);
-            
-            if (!response.ok) {
-                throw new Error('HTTP ' + response.status + ': ' + response.statusText);
-            }
-            
-            // Сначала получаем текст, потом парсим
-            return response.text();
-        })
-        .then(function(text) {
-            console.log('Raw response text:', text);
-            
-            // Очищаем текст от возможных HTML тегов или лишних символов
-            var cleanText = text.trim();
-            
-            // Проверяем, является ли ответ JSON
-            if (!cleanText.startsWith('{') && !cleanText.startsWith('[')) {
-                throw new Error('Response is not JSON format: ' + cleanText.substring(0, 100));
-            }
-            
-            var result = JSON.parse(cleanText);
-            console.log('Balance loaded from sheet:', result);
-            
-            if (result.balance !== undefined) {
-                var serverBalance = parseFloat(result.balance) || 0;
-                var localBalance = parseFloat(localStorage.getItem('wallet_balance') || '0');
+        // Создаем уникальное имя callback функции
+        var callbackName = 'balanceCallback_' + Date.now();
+        
+        // URL с JSONP callback параметром
+        var url = SCRIPT_URL + '?action=getBalance&username=' + encodeURIComponent(username) + 
+                  '&callback=' + callbackName + 
+                  '&timestamp=' + Date.now() + 
+                  '&nocache=' + Math.random();
+        
+        console.log('JSONP Request URL:', url);
+        
+        // Создаем callback функцию в глобальном пространстве
+        window[callbackName] = function(data) {
+            try {
+                console.log('JSONP Balance data received:', data);
                 
-                console.log('Server balance:', serverBalance, 'Local balance:', localBalance);
-                
-                // Используем серверный баланс как единственный источник истины
-                if (Math.abs(serverBalance - localBalance) > 0.01) {
-                    console.log('Updating balance from server:', serverBalance, 'was:', localBalance);
+                if (data.balance !== undefined) {
+                    var serverBalance = parseFloat(data.balance) || 0;
+                    var localBalance = parseFloat(localStorage.getItem('wallet_balance') || '0');
                     
-                    // Останавливаем начисления
-                    stopInterestAccrual();
+                    console.log('Server balance:', serverBalance, 'Local balance:', localBalance);
                     
-                    // Обновляем баланс
-                    currentBalance = serverBalance;
-                    localStorage.setItem('wallet_balance', currentBalance.toString());
-                    
-                    // Обновляем отображение
-                    updateBalanceDisplay();
-                    
-                    // Перезапускаем начисления если баланс больше 0
-                    if (currentBalance > 0) {
-                        startInterestAccrual();
+                    // Используем серверный баланс как единственный источник истины
+                    if (Math.abs(serverBalance - localBalance) > 0.01) {
+                        console.log('Updating balance from server:', serverBalance, 'was:', localBalance);
+                        
+                        // Останавливаем начисления
+                        stopInterestAccrual();
+                        
+                        // Обновляем баланс
+                        currentBalance = serverBalance;
+                        localStorage.setItem('wallet_balance', currentBalance.toString());
+                        
+                        // Обновляем отображение
+                        updateBalanceDisplay();
+                        
+                        // Перезапускаем начисления если баланс больше 0
+                        if (currentBalance > 0) {
+                            startInterestAccrual();
+                        }
+                        
+                        showNotification('Баланс синхронизирован с сервером: ' + formatNumber(serverBalance.toString()) + ' ⚡', 'info');
+                    } else {
+                        console.log('Balance already up to date');
                     }
                     
-                    showNotification('Баланс синхронизирован с сервером: ' + formatNumber(serverBalance.toString()) + ' ⚡', 'info');
+                    // Обновляем стратегию если она изменилась
+                    if (data.strategy && data.strategy !== currentStrategy) {
+                        console.log('Strategy updated by server:', data.strategy, 'local was:', currentStrategy);
+                        currentStrategy = data.strategy;
+                        localStorage.setItem('investment_strategy', currentStrategy);
+                        updateCurrentStrategyDisplay();
+                        loadStrategy();
+                    }
+                } else if (data.error) {
+                    console.error('Server returned error:', data.error);
+                    showNotification('Ошибка сервера: ' + data.error, 'error');
                 } else {
-                    console.log('Balance already up to date');
+                    console.log('No balance data received from server');
                 }
                 
-                // Обновляем стратегию если она изменилась
-                if (result.strategy && result.strategy !== currentStrategy) {
-                    console.log('Strategy updated by server:', result.strategy, 'local was:', currentStrategy);
-                    currentStrategy = result.strategy;
-                    localStorage.setItem('investment_strategy', currentStrategy);
-                    updateCurrentStrategyDisplay();
-                    loadStrategy();
+                // Очищаем callback функцию и script элемент
+                if (window[callbackName]) {
+                    delete window[callbackName];
                 }
-            } else if (result.error) {
-                console.error('Server returned error:', result.error);
-                showNotification('Ошибка сервера: ' + result.error, 'error');
-            } else {
-                console.log('No balance data received from server');
-                showNotification('Нет данных о балансе от сервера', 'error');
+                var scriptElement = document.getElementById(callbackName);
+                if (scriptElement && scriptElement.parentNode) {
+                    scriptElement.parentNode.removeChild(scriptElement);
+                }
+                
+            } catch (callbackError) {
+                console.error('Error in JSONP callback:', callbackError);
+                showNotification('Ошибка обработки данных с сервера', 'error');
             }
-        })
-        .catch(function(error) {
-            console.error('Error loading from sheet:', error);
+        };
+        
+        // Создаем script элемент для JSONP запроса
+        var script = document.createElement('script');
+        script.id = callbackName;
+        script.src = url;
+        script.onerror = function() {
+            console.error('JSONP request failed');
+            showNotification('Ошибка соединения с сервером', 'error');
             
-            // Более детальная обработка ошибок
-            if (error.message.includes('CORS')) {
-                console.error('CORS error - Google Apps Script not properly configured');
-                showNotification('Ошибка доступа к серверу (CORS). Проверьте настройки Google Apps Script.', 'error');
-            } else if (error.message.includes('Failed to fetch')) {
-                console.error('Network error - possibly offline or server unavailable');
-                showNotification('Ошибка сети. Проверьте подключение к интернету.', 'error');
-            } else if (error.message.includes('not JSON')) {
-                console.error('Server returned non-JSON response');
-                showNotification('Сервер вернул неправильный формат данных.', 'error');
-            } else {
-                showNotification('Ошибка синхронизации с сервером: ' + error.message, 'error');
+            // Очищаем callback и элемент
+            if (window[callbackName]) {
+                delete window[callbackName];
             }
-            
-            // В случае ошибки используем локальные данные
-            console.log('Using local data due to server error');
-        });
+            if (script.parentNode) {
+                script.parentNode.removeChild(script);
+            }
+        };
+        
+        // Добавляем script в head для выполнения запроса
+        document.head.appendChild(script);
+        
+        // Устанавливаем таймаут для очистки в случае отсутствия ответа
+        setTimeout(function() {
+            if (window[callbackName]) {
+                console.log('JSONP request timed out');
+                delete window[callbackName];
+            }
+            var scriptElement = document.getElementById(callbackName);
+            if (scriptElement && scriptElement.parentNode) {
+                scriptElement.parentNode.removeChild(scriptElement);
+            }
+        }, 10000); // 10 секунд таймаут
+        
     } catch (e) {
         console.error('Error in loadBalanceFromSheet:', e);
         showNotification('Критическая ошибка синхронизации', 'error');
