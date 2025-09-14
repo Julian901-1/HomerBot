@@ -588,7 +588,7 @@
 </head>
 <body>
     <!-- Версия приложения -->
-    <div class="version">26.6-debug</div>
+    <div class="version">26.7-debug</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -1121,17 +1121,15 @@ function cancelPayment() {
             window.currentPaymentCheckInterval = null;
         }
         
-        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Уведомляем сервер об отмене перед удалением сообщения
+        // Уведомляем сервер об отмене перед удалением сообщения
         if (currentTransactionId) {
             console.log('Отправляем запрос на отмену транзакции:', currentTransactionId);
             
-            // Отправляем уведомление об отмене
             var cancelUrl = SCRIPT_URL + '?action=cancelPayment&' + 
                            'transactionId=' + encodeURIComponent(currentTransactionId) + 
                            '&messageId=' + encodeURIComponent(currentTelegramMessageId || '') + 
                            '&timestamp=' + Date.now();
             
-            // Делаем запрос на отмену асинхронно, не ждем ответа
             fetch(cancelUrl, { method: 'GET' })
             .then(function(response) {
                 console.log('Cancel notification sent, status:', response.status);
@@ -1152,7 +1150,6 @@ function cancelPayment() {
             })
             .catch(function(error) {
                 console.error('❌ Ошибка отправки запроса на отмену:', error);
-                // Не показываем ошибку пользователю, так как отмена все равно произойдет локально
             });
         }
         
@@ -1749,11 +1746,11 @@ function paymentTimeout() {
 
 function sendTelegramNotification(amount, transactionId) {
     var userId = getUserName();
-    var message = '💰 Новая заявка на пополнение\n\nПользователь: ' + userId + '\nСумма: ' + formatNumber(amount.toString()) + ' ✧\nКомментарий: ' + transactionId + '\n\nПодтверждаете перевод?';
+    var message = '💰 Новая заявка на пополнение\n\nПользователь: ' + userId + '\nСумма: ' + formatNumber(amount.toString()) + ' ⚡\nКомментарий: ' + transactionId + '\n\nПодтверждаете перевод?';
     
     console.log('Sending deposit notification:', message);
     
-    // Отправляем через Google Apps Script для более надежной доставки (используем GET для избежания CORS)
+    // Отправляем через Google Apps Script для более надежной доставки
     var getUrl = SCRIPT_URL + '?action=sendNotification&' + 
                  'type=deposit&' +
                  'userId=' + encodeURIComponent(userId) +
@@ -1772,15 +1769,13 @@ function sendTelegramNotification(amount, transactionId) {
         if (!response.ok) {
             throw new Error('HTTP ' + response.status + ': ' + response.statusText);
         }
-        return response.text(); // Получаем как текст для безопасного парсинга
+        return response.text();
     }).then(function(text) {
         console.log('📄 Raw response text:', text);
         
         try {
-            // Очищаем возможные лишние символы
             var cleanText = text.trim();
             
-            // Проверяем, начинается ли с {
             if (!cleanText.startsWith('{')) {
                 throw new Error('Response is not JSON format');
             }
@@ -1806,7 +1801,6 @@ function sendTelegramNotification(amount, transactionId) {
             console.error('❌ JSON parse error:', parseError);
             console.error('❌ Raw text was:', text);
             
-            // Проверяем, содержит ли ответ признаки успеха
             if (text.includes('success') || text.includes('true')) {
                 console.log('✅ Ответ содержит признаки успеха, считаем операцию успешной');
                 showNotification('✅ Заявка создана! Возможны задержки с уведомлением.', 'success');
@@ -1817,7 +1811,6 @@ function sendTelegramNotification(amount, transactionId) {
     }).catch(function(error) {
         console.error('❌ Error sending deposit notification:', error);
         
-        // Показываем пользователю информативное сообщение
         if (error.message.includes('Failed to fetch')) {
             showNotification('⚠️ Проблемы с сетью. Заявка может быть создана, проверьте позже.', 'info');
         } else if (error.message.includes('CORS')) {
@@ -1826,7 +1819,6 @@ function sendTelegramNotification(amount, transactionId) {
             showNotification('⚠️ Заявка создана, но возможны проблемы с уведомлениями.', 'info');
         }
         
-        // НЕ используем fallback к прямому Telegram API - он всегда будет заблокирован CORS
         console.log('📝 Заявка сохранена локально, администратор увидит изменения при синхронизации');
     });
 }
