@@ -1,291 +1,121 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Кошелёк v4</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background-color: var(--tg-theme-bg-color, #ffffff);
-      color: var(--tg-theme-text-color, #000000);
-      margin: 0;
-      padding: 20px;
-      box-sizing: border-box;
-    }
-    .container {
-      max-width: 400px;
-      margin: 0 auto;
-    }
-    .balance-container {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 15px;
-      padding: 20px;
-      color: white;
-      text-align: center;
-      margin-bottom: 20px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-      position: relative;
-      overflow: hidden;
-    }
-    .balance-container::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
-      transform: rotate(30deg);
-    }
-    #balanceDisplay {
-      font-size: 2.5em;
-      font-weight: bold;
-      margin: 10px 0;
-    }
-    #balanceDisplay::after {
-      content: " ✧";
-    }
-    .interest-info {
-      font-size: 0.9em;
-      opacity: 0.9;
-    }
-    button {
-      background-color: var(--tg-theme-button-color, #0088cc);
-      color: var(--tg-theme-button-text-color, #ffffff);
-      border: none;
-      border-radius: 8px;
-      padding: 12px 20px;
-      font-size: 16px;
-      cursor: pointer;
-      width: 100%;
-      margin-top: 10px;
-      transition: opacity 0.2s;
-    }
-    button:hover {
-      opacity: 0.9;
-    }
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    #status {
-      margin-top: 20px;
-      padding: 10px;
-      border-radius: 5px;
-      text-align: center;
-      font-weight: bold;
-    }
-    .success { background-color: #d4edda; color: #155724; }
-    .error { background-color: #f8d7da; color: #721c24; }
-    .info { background-color: #cce5ff; color: #004085; }
-    .warning { background-color: #fff3cd; color: #856404; }
-    .hidden { display: none; }
-    input[type="number"] {
-      width: 100%;
-      padding: 10px;
-      margin: 10px 0;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      box-sizing: border-box;
-    }
-    .section {
-      background: var(--tg-theme-secondary-bg-color, #f8f9fa);
-      border-radius: 10px;
-      padding: 15px;
-      margin-bottom: 20px;
-    }
-    h3 {
-      margin-top: 0;
-      color: var(--tg-theme-text-color, #000000);
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кошелёк</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            text-align: center;
+        }
+        
+        .wallet-container {
+            max-width: 300px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        .wallet-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        
+        .balance {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 30px 0;
+            color: var(--tg-theme-button-color, #0088cc);
+        }
+        
+        .add-button {
+            background-color: var(--tg-theme-button-color, #0088cc);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-size: 18px;
+            cursor: pointer;
+            margin: 20px 0;
+        }
+        
+        .add-button:hover {
+            opacity: 0.8;
+        }
+        
+        .status {
+            font-size: 12px;
+            color: var(--tg-theme-hint-color, #999999);
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <div class="balance-container">
-      <div>Ваш баланс</div>
-      <div id="balanceDisplay">0.00</div>
-      <div class="interest-info">Начисление 16% годовых</div>
+    <div class="wallet-container">
+        <div class="wallet-title">Кошелёк</div>
+        <div class="balance" id="balance">0</div>
+        <button class="add-button" id="addButton" onclick="addOne()">+1</button>
+        <div class="status" id="status">Загрузка...</div>
     </div>
 
-    <button id="syncBtn">🔄 Обновить баланс</button>
-    
-    <div class="section">
-      <h3>Пополнение</h3>
-      <input type="number" id="depositAmount" placeholder="Сумма (мин. 100)" min="100" step="100">
-      <button id="depositBtn">📥 Создать заявку</button>
-    </div>
-
-    <div class="section">
-      <h3>Информация</h3>
-      <button id="infoBtn">ℹ️ Как это работает</button>
-    </div>
-
-    <div id="status" class="hidden"></div>
-  </div>
-
-  <script>
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec'; // <-- ЗАМЕНИТЕ НА ВАШ URL
-    let currentBalance = 0;
-    let syncIntervalId = null;
-    let tg = window.Telegram?.WebApp;
-
-    if (tg) {
-      tg.ready();
-      tg.expand();
-    }
-
-    // === UI ФУНКЦИИ ===
-    function showStatus(message, type = 'info', duration = 5000) {
-      const statusEl = document.getElementById('status');
-      statusEl.textContent = message;
-      statusEl.className = type;
-      statusEl.classList.remove('hidden');
-      if (duration > 0) {
-        setTimeout(() => statusEl.classList.add('hidden'), duration);
-      }
-    }
-
-    function updateBalanceDisplay() {
-      document.getElementById('balanceDisplay').textContent = currentBalance.toFixed(2);
-    }
-
-    function getUserName() {
-      if (tg?.initDataUnsafe?.user) {
-        const user = tg.initDataUnsafe.user;
-        return user.username ? `@${user.username}` : `user_${user.id}`;
-      }
-      return '@test_user';
-    }
-
-    // === СЕТЕВЫЕ ФУНКЦИИ (JSONP) ===
-    function jsonpRequest(url, successCallback, errorCallback) {
-      const callbackName = 'cb_' + Date.now() + Math.floor(Math.random() * 10000);
-      let script = document.createElement('script');
-      let timeoutId;
-
-      const cleanup = () => {
-        clearTimeout(timeoutId);
-        if (window[callbackName]) delete window[callbackName];
-        if (script.parentNode) script.parentNode.removeChild(script);
-      };
-
-      timeoutId = setTimeout(() => {
-        cleanup();
-        console.error('JSONP Timeout:', url);
-        if (errorCallback) errorCallback('Request timeout');
-      }, 15000); // Увеличил таймаут до 15 секунд
-
-      window[callbackName] = (data) => {
-        cleanup();
-        console.log('JSONP Success:', url, data);
-        if (successCallback) successCallback(data);
-      };
-
-      script.onerror = (err) => {
-        cleanup();
-        console.error('JSONP Error:', url, err);
-        if (errorCallback) errorCallback('Script load error');
-      };
-
-      script.src = url;
-      document.head.appendChild(script);
-    }
-
-    // === ОСНОВНАЯ ЛОГИКА ===
-    function syncBalance() {
-      const username = getUserName();
-      if (username === '@test_user') {
-        showStatus('Тестовый пользователь.', 'info');
-        return Promise.resolve();
-      }
-
-      showStatus('🔄 Синхронизация...', 'info', 0); // 0 = не скрывать автоматически
-      const url = `${GAS_URL}?action=getBalance&username=${encodeURIComponent(username)}&t=${Date.now()}`;
-
-      return new Promise((resolve, reject) => {
-        jsonpRequest(url,
-          (data) => {
-            const statusEl = document.getElementById('status');
-            if (data?.success) {
-              currentBalance = parseFloat(data.balance) || 0;
-              updateBalanceDisplay();
-              statusEl.classList.add('hidden'); // Скрываем статус "Синхронизация..."
-              resolve(data);
-            } else {
-              showStatus(`⚠️ Ошибка: ${data?.error || 'Неизвестная ошибка'}`, 'error');
-              reject(new Error(data?.error || 'Unknown error'));
-            }
-          },
-          (error) => {
-            showStatus(`❌ Сеть: ${error}`, 'error');
-            reject(new Error(error));
-          }
-        );
-      });
-    }
-
-    function generateDeposit() {
-      const amount = parseFloat(document.getElementById('depositAmount').value);
-      if (!amount || amount < 100) {
-        showStatus('❌ Минимальная сумма 100', 'error');
-        return;
-      }
-      const username = getUserName();
-      const transactionId = 'DEP' + Date.now();
-      
-      const message = `💰 Новая заявка\nПользователь: ${username}\nСумма: ${amount.toFixed(2)}\nID: ${transactionId}`;
-
-      showStatus('📤 Отправка заявки...', 'info', 0);
-      const url = `${GAS_URL}?action=sendNotification&type=deposit&userId=${encodeURIComponent(username)}&amount=${amount}&transactionId=${transactionId}&message=${encodeURIComponent(message)}&t=${Date.now()}`;
-
-      jsonpRequest(url,
-        (data) => {
-          if (data?.success) {
-            showStatus('✅ Заявка отправлена!', 'success');
-            document.getElementById('depositAmount').value = '';
-          } else {
-            showStatus(`⚠️ Ошибка: ${data?.error || 'Не удалось'}`, 'error');
-          }
-        },
-        (error) => {
-          showStatus(`❌ Сеть: ${error}`, 'error');
+    <script>
+        let currentBalance = 0;
+        let localBalance = 0;
+        let username = '';
+        
+        // Инициализация Telegram Web App
+        window.Telegram.WebApp.ready();
+        
+        // Получаем данные пользователя
+        const user = window.Telegram.WebApp.initDataUnsafe?.user;
+        if (user && user.username) {
+            username = user.username;
+        } else {
+            document.getElementById('status').textContent = 'Ошибка: не удалось получить имя пользователя';
         }
-      );
-    }
-
-    function showInfo() {
-      if (tg) {
-        tg.showAlert("Информация:\n\n- Баланс растет автоматически (16% годовых)\n- Проценты начисляются каждые несколько часов\n- При синхронизации вы видите актуальный баланс\n- Администратор может вручную изменить баланс в таблице");
-      } else {
-        alert("Информация:\n\n- Баланс растет автоматически (16% годовых)\n- Проценты начисляются каждые несколько часов\n- При синхронизации вы видите актуальный баланс\n- Администратор может вручную изменить баланс в таблице");
-      }
-    }
-
-    // === ИНИЦИАЛИЗАЦИЯ И ЗАПУСК ===
-    document.getElementById('syncBtn').addEventListener('click', syncBalance);
-    document.getElementById('depositBtn').addEventListener('click', generateDeposit);
-    document.getElementById('infoBtn').addEventListener('click', showInfo);
-
-    // Начальная синхронизация и запуск периодической
-    updateBalanceDisplay();
-    syncBalance().finally(() => {
-        // Запускаем периодическую синхронизацию каждые 30 секунд
-        syncIntervalId = setInterval(() => {
-            console.log("⏰ Auto-sync triggered");
-            syncBalance().catch(err => console.log("Auto-sync error (background):", err));
-        }, 30000);
-    });
-    
-    // Синхронизация при возвращении на страницу
-    window.addEventListener('focus', syncBalance);
-    // Синхронизация перед закрытием
-    window.addEventListener('beforeunload', () => {
-        if (syncIntervalId) clearInterval(syncIntervalId);
-        // Тут можно было бы сделать syncBalance(), но это блокирует закрытие
-    });
-  </script>
+        
+        // URL вашего Google Apps Script
+        const SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
+        
+        async function syncBalance() {
+            if (!username) return;
+            
+            try {
+                const response = await fetch(`${SCRIPT_URL}?action=getBalance&username=${username}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentBalance = data.balance;
+                    localBalance = currentBalance;
+                    updateDisplay();
+                    document.getElementById('status').textContent = `Синхронизировано: ${new Date().toLocaleTimeString()}`;
+                } else {
+                    document.getElementById('status').textContent = 'Ошибка синхронизации';
+                }
+            } catch (error) {
+                document.getElementById('status').textContent = 'Ошибка подключения';
+                console.error('Sync error:', error);
+            }
+        }
+        
+        function addOne() {
+            localBalance++;
+            updateDisplay();
+        }
+        
+        function updateDisplay() {
+            document.getElementById('balance').textContent = localBalance;
+        }
+        
+        // Запуск синхронизации каждые 20 секунд
+        syncBalance(); // Первоначальная загрузка
+        setInterval(syncBalance, 20000);
+    </script>
 </body>
 </html>
