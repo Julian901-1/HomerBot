@@ -96,7 +96,7 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёк</div>
+        <div class="wallet-title">Кошелёк v3</div>
         <div class="balance" id="balance">0.0000</div>
         
         <div class="rate-selection">
@@ -322,10 +322,83 @@
                 return;
             }
             
-            // Обновляем баланс с процентами перед добавлением
-            updateBalanceWithInterest();
-            localBalance++;
-            updateDisplay();
+            if (pendingRequest) {
+                showPopup('Ожидается подтверждение администратора');
+                return;
+            }
+            
+            // Отправляем запрос администратору
+            sendAdminRequest();
+        }
+        
+        async function sendAdminRequest() {
+            pendingRequest = true;
+            document.getElementById('addButton').textContent = 'Ожидание...';
+            document.getElementById('addButton').disabled = true;
+            
+            try {
+                const url = `${SCRIPT_URL}?action=requestAddOne&username=${username}`;
+                await fetch(url);
+                showPopup('Запрос отправлен администратору');
+            } catch (error) {
+                console.error('Admin request error:', error);
+                showPopup('Ошибка отправки запроса');
+                pendingRequest = false;
+                document.getElementById('addButton').textContent = '+1';
+                document.getElementById('addButton').disabled = false;
+            }
+        }
+        
+        // Функция показа popup уведомлений
+        function showPopup(message) {
+            // Создаем popup элемент
+            const popup = document.createElement('div');
+            popup.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background-color: var(--tg-theme-bg-color, #ffffff);
+                color: var(--tg-theme-text-color, #000000);
+                border: 2px solid var(--tg-theme-button-color, #0088cc);
+                border-radius: 12px;
+                padding: 20px;
+                max-width: 280px;
+                text-align: center;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                z-index: 1000;
+                font-size: 16px;
+                line-height: 1.4;
+            `;
+            popup.textContent = message;
+            
+            // Создаем затемняющий фон
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0,0,0,0.5);
+                z-index: 999;
+            `;
+            
+            // Добавляем на страницу
+            document.body.appendChild(overlay);
+            document.body.appendChild(popup);
+            
+            // Убираем через 3 секунды
+            setTimeout(() => {
+                document.body.removeChild(popup);
+                document.body.removeChild(overlay);
+            }, 3000);
+            
+            // Убираем при клике на overlay
+            overlay.onclick = () => {
+                document.body.removeChild(popup);
+                document.body.removeChild(overlay);
+            };
         }
         
         function updateDisplay() {
