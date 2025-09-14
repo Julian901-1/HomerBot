@@ -49,6 +49,11 @@
             opacity: 0.8;
         }
         
+        .add-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
         .rate-selection {
             margin: 20px 0;
             text-align: center;
@@ -96,7 +101,7 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёкv</div>
+        <div class="wallet-title">Кошелёкь</div>
         <div class="balance" id="balance">0.0000</div>
         
         <div class="rate-selection">
@@ -113,12 +118,14 @@
     </div>
 
     <script>
-        let localBalance = 0;
-        let username = '';
-        let isInitialized = false;
-        let currentRate = 16; // Процентная ставка по умолчанию
-        let lastUpdateTime = Date.now();
-        let realTimeUpdateInterval;
+        // Глобальные переменные
+        var localBalance = 0;
+        var username = '';
+        var isInitialized = false;
+        var currentRate = 16;
+        var lastUpdateTime = Date.now();
+        var realTimeUpdateInterval = null;
+        var pendingRequest = false;
         
         // URL вашего Google Apps Script
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
@@ -135,7 +142,8 @@
                 isInitialized: isInitialized,
                 scriptUrl: SCRIPT_URL,
                 currentRate: currentRate,
-                localBalance: localBalance
+                localBalance: localBalance,
+                pendingRequest: pendingRequest
             });
         }
         
@@ -199,7 +207,7 @@
                 clearInterval(realTimeUpdateInterval);
             }
             
-            realTimeUpdateInterval = setInterval(updateBalanceWithInterest, 100); // Обновление каждые 100мс
+            realTimeUpdateInterval = setInterval(updateBalanceWithInterest, 100);
         }
         
         // Установка процентной ставки
@@ -245,6 +253,20 @@
                         updateDisplay();
                     }
                     
+                    // Проверяем ответы администратора
+                    if (data.adminResponse) {
+                        if (data.adminResponse === 'approved') {
+                            showPopup('Администратор одобрил добавление единицы');
+                            localBalance++;
+                            updateDisplay();
+                        } else if (data.adminResponse === 'rejected') {
+                            showPopup('Администратор НЕ одобрил добавление единицы');
+                        }
+                        pendingRequest = false;
+                        document.getElementById('addButton').textContent = '+1';
+                        document.getElementById('addButton').disabled = false;
+                    }
+                    
                     // Проверяем, изменилась ли ставка
                     if (data.rate && data.rate !== currentRate) {
                         currentRate = data.rate;
@@ -285,10 +307,17 @@
                         const timeElapsed = Date.now() - lastUpdateTimestamp;
                         const rate = data.rate || 16;
                         
+                        const oldBalance = data.balance;
                         localBalance = calculateInterest(data.balance, rate, timeElapsed);
                         currentRate = rate;
                         
-                        console.log('Calculated balance with interest:', localBalance, 'from', data.balance, 'time elapsed:', timeElapsed);
+                        // Показываем уведомление о добавленных процентах, если есть прирост
+                        const addedAmount = localBalance - oldBalance;
+                        if (addedAmount > 0.0001) { // Показываем только если прирост больше 0.0001
+                            showPopup(`Добавлено с последнего захода в приложение: ${addedAmount.toFixed(4)}`);
+                        }
+                        
+                        console.log('Calculated balance with interest:', localBalance, 'from', data.balance, 'added:', addedAmount);
                     } else {
                         localBalance = data.balance || 0;
                         currentRate = data.rate || 16;
@@ -317,6 +346,8 @@
         }
         
         function addOne() {
+            console.log('addOne called, pendingRequest:', pendingRequest, 'isInitialized:', isInitialized);
+            
             if (!isInitialized) {
                 document.getElementById('status').textContent = 'Ожидание инициализации...';
                 return;
@@ -390,14 +421,22 @@
             
             // Убираем через 3 секунды
             setTimeout(() => {
-                document.body.removeChild(popup);
-                document.body.removeChild(overlay);
+                if (document.body.contains(popup)) {
+                    document.body.removeChild(popup);
+                }
+                if (document.body.contains(overlay)) {
+                    document.body.removeChild(overlay);
+                }
             }, 3000);
             
             // Убираем при клике на overlay
             overlay.onclick = () => {
-                document.body.removeChild(popup);
-                document.body.removeChild(overlay);
+                if (document.body.contains(popup)) {
+                    document.body.removeChild(popup);
+                }
+                if (document.body.contains(overlay)) {
+                    document.body.removeChild(overlay);
+                }
             };
         }
         
