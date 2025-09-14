@@ -588,7 +588,7 @@
 </head>
 <body>
     <!-- Версия приложения -->
-    <div class="version">26.8-debug</div>
+    <div class="version">26.9-debug</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -1883,6 +1883,9 @@ function loadBalance() {
         var savedBalance = localStorage.getItem('wallet_balance') || '0';
         currentBalance = parseFloat(savedBalance);
         
+        // УДАЛЕНО: автоматическое добавление 1000
+        // НЕ ДОБАВЛЯЕМ тестовый баланс
+        
         if (currentBalance > 0) {
             calculateMissedInterest();
         }
@@ -1907,7 +1910,7 @@ function loadBalance() {
         }
     } catch (e) {
         console.error('Error loading balance:', e);
-        currentBalance = 0;
+        currentBalance = 0; // ИЗМЕНЕНО: было 1000
         var balanceElement = document.getElementById('balanceAmount');
         if (balanceElement) {
             balanceElement.textContent = '0.00';
@@ -2116,21 +2119,16 @@ function testGoogleAppsScriptConnection() {
 // === ИНИЦИАЛИЗАЦИЯ ===
 function initApp() {
     console.log('initApp called');
-    console.log('SCRIPT_URL:', SCRIPT_URL);
-    console.log('BOT_TOKEN:', BOT_TOKEN ? BOT_TOKEN.substring(0, 10) + '...' : 'NOT SET');
-    console.log('CHAT_ID:', CHAT_ID);
     
     try {
         initTelegram();
-        
-        // Тестируем подключение к Google Apps Script
         testGoogleAppsScriptConnection();
-        
         loadBalance();
         loadStrategy();
         updateGreeting();
         startFrequentSync();
         
+        // Настройка обработчиков событий
         var customAmountInput = document.getElementById('customAmount');
         if (customAmountInput) {
             customAmountInput.addEventListener('input', function() {
@@ -2144,39 +2142,13 @@ function initApp() {
             });
         }
         
-        var withdrawAmountInput = document.getElementById('withdrawAmount');
-        if (withdrawAmountInput) {
-            withdrawAmountInput.addEventListener('input', function() {
-                var value = this.value.replace(/\s/g, '');
-                this.value = formatNumber(value);
-            });
-        }
-        
-        var withdrawPhoneInput = document.getElementById('withdrawPhone');
-        if (withdrawPhoneInput) {
-            withdrawPhoneInput.addEventListener('input', function() {
-                this.value = formatPhoneNumber(this.value);
-            });
-        }
+        // УДАЛЕНО: весь блок setTimeout с установкой тестового баланса
+        // НЕ устанавливаем автоматически currentBalance = 1000
         
         console.log('App initialized successfully');
         
-        // Тестовый баланс для демонстрации
-setTimeout(function() {
-    if (currentBalance === 0) {
-        console.log('Setting test balance for demonstration');
-        currentBalance = 1000;
-        localStorage.setItem('wallet_balance', currentBalance.toString());
-        updateBalanceDisplay();
-        startInterestAccrual();
-    }
-    
-    // Принудительно обновляем отображение
-    updateBalanceDisplay();
-    
-    // Пробуем загрузить с сервера
-    loadBalanceFromSheet();
-}, 1000); // Уменьшил время ожидания
+        // Загружаем данные с сервера
+        loadBalanceFromSheet();
         
     } catch (e) {
         console.error('Error in initApp:', e);
