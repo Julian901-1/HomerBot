@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -454,11 +455,11 @@
             flex: 1;
         }
 
-.strategy-name {
-    font-weight: 500;
-    margin-bottom: 4px;
-    color: var(--tg-theme-text-color, #000);
-}
+        .strategy-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+            color: var(--tg-theme-text-color, #000);
+        }
 
         .strategy-desc {
             font-size: 13px;
@@ -491,32 +492,36 @@
         }
 
         /* Pop-up уведомление */
-.popup-notification {
-    position: fixed;
-    top: -100px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #4CAF50;
-    color: white;
-    padding: 16px 24px;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-    z-index: 1001;
-    font-size: 14px;
-    font-weight: 500;
-    text-align: center;
-    max-width: 90%;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    opacity: 0;
-}
+        .popup-notification {
+            position: fixed;
+            top: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #4CAF50;
+            color: white;
+            padding: 16px 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            z-index: 1001;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            max-width: 90%;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0;
+        }
 
-.popup-notification.show {
-    top: 20px;
-    opacity: 1;
-}
+        .popup-notification.show {
+            top: 20px;
+            opacity: 1;
+        }
 
         .popup-notification.error {
             background: #f44336;
+        }
+
+        .popup-notification.info {
+            background: #2196F3;
         }
 
         /* Модальное окно */
@@ -587,9 +592,9 @@
     </style>
 </head>
 <body>
-	
+    
     <!-- Версия приложения -->
-    <div class="version">27.8-debug</div>
+    <div class="version">28.0-stable</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -617,42 +622,16 @@
                 <button class="btn btn-withdraw" onclick="showWithdrawPage()">
                     Вывести
                 </button>
-				<button onclick="forceBalanceSync()" style="background: red; color: white; padding: 10px;">ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ</button>
-				<!-- В секции кнопок тестирования добавьте: -->
-<button class="btn centered-btn" onclick="runSyncDiagnostics()" style="background: #6c757d; margin-top: 10px;">
-    🔍 ДИАГНОСТИКА: Проверка синхронизации
-</button>
-
-<script>
-function runSyncDiagnostics() {
-    console.log('🔍 Running sync diagnostics...');
-    showNotification('🔍 Запуск диагностики...', 'info');
-    
-    diagnoseSyncIssues()
-        .then(function(serverReachable) {
-            return performReliableSync();
-        })
-        .then(function(result) {
-            const message = result.success ? 
-                '✅ Диагностика пройдена. Синхронизация работает.' : 
-                '⚠️ Обнаружены проблемы с синхронизацией.';
-            
-            showNotification(message, result.success ? 'success' : 'error');
-            
-            // Подробная информация в консоль
-            console.log('📊 Diagnostic Results:', {
-                syncResult: result,
-                currentBalance: currentBalance,
-                currentStrategy: currentStrategy,
-                syncState: syncState
-            });
-        })
-        .catch(function(error) {
-            showNotification('❌ Диагностика не удалась: ' + error.message, 'error');
-            console.error('❌ Diagnostics failed:', error);
-        });
-}
-</script>
+                
+                <!-- Кнопка принудительной синхронизации -->
+                <button class="btn centered-btn" onclick="forceBalanceSync()" style="background: #6c757d; margin-top: 10px;">
+                    🔄 Обновить баланс
+                </button>
+                
+                <!-- Диагностика синхронизации -->
+                <button class="btn centered-btn" onclick="runSyncDiagnostics()" style="background: #17a2b8; margin-top: 5px;">
+                    🔍 ДИАГНОСТИКА: Проверка синхронизации
+                </button>
             </div>
 
             <div class="current-strategy" id="currentStrategy" onclick="showStrategyPage()">
@@ -816,21 +795,6 @@ function runSyncDiagnostics() {
                 <button class="btn btn-withdraw centered-btn" onclick="processWithdraw()">
                     Создать заявку на вывод
                 </button>
-                
-                <!-- Тестовая кнопка для диагностики -->
-                <button class="btn centered-btn" onclick="testNotification()" style="background: #28a745; margin-top: 20px;">
-                    🧪 ТЕСТ: Отправить уведомление
-                </button>
-                
-                <!-- Кнопка проверки webhook -->
-                <button class="btn centered-btn" onclick="checkWebhookStatus()" style="background: #17a2b8; margin-top: 10px;">
-                    🔍 ПРОВЕРИТЬ: Webhook статус
-                </button>
-                
-                <!-- Кнопка прямого тестирования GET -->
-                <button class="btn centered-btn" onclick="testDirectGet()" style="background: #6f42c1; margin-top: 10px;">
-                    🎯 ТЕСТ: Прямой GET запрос
-                </button>
             </div>
         </div>
 
@@ -844,7 +808,7 @@ function runSyncDiagnostics() {
     </div>
 
 <script>
-// Дополнительная инициализация для Telegram
+// Инициализация Telegram WebApp
 if (window.Telegram && window.Telegram.WebApp) {
     window.Telegram.WebApp.ready();
     window.Telegram.WebApp.expand();
@@ -852,7 +816,8 @@ if (window.Telegram && window.Telegram.WebApp) {
 } else {
     console.log('Not in Telegram environment - using test data');
 }
-// Глобальные переменные
+
+// === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 var currentBalance = 0;
 var selectedAmount = 0;
 var currentStrategy = 'standard';
@@ -862,7 +827,6 @@ var currentTransactionId = null;
 var currentPaymentAmount = 0;
 var interestTimer = null;
 var lastUpdateTime = null;
-var syncTimer = null;
 var currentTelegramMessageId = null;
 
 // Константы для Telegram бота
@@ -877,6 +841,22 @@ var INTEREST_RATES = {
     standard: 16.0,
     balanced: 17.5,
     aggressive: 18.5
+};
+
+// === УЛУЧШЕННАЯ СИСТЕМА СИНХРОНИЗАЦИИ ===
+var SYNC_CONFIG = {
+    maxRetries: 3,
+    timeoutMs: 10000,
+    retryDelayMs: 2000,
+    syncIntervalMs: 120000,
+    forceUpdateThreshold: 0.01
+};
+
+var syncState = {
+    isActive: false,
+    lastSyncTime: 0,
+    consecutiveFailures: 0,
+    currentMethod: 'jsonp'
 };
 
 // === ОСНОВНЫЕ ФУНКЦИИ НАВИГАЦИИ ===
@@ -942,7 +922,6 @@ function showMainPage() {
 function showStrategyPage() {
     showTab('info');
     
-    // Подсвечиваем область выбора стратегии
     setTimeout(function() {
         var overlay = document.getElementById('highlightOverlay');
         var strategySelector = document.getElementById('strategySelector');
@@ -981,19 +960,18 @@ function showNotification(message, type, duration) {
         
         if (type === 'error') {
             notification.classList.add('error');
+        } else if (type === 'info') {
+            notification.classList.add('info');
         }
         
-        // Показываем уведомление
         requestAnimationFrame(function() {
             notification.classList.add('show');
         });
         
-        // Скрываем через указанное время
         var hideDelay = duration || 3000;
         setTimeout(function() {
             notification.classList.remove('show');
             
-            // Очищаем после анимации
             setTimeout(function() {
                 notification.className = 'popup-notification';
                 notification.textContent = '';
@@ -1005,57 +983,7 @@ function showNotification(message, type, duration) {
     }
 }
 
-// === ФУНКЦИИ ОБРАБОТКИ СУММ И ПЛАТЕЖЕЙ ===
-function checkPaymentConfirmation() {
-    if (!currentTransactionId || !currentPaymentAmount) return;
-    
-    console.log('Checking payment status for transaction:', currentTransactionId);
-    
-    // Проверяем статус платежа через Google Sheets
-    fetch(SCRIPT_URL + '?action=checkPayment&transactionId=' + currentTransactionId)
-    .then(function(response) {
-        console.log('Payment check response status:', response.status);
-        return response.json();
-    })
-    .then(function(result) {
-        console.log('Payment check result:', result);
-        
-        if (result.confirmed) {
-            if (result.newBalance !== undefined) {
-                // Используем баланс из сервера как единственный источник истины
-                var serverBalance = result.newBalance;
-                var currentLocalBalance = parseFloat(localStorage.getItem('wallet_balance') || '0');
-                
-                // Обновляем только если серверный баланс отличается от локального
-                if (Math.abs(serverBalance - currentLocalBalance) > 0.01) {
-                    console.log('Updating balance from server:', serverBalance, 'was:', currentLocalBalance);
-                    currentBalance = serverBalance;
-                    localStorage.setItem('wallet_balance', currentBalance.toString());
-                    updateBalanceDisplay();
-                    showNotification('✅ Платеж подтвержден! Баланс обновлен.', 'success');
-                    
-                    // Обновляем баланс из таблицы для синхронизации
-                    loadBalanceFromSheet();
-                } else {
-                    console.log('Balance already up to date, no changes needed');
-                }
-            }
-            
-            // Очищаем данные о платеже в любом случае
-            cancelPayment();
-        } else if (result.rejected) {
-            // Платеж отклонен
-            showNotification('❌ Платеж отклонен администратором. Попробуйте еще раз.', 'error');
-            
-            // Очищаем данные о платеже
-            cancelPayment();
-        }
-    })
-    .catch(function(error) {
-        console.error('Error checking payment:', error);
-    });
-}
-
+// === ФУНКЦИИ РАБОТЫ С СУММАМИ И ПЛАТЕЖАМИ ===
 function selectAmount(amount) {
     console.log('selectAmount called with:', amount);
     try {
@@ -1110,21 +1038,15 @@ function generatePayment() {
         if (timerDiv) timerDiv.style.display = 'block';
 
         showNotification('✅ Заявка на пополнение создана! После поступления средств баланс будет обновлён автоматически.');
-
-        // Запускаем таймер на 5 минут
+        
         startPaymentTimer();
-
-        // Отправляем уведомление в Telegram бот
-   sendTelegramNotification(amount, transactionId);
-    
-    // Запускаем проверку статуса платежа каждые 5 секунд
-    var paymentCheckInterval = setInterval(function() {
-        checkPaymentConfirmation();
-    }, 5000);
-    
-    // Сохраняем интервал для очистки при отмене
-    window.currentPaymentCheckInterval = paymentCheckInterval;
-		
+        sendTelegramNotification(amount, transactionId);
+        
+        var paymentCheckInterval = setInterval(function() {
+            checkPaymentConfirmation();
+        }, 5000);
+        
+        window.currentPaymentCheckInterval = paymentCheckInterval;
         
     } catch (e) {
         console.error('Error in generatePayment:', e);
@@ -1152,16 +1074,12 @@ function cancelPayment() {
             btns[i].classList.remove('selected');
         }
         
-        // Очищаем интервал проверки платежа
         if (window.currentPaymentCheckInterval) {
             clearInterval(window.currentPaymentCheckInterval);
             window.currentPaymentCheckInterval = null;
         }
         
-        // Уведомляем сервер об отмене перед удалением сообщения
         if (currentTransactionId) {
-            console.log('Отправляем запрос на отмену транзакции:', currentTransactionId);
-            
             var cancelUrl = SCRIPT_URL + '?action=cancelPayment&' + 
                            'transactionId=' + encodeURIComponent(currentTransactionId) + 
                            '&messageId=' + encodeURIComponent(currentTelegramMessageId || '') + 
@@ -1170,27 +1088,12 @@ function cancelPayment() {
             fetch(cancelUrl, { method: 'GET' })
             .then(function(response) {
                 console.log('Cancel notification sent, status:', response.status);
-                return response.text();
-            })
-            .then(function(text) {
-                console.log('Cancel response:', text);
-                try {
-                    const result = JSON.parse(text);
-                    if (result.success) {
-                        console.log('✅ Отмена обработана сервером успешно');
-                    } else {
-                        console.log('⚠️ Сервер вернул ошибку отмены:', result.error);
-                    }
-                } catch (e) {
-                    console.log('⚠️ Ответ сервера не является JSON, но запрос отправлен');
-                }
             })
             .catch(function(error) {
-                console.error('❌ Ошибка отправки запроса на отмену:', error);
+                console.error('Error sending cancel notification:', error);
             });
         }
         
-        // Очищаем локальные переменные
         selectedAmount = 0;
         clearPaymentTimer();
         currentTransactionId = null;
@@ -1204,60 +1107,6 @@ function cancelPayment() {
     }
 }
 
-    try {
-        var paymentInfo = document.getElementById('paymentInfo');
-        var paymentInstructions = document.getElementById('paymentInstructions');
-        var generateBtn = document.getElementById('generatePaymentBtn');
-        var cancelBtn = document.getElementById('cancelPaymentBtn');
-        var timerDiv = document.getElementById('paymentTimer');
-        var customInput = document.getElementById('customAmount');
-        
-        if (paymentInfo) paymentInfo.style.display = 'none';
-        if (paymentInstructions) paymentInstructions.style.display = 'none';
-        if (generateBtn) generateBtn.style.display = 'block';
-        if (cancelBtn) cancelBtn.style.display = 'none';
-        if (timerDiv) timerDiv.style.display = 'none';
-        if (customInput) customInput.value = '';
-        
-        var btns = document.querySelectorAll('.amount-btn');
-        for (var i = 0; i < btns.length; i++) {
-            btns[i].classList.remove('selected');
-        }
-        
-        // Очищаем интервал проверки платежа
-        if (window.currentPaymentCheckInterval) {
-            clearInterval(window.currentPaymentCheckInterval);
-            window.currentPaymentCheckInterval = null;
-        }
-        
-        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Уведомляем сервер об отмене перед удалением сообщения
-        if (currentTransactionId) {
-            // Уведомляем Google Apps Script об отмене платежа
-            var cancelUrl = SCRIPT_URL + '?action=cancelPayment&transactionId=' + encodeURIComponent(currentTransactionId) + '&messageId=' + encodeURIComponent(currentTelegramMessageId || '') + '&timestamp=' + Date.now();
-            
-            fetch(cancelUrl, { method: 'GET' })
-            .then(function(response) {
-                console.log('Cancel notification sent, status:', response.status);
-                return response.json();
-            })
-            .then(function(result) {
-                console.log('Cancel result:', result);
-            })
-            .catch(function(error) {
-                console.error('Error sending cancel notification:', error);
-            });
-        }
-        
-        selectedAmount = 0;
-        clearPaymentTimer();
-        currentTransactionId = null;
-        currentPaymentAmount = 0;
-        currentTelegramMessageId = null;
-        
-    } catch (e) {
-        console.error('Error in cancelPayment:', e);
-    }
-
 function processWithdraw() {
     console.log('processWithdraw called');
     try {
@@ -1268,38 +1117,33 @@ function processWithdraw() {
         var amount = parseFloat(amountStr) || 0;
         var phone = withdrawPhoneInput ? withdrawPhoneInput.value.replace(/\D/g, '') : '';
         
-        // Проверка номера телефона
         if (!phone || phone.length !== 11 || !phone.startsWith('7')) {
             showNotification('Номер должен начинаться с +7 и содержать 11 цифр', 'error');
             return;
         }
         
-        // Проверка суммы
         if (!amount || amount < 100) {
             showNotification('Минимальная сумма вывода: 100 ✧', 'error');
             return;
         }
         
         var commission = amount * 0.005;
-        var totalToDeduct = amount + commission; // Из баланса вычитаем сумму + комиссия
-        var finalAmount = amount - commission; // Пользователь получит сумма - комиссия
+        var totalToDeduct = amount + commission;
+        var finalAmount = amount - commission;
         
         if (totalToDeduct > currentBalance) {
             showNotification('Недостаточно средств (с учётом комиссии 0,5%)', 'error');
             return;
         }
 
-        // Вычитаем полную сумму из баланса (сумма + комиссия)
         currentBalance -= totalToDeduct;
         localStorage.setItem('wallet_balance', currentBalance.toString());
-        loadBalance();
+        updateBalanceDisplay();
         
-        // Отправляем уведомление в Telegram
         sendWithdrawNotification(amount, phone, commission, finalAmount);
         
         showNotification('✅ Заявка на вывод ' + formatNumber(finalAmount.toFixed(2)) + ' ✧ создана!');
         
-        // Очищаем поля
         if (withdrawAmountInput) withdrawAmountInput.value = '';
         if (withdrawPhoneInput) withdrawPhoneInput.value = '';
         
@@ -1334,11 +1178,8 @@ function selectStrategy(strategy) {
             localStorage.setItem('investment_strategy', strategy);
             updateCurrentStrategyDisplay();
             
-            // Отправляем уведомление о смене стратегии
             sendStrategyChangeNotification(strategy);
-            
-            // Обновляем баланс в Google таблице
-            syncBalanceToSheet();
+            syncBalanceToServer();
         }
     } catch (e) {
         console.error('Error in selectStrategy:', e);
@@ -1430,7 +1271,7 @@ function updateGreeting() {
         if (!greeting) return;
         
         var now = new Date();
-        var moscowTime = new Date(now.getTime() + (3 * 60 * 60 * 1000)); // UTC+3 для МСК
+        var moscowTime = new Date(now.getTime() + (3 * 60 * 60 * 1000));
         var hour = moscowTime.getHours();
         
         var timeGreeting = hour >= 17 ? 'Добрый вечер' : 'Добрый день';
@@ -1471,8 +1312,6 @@ function startInterestAccrual() {
             var interest = currentBalance * secondlyRate * timeDiff;
             currentBalance += interest;
             
-            console.log('Interest added:', interest, 'New balance:', currentBalance);
-            
             localStorage.setItem('wallet_balance', currentBalance.toString());
             localStorage.setItem('last_update_time', currentTime.toString());
             
@@ -1496,6 +1335,8 @@ function updateBalanceDisplay() {
             minimumFractionDigits: 8,
             maximumFractionDigits: 8
         });
+    } else if (balanceElement) {
+        balanceElement.textContent = '0.00';
     }
 }
 
@@ -1507,7 +1348,6 @@ function calculateMissedInterest() {
             var currentTime = Date.now();
             var timeDiff = (currentTime - lastTime) / 1000;
             
-            // Убираем ограничение в 24 часа - начисляем за любое время отсутствия
             if (timeDiff > 0) {
                 var currentRate = INTEREST_RATES[currentStrategy] || INTEREST_RATES.standard;
                 var yearlyRate = currentRate / 100;
@@ -1526,213 +1366,314 @@ function calculateMissedInterest() {
     }
 }
 
-// === СИНХРОНИЗАЦИЯ С GOOGLE SHEETS ===
-function syncBalanceToSheet() {
-    try {
-        var username = getUserName();
-        
-        // Используем GET запрос для избежания CORS
-        var getUrl = SCRIPT_URL + '?action=updateBalance&' + 
-                     'username=' + encodeURIComponent(username) +
-                     '&strategy=' + encodeURIComponent(currentStrategy) +
-                     '&balance=' + encodeURIComponent(currentBalance) +
-                     '&timestamp=' + Date.now();
-        
-        console.log('🔄 Syncing balance to sheet via GET:', getUrl);
-        
-        fetch(getUrl, {
-            method: 'GET',
-            mode: 'no-cors' // Используем no-cors для избежания preflight запросов
-        })
-        .then(function(response) {
-            console.log('📋 Sync response received');
-            
-            // В режиме no-cors мы не можем читать ответ
-            // Но запрос будет отправлен
-            if (response.type === 'opaque') {
-                console.log('✅ Balance sync request sent (no-cors mode)');
-                return { success: true, note: 'no-cors mode' };
-            }
-            
-            return response.text();
-        })
-        .then(function(result) {
-            if (typeof result === 'string') {
-                try {
-                    var parsed = JSON.parse(result);
-                    console.log('✅ Balance synced to sheet successfully:', parsed);
-                    
-                    if (parsed.error) {
-                        console.error('⚠️ Server returned error:', parsed.error);
-                    }
-                } catch (e) {
-                    console.log('✅ Sync request sent, response not JSON:', result.substring(0, 50));
-                }
-            } else {
-                console.log('✅ Sync request completed:', result);
-            }
-        })
-        .catch(function(error) {
-            console.error('⚠️ Error syncing to sheet:', error);
-            
-            // Не показываем ошибку пользователю для фоновых синхронизаций
-            // Только логируем для отладки
-            if (error.message.includes('CORS')) {
-                console.log('📝 CORS error expected in browser environment');
-            } else {
-                console.error('🔍 Unexpected sync error:', error.message);
-            }
-        });
-    } catch (e) {
-        console.error('⚠️ Error in syncBalanceToSheet:', e);
+// === УЛУЧШЕННАЯ СИСТЕМА СИНХРОНИЗАЦИИ ===
+function performReliableSync() {
+    if (syncState.isActive) {
+        console.log('🔄 Sync already in progress, skipping');
+        return Promise.resolve({ success: false, message: 'Sync in progress' });
     }
-}
 
-function loadBalanceFromSheet() {
-    console.log('Starting balance sync...');
-    
-    // Сначала пробуем JSONP
-    tryJsonpSync()
-    .then(function(success) {
-        if (!success) {
-            console.log('JSONP failed, trying no-cors fallback');
-            tryNoCorsSync();
-        }
-    })
-    .catch(function(error) {
-        console.error('All sync methods failed:', error);
-        showNotification('Ошибка синхронизации с сервером', 'error');
-    });
-}
+    syncState.isActive = true;
+    console.log('🚀 Starting reliable sync process...');
 
-function tryJsonpSync() {
-    return new Promise(function(resolve, reject) {
-        try {
-            var username = getUserName();
-            var callbackName = 'jsonp_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-            
-            console.log('Attempting JSONP sync for user:', username);
-            
-            var timeoutId = setTimeout(function() {
-                console.log('JSONP timeout after 8 seconds');
-                cleanup();
-                resolve(false); // Не удалось, но не ошибка
-            }, 8000);
-            
-            var cleanup = function() {
-                clearTimeout(timeoutId);
-                if (window[callbackName]) {
-                    delete window[callbackName];
-                }
-                var script = document.getElementById(callbackName);
-                if (script && script.parentNode) {
-                    script.parentNode.removeChild(script);
-                }
-            };
-            
-            window[callbackName] = function(data) {
-                try {
-                    console.log('JSONP success! Received:', data);
-                    cleanup();
-                    
-                    if (data.balance !== undefined) {
-                        var serverBalance = parseFloat(data.balance) || 0;
-                        var localBalance = parseFloat(localStorage.getItem('wallet_balance') || '0');
-                        
-                        if (Math.abs(serverBalance - localBalance) > 0.01) {
-                            console.log('Updating balance from', localBalance, 'to', serverBalance);
-                            
-                            stopInterestAccrual();
-                            currentBalance = serverBalance;
-                            localStorage.setItem('wallet_balance', currentBalance.toString());
-                            updateBalanceDisplay();
-                            
-                            if (currentBalance > 0) {
-                                startInterestAccrual();
-                            }
-                            
-                            showNotification('Баланс обновлен: ' + formatNumber(serverBalance.toFixed(2)) + ' ⚡', 'info');
-                        } else {
-                            console.log('Balance already up to date');
-                        }
-                        
-                        if (data.strategy && data.strategy !== currentStrategy) {
-                            currentStrategy = data.strategy;
-                            localStorage.setItem('investment_strategy', currentStrategy);
-                            updateCurrentStrategyDisplay();
-                            loadStrategy();
-                        }
-                    }
-                    
-                    resolve(true); // Успех
-                } catch (error) {
-                    console.error('Error processing JSONP response:', error);
-                    cleanup();
-                    resolve(false); // Не удалось обработать
-                }
-            };
-            
-            var script = document.createElement('script');
-            script.id = callbackName;
-            script.type = 'text/javascript';
-            
-            script.onerror = function(error) {
-                console.log('JSONP script failed to load:', error);
-                cleanup();
-                resolve(false); // Не удалось загрузить
-            };
-            
-            script.onload = function() {
-                console.log('JSONP script loaded successfully');
-            };
-            
-            var url = SCRIPT_URL + 
-                      '?action=getBalance' +
-                      '&username=' + encodeURIComponent(username) +
-                      '&callback=' + callbackName +
-                      '&t=' + Date.now();
-            
-            console.log('JSONP request URL:', url);
-            script.src = url;
-            document.head.appendChild(script);
-            
-        } catch (error) {
-            console.error('Error setting up JSONP:', error);
-            resolve(false);
-        }
-    });
-}
-
-function tryNoCorsSync() {
-    try {
-        var username = getUserName();
-        var url = SCRIPT_URL + '?action=getBalance&username=' + encodeURIComponent(username) + '&timestamp=' + Date.now();
-        
-        console.log('Attempting no-cors sync for user:', username);
-        
-        fetch(url, {
-            method: 'GET',
-            mode: 'no-cors',
-            cache: 'no-cache'
-        })
-        .then(function(response) {
-            console.log('No-cors request completed');
-            
-            if (response.type === 'opaque') {
-                showNotification('Синхронизация отправлена (ограниченный режим)', 'info', 2000);
+    return executeWithRetry(attemptJsonpSync, SYNC_CONFIG.maxRetries)
+        .then(function(result) {
+            if (result.success) {
+                syncState.consecutiveFailures = 0;
+                syncState.currentMethod = 'jsonp';
+                return result;
             }
+            throw new Error('JSONP sync failed after all retries');
         })
-        .catch(function(error) {
-            console.log('No-cors request error (may be normal):', error);
-            showNotification('Запрос синхронизации отправлен', 'info', 2000);
+        .catch(function(jsonpError) {
+            console.log('⚠️ JSONP failed, trying image pixel method:', jsonpError.message);
+            return attemptImagePixelSync();
+        })
+        .catch(function(allError) {
+            console.log('❌ All sync methods failed:', allError.message);
+            syncState.consecutiveFailures++;
+            return { success: false, error: allError.message };
+        })
+        .finally(function() {
+            syncState.isActive = false;
+            syncState.lastSyncTime = Date.now();
         });
+}
+
+function attemptJsonpSync() {
+    return new Promise(function(resolve, reject) {
+        var username = getUserName();
+        var callbackName = 'sync_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+        var timeoutId, script;
+        var completed = false;
+
+        function cleanup() {
+            if (completed) return;
+            completed = true;
+            
+            clearTimeout(timeoutId);
+            
+            if (window[callbackName]) {
+                delete window[callbackName];
+            }
+            
+            if (script && script.parentNode) {
+                script.parentNode.removeChild(script);
+            }
+        }
+
+        function complete(success, data) {
+            cleanup();
+            if (success) {
+                resolve(data);
+            } else {
+                reject(new Error(data || 'JSONP request failed'));
+            }
+        }
+
+        timeoutId = setTimeout(function() {
+            console.log('⏰ JSONP timeout after', SYNC_CONFIG.timeoutMs, 'ms');
+            complete(false, 'JSONP timeout');
+        }, SYNC_CONFIG.timeoutMs);
+
+        window[callbackName] = function(data) {
+            console.log('✅ JSONP success! Received:', data);
+            
+            try {
+                var processResult = processServerData(data);
+                complete(true, { success: true, data: data, processed: processResult });
+            } catch (error) {
+                console.error('❌ Error processing JSONP data:', error);
+                complete(false, 'Error processing data: ' + error.message);
+            }
+        };
+
+        script = document.createElement('script');
+        script.id = callbackName;
+        script.type = 'text/javascript';
+        
+        script.onerror = function(error) {
+            console.log('❌ JSONP script failed to load:', error);
+            complete(false, 'Script load error');
+        };
+
+        var url = SCRIPT_URL + 
+                  '?action=getBalance' +
+                  '&username=' + encodeURIComponent(username) +
+                  '&currentBalance=' + encodeURIComponent(currentBalance) +
+                  '&strategy=' + encodeURIComponent(currentStrategy) +
+                  '&callback=' + callbackName +
+                  '&t=' + Date.now();
+
+        console.log('🌐 JSONP request URL:', url.substring(0, 150) + '...');
+        script.src = url;
+        document.head.appendChild(script);
+    });
+}
+
+function attemptImagePixelSync() {
+    return new Promise(function(resolve, reject) {
+        console.log('🖼️ Attempting image pixel sync fallback...');
+        
+        var username = getUserName();
+        var img = new Image();
+        var completed = false;
+        
+        function cleanup() {
+            if (completed) return;
+            completed = true;
+            img.onload = null;
+            img.onerror = null;
+        }
+        
+        var timeoutId = setTimeout(function() {
+            cleanup();
+            reject(new Error('Image pixel sync timeout'));
+        }, SYNC_CONFIG.timeoutMs);
+        
+        img.onload = function() {
+            cleanup();
+            clearTimeout(timeoutId);
+            console.log('✅ Image pixel sync completed (fire-and-forget)');
+            resolve({ success: true, method: 'image_pixel', note: 'fire-and-forget' });
+        };
+        
+        img.onerror = function() {
+            cleanup();
+            clearTimeout(timeoutId);
+            console.log('❌ Image pixel sync failed');
+            reject(new Error('Image pixel sync failed'));
+        };
+        
+        var syncUrl = SCRIPT_URL + 
+                      '?action=updateBalance' +
+                      '&username=' + encodeURIComponent(username) +
+                      '&balance=' + encodeURIComponent(currentBalance) +
+                      '&strategy=' + encodeURIComponent(currentStrategy) +
+                      '&method=image_pixel' +
+                      '&t=' + Date.now();
+        
+        console.log('🖼️ Image pixel URL:', syncUrl.substring(0, 150) + '...');
+        img.src = syncUrl;
+    });
+}
+
+function processServerData(serverData) {
+    var updated = false;
+    
+    try {
+        if (serverData.balance !== undefined) {
+            var serverBalance = parseFloat(serverData.balance) || 0;
+            var localBalance = parseFloat(localStorage.getItem('wallet_balance') || '0');
+            var balanceDiff = Math.abs(serverBalance - localBalance);
+            
+            if (balanceDiff > SYNC_CONFIG.forceUpdateThreshold) {
+                console.log('💰 Updating balance from server:', localBalance, '->', serverBalance);
+                
+                stopInterestAccrual();
+                
+                currentBalance = serverBalance;
+                localStorage.setItem('wallet_balance', currentBalance.toString());
+                updateBalanceDisplay();
+                
+                if (currentBalance > 0) {
+                    startInterestAccrual();
+                }
+                
+                updated = true;
+                
+                if (balanceDiff > 1) {
+                    showNotification('💰 Баланс обновлен: ' + formatNumber(serverBalance.toFixed(2)) + ' ⚡', 'info', 3000);
+                }
+            } else {
+                console.log('✓ Balance already synchronized');
+            }
+        }
+        
+        if (serverData.strategy && serverData.strategy !== currentStrategy) {
+            console.log('🎯 Updating strategy from server:', currentStrategy, '->', serverData.strategy);
+            currentStrategy = serverData.strategy;
+            localStorage.setItem('investment_strategy', currentStrategy);
+            updateCurrentStrategyDisplay();
+            loadStrategy();
+            updated = true;
+        }
+        
+        return {
+            updated: updated,
+            balance: serverData.balance,
+            strategy: serverData.strategy,
+            timestamp: new Date().toISOString()
+        };
         
     } catch (error) {
-        console.error('Error in no-cors sync:', error);
+        console.error('Error processing server data:', error);
+        throw error;
     }
 }
 
-// Принудительная синхронизация баланса с сервером
+function executeWithRetry(asyncFn, maxRetries) {
+    var attempt = 0;
+    
+    function tryExecute() {
+        attempt++;
+        console.log('🔄 Sync attempt', attempt, 'of', maxRetries);
+        
+        return asyncFn()
+            .catch(function(error) {
+                if (attempt >= maxRetries) {
+                    console.log('❌ All', maxRetries, 'attempts failed');
+                    throw error;
+                }
+                
+                console.log('⏳ Retrying in', SYNC_CONFIG.retryDelayMs, 'ms...');
+                return new Promise(function(resolve) {
+                    setTimeout(resolve, SYNC_CONFIG.retryDelayMs);
+                }).then(tryExecute);
+            });
+    }
+    
+    return tryExecute();
+}
+
+function syncBalanceToServer() {
+    if (syncState.isActive) {
+        console.log('🔒 Sync in progress, skipping balance upload');
+        return Promise.resolve(false);
+    }
+    
+    console.log('📤 Uploading balance to server...');
+    
+    var username = getUserName();
+    var uploadUrl = SCRIPT_URL + '?action=updateBalance&' + 
+                    'username=' + encodeURIComponent(username) +
+                    '&strategy=' + encodeURIComponent(currentStrategy) +
+                    '&balance=' + encodeURIComponent(currentBalance) +
+                    '&source=client_sync' +
+                    '&timestamp=' + Date.now();
+    
+    return new Promise(function(resolve) {
+        var img = new Image();
+        img.onload = function() {
+            console.log('✅ Balance uploaded successfully');
+            resolve(true);
+        };
+        img.onerror = function() {
+            console.log('⚠️ Balance upload failed');
+            resolve(false);
+        };
+        img.src = uploadUrl;
+    });
+}
+
+function startImprovedSync() {
+    console.log('🚀 Starting improved synchronization system...');
+    
+    if (window.syncInterval) {
+        clearInterval(window.syncInterval);
+    }
+    
+    setTimeout(function() {
+        performReliableSync()
+            .then(function(result) {
+                if (result.success) {
+                    console.log('✅ Initial sync completed successfully');
+                } else {
+                    console.log('⚠️ Initial sync had issues:', result.error);
+                }
+            });
+    }, 5000);
+    
+    window.syncInterval = setInterval(function() {
+        console.log('⏰ Scheduled sync starting...');
+        performReliableSync()
+            .then(function(result) {
+                var status = result.success ? 'Success' : 'Failed';
+                console.log('📊 Scheduled sync result:', status);
+                
+                if (syncState.consecutiveFailures > 3) {
+                    console.log('⚠️ Too many failures, reducing sync frequency');
+                    clearInterval(window.syncInterval);
+                    window.syncInterval = setInterval(arguments.callee, SYNC_CONFIG.syncIntervalMs * 2);
+                }
+            });
+    }, SYNC_CONFIG.syncIntervalMs);
+    
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            console.log('👀 Page became visible, syncing...');
+            setTimeout(function() {
+                performReliableSync();
+            }, 1000);
+        }
+    });
+    
+    window.addEventListener('beforeunload', function() {
+        syncBalanceToServer();
+    });
+}
+
+// === ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ ===
 function forceBalanceSync() {
     console.log('🔄 User requested force sync');
     showNotification('🔄 Выполняется принудительная синхронизация...', 'info');
@@ -1753,193 +1694,121 @@ function forceBalanceSync() {
         });
 }
 
+// === ДИАГНОСТИКА СИНХРОНИЗАЦИИ ===
+function runSyncDiagnostics() {
+    console.log('🔍 Running sync diagnostics...');
+    showNotification('🔍 Запуск диагностики...', 'info');
+    
+    diagnoseSyncIssues()
+        .then(function(serverReachable) {
+            return performReliableSync();
+        })
+        .then(function(result) {
+            const message = result.success ? 
+                '✅ Диагностика пройдена. Синхронизация работает.' : 
+                '⚠️ Обнаружены проблемы с синхронизацией.';
+            
+            showNotification(message, result.success ? 'success' : 'error');
+            
+            console.log('📊 Diagnostic Results:', {
+                syncResult: result,
+                currentBalance: currentBalance,
+                currentStrategy: currentStrategy,
+                syncState: syncState
+            });
+        })
+        .catch(function(error) {
+            showNotification('❌ Диагностика не удалась: ' + error.message, 'error');
+            console.error('❌ Diagnostics failed:', error);
+        });
+}
+
+function diagnoseSyncIssues() {
+    console.log('🔍 SYNC DIAGNOSTICS:');
+    console.log('- Current method:', syncState.currentMethod);
+    console.log('- Is active:', syncState.isActive);
+    console.log('- Last sync:', new Date(syncState.lastSyncTime).toLocaleString());
+    console.log('- Consecutive failures:', syncState.consecutiveFailures);
+    console.log('- Script URL:', SCRIPT_URL);
+    console.log('- Current balance:', currentBalance);
+    console.log('- Current strategy:', currentStrategy);
+    console.log('- Username:', getUserName());
+    
+    var testUrl = SCRIPT_URL + '?action=test&t=' + Date.now();
+    
+    return fetch(testUrl, { 
+        method: 'GET', 
+        mode: 'no-cors',
+        cache: 'no-cache'
+    })
+    .then(function() {
+        console.log('✅ Server is reachable');
+        return true;
+    })
+    .catch(function(error) {
+        console.log('❌ Server unreachable:', error.message);
+        return false;
+    });
+}
+
 function getUserName() {
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
         var user = tg.initDataUnsafe.user;
-        // Возвращаем username с @ если есть, иначе используем ID
         return user.username ? '@' + user.username : 'user_' + user.id;
     }
-    return '@test_user'; // Добавляем @ для тестового пользователя
+    return '@test_user';
 }
 
-function startFrequentSync() {
-    // Очищаем предыдущий таймер если есть
-    if (syncTimer) {
-        clearInterval(syncTimer);
-    }
+// === ФУНКЦИИ ПРОВЕРКИ ПЛАТЕЖЕЙ ===
+function checkPaymentConfirmation() {
+    if (!currentTransactionId || !currentPaymentAmount) return;
     
-    // Синхронизация каждые 2 минуты (увеличено для снижения нагрузки)
-    syncTimer = setInterval(function() {
-        try {
-            syncBalanceToSheet();
-            
-            // Загружаем баланс только каждую 4-ю синхронизацию (каждые 8 минут)
-            if (Math.random() < 0.25) {
-                loadBalanceFromSheet();
+    console.log('Checking payment status for transaction:', currentTransactionId);
+    
+    fetch(SCRIPT_URL + '?action=checkPayment&transactionId=' + currentTransactionId)
+    .then(function(response) {
+        console.log('Payment check response status:', response.status);
+        return response.json();
+    })
+    .then(function(result) {
+        console.log('Payment check result:', result);
+        
+        if (result.confirmed) {
+            if (result.newBalance !== undefined) {
+                var serverBalance = result.newBalance;
+                var currentLocalBalance = parseFloat(localStorage.getItem('wallet_balance') || '0');
+                
+                if (Math.abs(serverBalance - currentLocalBalance) > 0.01) {
+                    console.log('Updating balance from server:', serverBalance, 'was:', currentLocalBalance);
+                    currentBalance = serverBalance;
+                    localStorage.setItem('wallet_balance', currentBalance.toString());
+                    updateBalanceDisplay();
+                    showNotification('✅ Платеж подтвержден! Баланс обновлен.', 'success');
+                    
+                    performReliableSync();
+                } else {
+                    console.log('Balance already up to date, no changes needed');
+                }
             }
-        } catch (e) {
-            console.error('Error in sync interval:', e);
+            
+            cancelPayment();
+        } else if (result.rejected) {
+            showNotification('❌ Платеж отклонен администратором. Попробуйте еще раз.', 'error');
+            cancelPayment();
         }
-    }, 120 * 1000); // каждые 2 минуты
-    
-    // Первая синхронизация через 30 секунд после запуска
-    setTimeout(function() {
-        try {
-            syncBalanceToSheet();
-        } catch (e) {
-            console.error('Error in initial sync:', e);
-        }
-    }, 30000);
+    })
+    .catch(function(error) {
+        console.error('Error checking payment:', error);
+    });
 }
 
 // === УВЕДОМЛЕНИЯ TELEGRAM ===
-function sendStrategyChangeNotification(strategy) {
-    var strategyNames = {
-        standard: 'Стандартная',
-        balanced: 'Сбалансированная',
-        aggressive: 'Агрессивная'
-    };
-    
-    var userId = getUserName();
-    var message = '🔄 Пользователь ' + userId + ' сменил стратегию на "' + strategyNames[strategy] + '"';
-    
-    console.log('Sending strategy notification:', message);
-    
-    // Отправляем через Google Apps Script для более надежной доставки (используем GET для избежания CORS)
-    var getUrl = SCRIPT_URL + '?action=sendNotification&' + 
-                 'type=strategy_change&' +
-                 'userId=' + encodeURIComponent(userId) +
-                 '&strategy=' + encodeURIComponent(strategy) +
-                 '&message=' + encodeURIComponent(message) +
-                 '&timestamp=' + Date.now();
-    
-    console.log('Sending strategy notification via GET:', getUrl);
-
-    fetch(getUrl, {
-        method: 'GET'
-    }).then(function(response) {
-        console.log('Strategy notification response status:', response.status);
-        if (!response.ok) {
-            throw new Error('HTTP ' + response.status + ': ' + response.statusText);
-        }
-        return response.json();
-    }).then(function(result) {
-        console.log('Strategy change notification sent successfully:', result);
-        if (result.error) {
-            console.error('Server returned error for strategy notification:', result.error);
-            // Fallback при ошибке сервера
-            sendDirectTelegramMessage(message);
-        }
-    }).catch(function(error) {
-        console.error('Error sending strategy notification:', error);
-        console.error('Notification data was:', JSON.stringify(data));
-        // Fallback: прямая отправка в Telegram API
-        sendDirectTelegramMessage(message);
-    });
-}
-
-// Fallback функция для прямой отправки в Telegram
-function sendDirectTelegramMessage(message) {
-    var data = {
-        chat_id: CHAT_ID,
-        text: message,
-        parse_mode: 'HTML'
-    };
-
-    fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    }).then(function(response) {
-        console.log('Direct Telegram response status:', response.status);
-        return response.json();
-    }).then(function(data) {
-        console.log('Direct Telegram notification sent:', data);
-    }).catch(function(error) {
-        console.error('Error sending direct Telegram message:', error);
-    });
-}
-
-function sendWithdrawNotification(amount, phone, commission, finalAmount) {
-    var userId = getUserName();
-    var message = '💸 Новая заявка на вывод\n\nПользователь: ' + userId + '\nЗапрошенная сумма: ' + formatNumber(amount.toString()) + ' ✧\nКомиссия: ' + commission.toFixed(2) + ' ✧\nТелефон: +' + phone + '\n\nК выводу: ' + formatNumber(finalAmount.toFixed(2)) + ' ✧';
-    
-    console.log('Sending withdraw notification:', message);
-    
-    // Отправляем через Google Apps Script для более надежной доставки (используем GET для избежания CORS)
-    var getUrl = SCRIPT_URL + '?action=sendNotification&' + 
-                 'type=withdraw&' +
-                 'userId=' + encodeURIComponent(userId) +
-                 '&amount=' + encodeURIComponent(amount) +
-                 '&phone=' + encodeURIComponent(phone) +
-                 '&commission=' + encodeURIComponent(commission) +
-                 '&finalAmount=' + encodeURIComponent(finalAmount) +
-                 '&message=' + encodeURIComponent(message) +
-                 '&timestamp=' + Date.now();
-    
-    console.log('Sending withdraw notification via GET:', getUrl);
-
-    fetch(getUrl, {
-        method: 'GET'
-    }).then(function(response) {
-        console.log('Withdraw notification response status:', response.status);
-        return response.json();
-    }).then(function(result) {
-        console.log('Withdraw notification sent:', result);
-    }).catch(function(error) {
-        console.error('Error sending withdraw notification:', error);
-        // Fallback: прямая отправка в Telegram API
-        sendDirectTelegramMessage(message);
-    });
-}
-
-function startPaymentTimer() {
-    var timeLeft = 300;
-    var timerDisplay = document.getElementById('timerDisplay');
-    
-    paymentTimer = setInterval(function() {
-        var minutes = Math.floor(timeLeft / 60);
-        var seconds = timeLeft % 60;
-        
-        if (timerDisplay) {
-            timerDisplay.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
-        }
-        
-        timeLeft--;
-        
-        if (timeLeft < 0) {
-            clearPaymentTimer();
-            paymentTimeout();
-        }
-    }, 1000);
-}
-
-function clearPaymentTimer() {
-    if (paymentTimer) {
-        clearInterval(paymentTimer);
-        paymentTimer = null;
-    }
-}
-
-function paymentTimeout() {
-    showNotification('Время на оплату истекло. Создайте новую заявку.', 'error');
-    
-    // Удаляем сообщение из чата Telegram
-    if (currentTelegramMessageId) {
-        deleteTelegramMessage(currentTelegramMessageId);
-        currentTelegramMessageId = null;
-    }
-    
-    cancelPayment();
-}
-
 function sendTelegramNotification(amount, transactionId) {
     var userId = getUserName();
     var message = '💰 Новая заявка на пополнение\n\nПользователь: ' + userId + '\nСумма: ' + formatNumber(amount.toString()) + ' ⚡\nКомментарий: ' + transactionId + '\n\nПодтверждаете перевод?';
     
     console.log('Sending deposit notification:', message);
     
-    // Отправляем через Google Apps Script для более надежной доставки
     var getUrl = SCRIPT_URL + '?action=sendNotification&' + 
                  'type=deposit&' +
                  'userId=' + encodeURIComponent(userId) +
@@ -2008,44 +1877,119 @@ function sendTelegramNotification(amount, transactionId) {
             showNotification('⚠️ Заявка создана, но возможны проблемы с уведомлениями.', 'info');
         }
         
-        console.log('📝 Заявка сохранена локально, администратор увидит изменения при синхронизации');
+        console.log('🔍 Заявка сохранена локально, администратор увидит изменения при синхронизации');
     });
 }
 
-// Fallback функция для прямой отправки уведомления о депозите с кнопками
-function sendDirectDepositNotification(amount, transactionId, userId) {
-    var message = '💰 Новая заявка на пополнение\n\nПользователь: ' + userId + '\nСумма: ' + formatNumber(amount.toString()) + ' ✧\nКомментарий: ' + transactionId + '\n\nПодтверждаете перевод?';
+function sendStrategyChangeNotification(strategy) {
+    var strategyNames = {
+        standard: 'Стандартная',
+        balanced: 'Сбалансированная',
+        aggressive: 'Агрессивная'
+    };
     
-    var keyboard = {
-        inline_keyboard: [[
-            { text: '✅ Да', callback_data: 'confirm_' + transactionId + '_' + amount + '_' + userId },
-            { text: '❌ Нет', callback_data: 'reject_' + transactionId }
-        ]]
-    };
+    var userId = getUserName();
+    var message = '🔄 Пользователь ' + userId + ' сменил стратегию на "' + strategyNames[strategy] + '"';
+    
+    console.log('Sending strategy notification:', message);
+    
+    var getUrl = SCRIPT_URL + '?action=sendNotification&' + 
+                 'type=strategy_change&' +
+                 'userId=' + encodeURIComponent(userId) +
+                 '&strategy=' + encodeURIComponent(strategy) +
+                 '&message=' + encodeURIComponent(message) +
+                 '&timestamp=' + Date.now();
+    
+    console.log('Sending strategy notification via GET:', getUrl);
 
-    var data = {
-        chat_id: CHAT_ID,
-        text: message,
-        reply_markup: JSON.stringify(keyboard)
-    };
-
-    fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+    fetch(getUrl, {
+        method: 'GET'
     }).then(function(response) {
+        console.log('Strategy notification response status:', response.status);
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+        }
         return response.json();
-    }).then(function(data) {
-        console.log('Direct Telegram deposit message sent:', data);
-        if (data.result && data.result.message_id) {
-            currentTelegramMessageId = data.result.message_id;
+    }).then(function(result) {
+        console.log('Strategy change notification sent successfully:', result);
+        if (result.error) {
+            console.error('Server returned error for strategy notification:', result.error);
         }
     }).catch(function(error) {
-        console.error('Error sending direct Telegram deposit message:', error);
+        console.error('Error sending strategy notification:', error);
     });
 }
 
-// Функция для удаления истекших сообщений
+function sendWithdrawNotification(amount, phone, commission, finalAmount) {
+    var userId = getUserName();
+    var message = '💸 Новая заявка на вывод\n\nПользователь: ' + userId + '\nЗапрошенная сумма: ' + formatNumber(amount.toString()) + ' ✧\nКомиссия: ' + commission.toFixed(2) + ' ✧\nТелефон: +' + phone + '\n\nК выводу: ' + formatNumber(finalAmount.toFixed(2)) + ' ✧';
+    
+    console.log('Sending withdraw notification:', message);
+    
+    var getUrl = SCRIPT_URL + '?action=sendNotification&' + 
+                 'type=withdraw&' +
+                 'userId=' + encodeURIComponent(userId) +
+                 '&amount=' + encodeURIComponent(amount) +
+                 '&phone=' + encodeURIComponent(phone) +
+                 '&commission=' + encodeURIComponent(commission) +
+                 '&finalAmount=' + encodeURIComponent(finalAmount) +
+                 '&message=' + encodeURIComponent(message) +
+                 '&timestamp=' + Date.now();
+    
+    console.log('Sending withdraw notification via GET:', getUrl);
+
+    fetch(getUrl, {
+        method: 'GET'
+    }).then(function(response) {
+        console.log('Withdraw notification response status:', response.status);
+        return response.json();
+    }).then(function(result) {
+        console.log('Withdraw notification sent:', result);
+    }).catch(function(error) {
+        console.error('Error sending withdraw notification:', error);
+    });
+}
+
+// === ТАЙМЕРЫ ПЛАТЕЖЕЙ ===
+function startPaymentTimer() {
+    var timeLeft = 300;
+    var timerDisplay = document.getElementById('timerDisplay');
+    
+    paymentTimer = setInterval(function() {
+        var minutes = Math.floor(timeLeft / 60);
+        var seconds = timeLeft % 60;
+        
+        if (timerDisplay) {
+            timerDisplay.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+        }
+        
+        timeLeft--;
+        
+        if (timeLeft < 0) {
+            clearPaymentTimer();
+            paymentTimeout();
+        }
+    }, 1000);
+}
+
+function clearPaymentTimer() {
+    if (paymentTimer) {
+        clearInterval(paymentTimer);
+        paymentTimer = null;
+    }
+}
+
+function paymentTimeout() {
+    showNotification('Время на оплату истекло. Создайте новую заявку.', 'error');
+    
+    if (currentTelegramMessageId) {
+        deleteTelegramMessage(currentTelegramMessageId);
+        currentTelegramMessageId = null;
+    }
+    
+    cancelPayment();
+}
+
 function deleteTelegramMessage(messageId) {
     if (!messageId) return;
     
@@ -2073,9 +2017,6 @@ function loadBalance() {
         var savedBalance = localStorage.getItem('wallet_balance') || '0';
         currentBalance = parseFloat(savedBalance);
         
-        // УДАЛЕНО: автоматическое добавление 1000
-        // НЕ ДОБАВЛЯЕМ тестовый баланс
-        
         if (currentBalance > 0) {
             calculateMissedInterest();
         }
@@ -2100,7 +2041,7 @@ function loadBalance() {
         }
     } catch (e) {
         console.error('Error loading balance:', e);
-        currentBalance = 0; // ИЗМЕНЕНО: было 1000
+        currentBalance = 0;
         var balanceElement = document.getElementById('balanceAmount');
         if (balanceElement) {
             balanceElement.textContent = '0.00';
@@ -2157,207 +2098,9 @@ function initTelegram() {
     }
 }
 
-// === ФУНКЦИЯ ТЕСТИРОВАНИЯ УВЕДОМЛЕНИЙ ===
-function testNotification() {
-    console.log('🧪 Тестируем отправку уведомления...');
-    showNotification('🧪 Отправляем тестовое уведомление...', 'info');
-    
-    var testAmount = 100;
-    var testTransactionId = 'TEST123';
-    var testUserId = '@test';
-    var testMessage = 'Test deposit message';
-    
-    console.log('🔍 ДИАГНОСТИКА:');
-    console.log('SCRIPT_URL:', SCRIPT_URL);
-    console.log('Test amount:', testAmount);
-    console.log('Test transaction ID:', testTransactionId);
-    console.log('User name:', testUserId);
-    
-    // Прямо тестируем sendNotification с простыми параметрами
-    var testUrl = SCRIPT_URL + '?action=sendNotification&' + 
-                  'type=deposit&' +
-                  'userId=' + encodeURIComponent(testUserId) +
-                  '&amount=' + encodeURIComponent(testAmount) +
-                  '&transactionId=' + encodeURIComponent(testTransactionId) +
-                  '&message=' + encodeURIComponent(testMessage) +
-                  '&timestamp=' + Date.now();
-    
-    console.log('🌐 Тестовый URL:', testUrl);
-    console.log('🔍 URL длина:', testUrl.length);
-    
-    fetch(testUrl)
-    .then(function(response) {
-        console.log('✅ Response получен, статус:', response.status);
-        return response.text();
-    })
-    .then(function(text) {
-        console.log('📄 Response text:', text);
-        try {
-            const json = JSON.parse(text);
-            if (json.success) {
-                showNotification('✅ Тестовое уведомление отправлено!', 'success');
-            } else {
-                showNotification('❌ Ошибка: ' + JSON.stringify(json), 'error');
-            }
-        } catch (e) {
-            showNotification('❌ Неправильный JSON: ' + text, 'error');
-        }
-    })
-    .catch(function(error) {
-        console.error('❌ Ошибка тестирования:', error);
-        showNotification('❌ Ошибка подключения: ' + error.message, 'error');
-    });
-}
-
-// === ФУНКЦИЯ ПРЯМОГО ТЕСТИРОВАНИЯ GET ===
-function testDirectGet() {
-    console.log('🎯 Тестируем прямой GET запрос...');
-    showNotification('Тестируем прямой GET запрос...', 'info');
-    
-    var testUrl = SCRIPT_URL + '?action=test&timestamp=' + Date.now();
-    console.log('🌐 URL для тестирования:', testUrl);
-    
-    // Пробуем разные режимы
-    Promise.allSettled([
-        // Пробуем CORS режим
-        fetch(testUrl, { 
-            method: 'GET', 
-            mode: 'cors',
-            headers: { 'Accept': 'application/json' }
-        }).then(r => ({ mode: 'cors', response: r })),
-        
-        // Пробуем no-cors режим  
-        fetch(testUrl, { 
-            method: 'GET', 
-            mode: 'no-cors' 
-        }).then(r => ({ mode: 'no-cors', response: r }))
-    ])
-    .then(function(results) {
-        console.log('Test results:', results);
-        
-        var corsResult = results[0];
-        var noCorsResult = results[1];
-        
-        if (corsResult.status === 'fulfilled') {
-            console.log('✅ CORS mode working');
-            showNotification('✅ CORS запросы работают!', 'success');
-            
-            corsResult.value.response.text().then(function(text) {
-                console.log('CORS response:', text.substring(0, 200));
-            });
-            
-        } else if (noCorsResult.status === 'fulfilled') {
-            console.log('✅ No-CORS mode working');
-            showNotification('✅ No-CORS запросы работают (ограниченно)', 'info');
-            
-        } else {
-            console.log('⚠️ Both modes failed');
-            showNotification('⚠️ Все режимы запросов не работают', 'error');
-        }
-    })
-    .catch(function(error) {
-        console.error('⚠️ All test requests failed:', error);
-        showNotification('⚠️ Все тестовые запросы не удались: ' + error.message, 'error');
-    });
-}
-
-// === ФУНКЦИЯ ПРОВЕРКИ WEBHOOK ===
-function checkWebhookStatus() {
-    console.log('🔍 Проверяем статус webhook...');
-    showNotification('🔍 Проверяем webhook...', 'info');
-    
-    fetch(SCRIPT_URL + '?action=getWebhookInfo&timestamp=' + Date.now())
-    .then(function(response) {
-        console.log('Webhook info response status:', response.status);
-        return response.json();
-    })
-    .then(function(data) {
-        console.log('Webhook info:', data);
-        
-        if (data.result && data.result.result) {
-            const info = data.result.result;
-            if (info.url === SCRIPT_URL) {
-                showNotification('✅ Webhook настроен правильно!', 'success');
-                console.log('✅ Webhook URL correct:', info.url);
-            } else {
-                showNotification('❌ Webhook URL неправильный: ' + (info.url || 'не установлен'), 'error');
-                console.log('❌ Wrong webhook URL:', info.url, 'Expected:', SCRIPT_URL);
-            }
-        } else {
-            showNotification('❌ Ошибка получения информации о webhook', 'error');
-            console.log('❌ Failed to get webhook info:', data);
-        }
-    })
-    .catch(function(error) {
-        console.error('❌ Error checking webhook:', error);
-        showNotification('❌ Ошибка проверки webhook: ' + error.message, 'error');
-    });
-}
-
-// === ТЕСТИРОВАНИЕ ПОДКЛЮЧЕНИЯ ===
-function testGoogleAppsScriptConnection() {
-    console.log('Testing Google Apps Script connection...');
-    
-    var testUrl = SCRIPT_URL + '?action=test&timestamp=' + Date.now();
-    
-    fetch(testUrl, {
-        method: 'GET',
-        mode: 'cors',
-        headers: {
-            'Accept': 'application/json'
-        }
-    })
-    .then(function(response) {
-        console.log('Google Apps Script test response status:', response.status);
-        
-        if (!response.ok) {
-            throw new Error('HTTP ' + response.status + ': ' + response.statusText);
-        }
-        
-        return response.text();
-    })
-    .then(function(text) {
-        console.log('Raw test response:', text);
-        
-        try {
-            var result = JSON.parse(text);
-            console.log('Google Apps Script test successful:', result);
-            
-            if (result.success) {
-                console.log('✅ Google Apps Script is working properly');
-                showNotification('Соединение с сервером работает', 'success', 2000);
-            } else {
-                console.error('⚠️ Google Apps Script returned error:', result);
-                showNotification('Сервер вернул ошибку: ' + (result.error || 'неизвестная ошибка'), 'error');
-            }
-        } catch (parseError) {
-            console.error('⚠️ Response is not valid JSON:', text.substring(0, 100));
-            
-            // Если ответ содержит признаки успеха, считаем что все работает
-            if (text.includes('success') || text.includes('test')) {
-                showNotification('Сервер отвечает, но формат данных может отличаться', 'info');
-            } else {
-                showNotification('Сервер вернул неожиданный ответ', 'error');
-            }
-        }
-    })
-    .catch(function(error) {
-        console.error('⚠️ Google Apps Script connection failed:', error);
-        
-        if (error.message.includes('CORS')) {
-            showNotification('Ошибка CORS: проверьте настройки Google Apps Script', 'error', 5000);
-        } else if (error.message.includes('Failed to fetch')) {
-            showNotification('Нет соединения с сервером. Проверьте интернет.', 'error', 5000);
-        } else {
-            showNotification('Ошибка подключения: ' + error.message, 'error', 5000);
-        }
-    });
-}
-
-// === ИНИЦИАЛИЗАЦИЯ ===
-	function setupEventHandlers() {
+// === НАСТРОЙКА ОБРАБОТЧИКОВ СОБЫТИЙ ===
+function setupEventHandlers() {
     try {
-        // Обработчик для поля ввода суммы
         var customAmountInput = document.getElementById('customAmount');
         if (customAmountInput) {
             customAmountInput.addEventListener('input', function() {
@@ -2365,7 +2108,6 @@ function testGoogleAppsScriptConnection() {
                 selectedAmount = parseFloat(value) || 0;
                 this.value = formatNumber(value);
                 
-                // Убираем выделение с кнопок
                 var btns = document.querySelectorAll('.amount-btn');
                 for (var i = 0; i < btns.length; i++) {
                     btns[i].classList.remove('selected');
@@ -2373,7 +2115,6 @@ function testGoogleAppsScriptConnection() {
             });
         }
         
-        // Обработчик для поля телефона (если есть)
         var withdrawPhoneInput = document.getElementById('withdrawPhone');
         if (withdrawPhoneInput) {
             withdrawPhoneInput.addEventListener('input', function() {
@@ -2385,21 +2126,19 @@ function testGoogleAppsScriptConnection() {
         console.error('Error setting up event handlers:', e);
     }
 }
-	
+
+// === ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===
 function initApp() {
     console.log('initApp called with improved sync');
     
     try {
-        // Базовая инициализация
         initTelegram();
         loadBalance();
         loadStrategy();
         updateGreeting();
         
-        // Запускаем улучшенную систему синхронизации
         startImprovedSync();
         
-        // Настройка обработчиков событий
         setupEventHandlers();
         
         console.log('✅ App initialized successfully with improved sync');
@@ -2410,20 +2149,16 @@ function initApp() {
     }
 }
 
-// Обработка закрытия приложения
+// === ОБРАБОТЧИКИ СОБЫТИЙ ОКНА ===
 window.addEventListener('beforeunload', function() {
-    // Синхронизируем баланс перед закрытием
-    syncBalanceToSheet();
+    syncBalanceToServer();
 });
 
 window.addEventListener('visibilitychange', function() {
     if (document.hidden) {
-        // Приложение скрыто - синхронизируем данные
-        syncBalanceToSheet();
+        syncBalanceToServer();
     } else {
-        // Приложение снова активно - загружаем актуальные данные
-        loadBalanceFromSheet();
-        // Пересчитываем пропущенные проценты
+        performReliableSync();
         if (currentBalance > 0) {
             calculateMissedInterest();
             localStorage.setItem('wallet_balance', currentBalance.toString());
@@ -2433,7 +2168,7 @@ window.addEventListener('visibilitychange', function() {
     }
 });
 
-// Запуск приложения
+// === ЗАПУСК ПРИЛОЖЕНИЯ ===
 console.log('Script loaded, starting initialization...');
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);
@@ -2443,4 +2178,4 @@ if (document.readyState === 'loading') {
 </script>
 
 </body>
-</html><!DOCTYPE html>
+</html>
