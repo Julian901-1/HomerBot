@@ -588,7 +588,7 @@
 </head>
 <body>
     <!-- Версия приложения -->
-    <div class="version">26.9-debug</div>
+    <div class="version">27.0-debug</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -616,6 +616,7 @@
                 <button class="btn btn-withdraw" onclick="showWithdrawPage()">
                     Вывести
                 </button>
+				<button onclick="forceBalanceSync()" style="background: red; color: white; padding: 10px;">ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ</button>
             </div>
 
             <div class="current-strategy" id="currentStrategy" onclick="showStrategyPage()">
@@ -1534,12 +1535,21 @@ function syncBalanceToSheet() {
 function loadBalanceFromSheet() {
     try {
         var username = getUserName();
-        var url = SCRIPT_URL + '?action=getBalance&username=' + encodeURIComponent(username);
+        
+        // Добавляем timestamp для избежания кеширования
+        var url = SCRIPT_URL + '?action=getBalance&username=' + encodeURIComponent(username) + '&timestamp=' + Date.now() + '&nocache=' + Math.random();
         
         console.log('Loading balance from sheet for user:', username);
         console.log('Request URL:', url);
         
-        fetch(url)
+        fetch(url, {
+            method: 'GET',
+            cache: 'no-cache', // Принудительно отключаем кеш
+            headers: {
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
+        })
         .then(function(response) {
             console.log('Load balance response status:', response.status);
             if (!response.ok) {
@@ -1549,18 +1559,40 @@ function loadBalanceFromSheet() {
         })
         .then(function(result) {
             console.log('Balance loaded from sheet:', result);
+            
             if (result.balance !== undefined) {
-                // Проверяем, была ли изменена сумма админом
+                var serverBalance = parseFloat(result.balance) || 0;
                 var localBalance = parseFloat(localStorage.getItem('wallet_balance') || '0');
-                if (Math.abs(result.balance - localBalance) > 0.01) {
-                    console.log('Balance updated by admin:', result.balance, 'local was:', localBalance);
-                    currentBalance = result.balance;
+                
+                console.log('Server balance:', serverBalance, 'Local balance:', localBalance);
+                
+                // ПРИНУДИТЕЛЬНО используем серверный баланс как источник истины
+                if (serverBalance !== localBalance || Math.abs(serverBalance - localBalance) > 0.01) {
+                    console.log('Updating balance from server:', serverBalance, 'was:', localBalance);
+                    
+                    // Останавливаем начисления
+                    stopInterestAccrual();
+                    
+                    // Обновляем баланс
+                    currentBalance = serverBalance;
                     localStorage.setItem('wallet_balance', currentBalance.toString());
+                    
+                    // Обновляем отображение
                     updateBalanceDisplay();
+                    
+                    // Перезапускаем начисления если баланс больше 0
+                    if (currentBalance > 0) {
+                        startInterestAccrual();
+                    }
+                    
+                    showNotification('Баланс синхронизирован с сервером: ' + formatNumber(serverBalance.toString()) + ' ⚡', 'info');
+                } else {
+                    console.log('Balance already up to date');
                 }
                 
+                // Обновляем стратегию если она изменилась
                 if (result.strategy && result.strategy !== currentStrategy) {
-                    console.log('Strategy updated by admin:', result.strategy, 'local was:', currentStrategy);
+                    console.log('Strategy updated by server:', result.strategy, 'local was:', currentStrategy);
                     currentStrategy = result.strategy;
                     localStorage.setItem('investment_strategy', currentStrategy);
                     updateCurrentStrategyDisplay();
@@ -1572,11 +1604,33 @@ function loadBalanceFromSheet() {
         })
         .catch(function(error) {
             console.error('Error loading from sheet:', error);
-            console.error('Request URL was:', url);
+            // При ошибке загрузки уведомляем пользователя
+            showNotification('Ошибка синхронизации с сервером', 'error');
         });
     } catch (e) {
         console.error('Error in loadBalanceFromSheet:', e);
     }
+}
+
+// Принудительная синхронизация баланса с сервером
+function forceBalanceSync() {
+    console.log('🔄 Принудительная синхронизация баланса...');
+    
+    // Очищаем локальные данные
+    localStorage.removeItem('wallet_balance');
+    localStorage.removeItem('last_update_time');
+    
+    // Останавливаем начисления
+    stopInterestAccrual();
+    
+    // Сбрасываем баланс
+    currentBalance = 0;
+    updateBalanceDisplay();
+    
+    // Загружаем с сервера
+    loadBalanceFromSheet();
+    
+    showNotification('🔄 Синхронизация с сервером...', 'info');
 }
 
 function getUserName() {
