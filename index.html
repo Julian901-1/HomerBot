@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Кошелёк v1</title>
+    <title>Кошелёк</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body {
@@ -49,6 +49,44 @@
             opacity: 0.8;
         }
         
+        .rate-selection {
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .rate-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .rate-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .rate-button {
+            background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            color: var(--tg-theme-text-color, #000000);
+            border: 2px solid transparent;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .rate-button.active {
+            background-color: var(--tg-theme-button-color, #0088cc);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border-color: var(--tg-theme-button-color, #0088cc);
+        }
+        
+        .rate-button:hover {
+            opacity: 0.8;
+        }
+        
         .status {
             font-size: 12px;
             color: var(--tg-theme-hint-color, #999999);
@@ -58,8 +96,18 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёк v2</div>
-        <div class="balance" id="balance">0</div>
+        <div class="wallet-title">Кошелёк</div>
+        <div class="balance" id="balance">0.0000</div>
+        
+        <div class="rate-selection">
+            <div class="rate-title">Процентная ставка</div>
+            <div class="rate-buttons">
+                <button class="rate-button active" onclick="setRate(16)">16%</button>
+                <button class="rate-button" onclick="setRate(17)">17%</button>
+                <button class="rate-button" onclick="setRate(18)">18%</button>
+            </div>
+        </div>
+        
         <button class="add-button" id="addButton" onclick="addOne()">+1</button>
         <div class="status" id="status">Загрузка...</div>
     </div>
@@ -68,6 +116,9 @@
         let localBalance = 0;
         let username = '';
         let isInitialized = false;
+        let currentRate = 16; // Процентная ставка по умолчанию
+        let lastUpdateTime = Date.now();
+        let realTimeUpdateInterval;
         
         // URL вашего Google Apps Script
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
@@ -82,7 +133,9 @@
                 user: user,
                 username: username,
                 isInitialized: isInitialized,
-                scriptUrl: SCRIPT_URL
+                scriptUrl: SCRIPT_URL,
+                currentRate: currentRate,
+                localBalance: localBalance
             });
         }
         
@@ -116,11 +169,63 @@
             }, 100);
         }
         
+        // Расчет процентного начисления
+        function calculateInterest(balance, rate, timeElapsedMs) {
+            // Годовая ставка переводится в секундную
+            const annualRate = rate / 100;
+            const secondlyRate = annualRate / (365 * 24 * 60 * 60);
+            const timeElapsedSeconds = timeElapsedMs / 1000;
+            
+            // Сложные проценты: A = P * (1 + r)^t
+            return balance * Math.pow(1 + secondlyRate, timeElapsedSeconds);
+        }
+        
+        // Обновление баланса с процентами в реальном времени
+        function updateBalanceWithInterest() {
+            const now = Date.now();
+            const timeElapsed = now - lastUpdateTime;
+            
+            if (timeElapsed > 0 && localBalance > 0) {
+                localBalance = calculateInterest(localBalance, currentRate, timeElapsed);
+            }
+            
+            lastUpdateTime = now;
+            updateDisplay();
+        }
+        
+        // Запуск реального времени обновления
+        function startRealTimeUpdate() {
+            if (realTimeUpdateInterval) {
+                clearInterval(realTimeUpdateInterval);
+            }
+            
+            realTimeUpdateInterval = setInterval(updateBalanceWithInterest, 100); // Обновление каждые 100мс
+        }
+        
+        // Установка процентной ставки
+        function setRate(rate) {
+            // Обновляем баланс с текущей ставкой перед сменой
+            updateBalanceWithInterest();
+            
+            currentRate = rate;
+            
+            // Обновляем активную кнопку
+            document.querySelectorAll('.rate-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            console.log('Rate changed to:', rate);
+        }
+        
         async function syncBalance() {
             if (!username || !isInitialized) return;
             
+            // Обновляем баланс с процентами перед синхронизацией
+            updateBalanceWithInterest();
+            
             try {
-                const url = `${SCRIPT_URL}?action=syncBalance&username=${username}&balance=${localBalance}`;
+                const url = `${SCRIPT_URL}?action=syncBalance&username=${username}&balance=${localBalance}&rate=${currentRate}&timestamp=${Date.now()}`;
                 console.log('Sync URL:', url);
                 
                 const response = await fetch(url);
@@ -136,8 +241,16 @@
                     // Если в столбце E было значение, устанавливаем его как новый баланс
                     if (data.forceBalance !== null) {
                         localBalance = data.forceBalance;
+                        lastUpdateTime = Date.now();
                         updateDisplay();
                     }
+                    
+                    // Проверяем, изменилась ли ставка
+                    if (data.rate && data.rate !== currentRate) {
+                        currentRate = data.rate;
+                        updateRateButtons();
+                    }
+                    
                     document.getElementById('status').textContent = `Синхронизировано: ${new Date().toLocaleTimeString()}`;
                 } else {
                     document.getElementById('status').textContent = `Ошибка синхронизации: ${data.error || 'неизвестная ошибка'}`;
@@ -166,8 +279,28 @@
                 console.log('Load response:', data);
                 
                 if (data.success) {
-                    localBalance = data.balance;
+                    // Рассчитываем баланс с учетом времени, прошедшего с последнего обновления
+                    if (data.lastUpdate && data.balance > 0) {
+                        const lastUpdateTimestamp = new Date(data.lastUpdate).getTime();
+                        const timeElapsed = Date.now() - lastUpdateTimestamp;
+                        const rate = data.rate || 16;
+                        
+                        localBalance = calculateInterest(data.balance, rate, timeElapsed);
+                        currentRate = rate;
+                        
+                        console.log('Calculated balance with interest:', localBalance, 'from', data.balance, 'time elapsed:', timeElapsed);
+                    } else {
+                        localBalance = data.balance || 0;
+                        currentRate = data.rate || 16;
+                    }
+                    
+                    lastUpdateTime = Date.now();
                     updateDisplay();
+                    updateRateButtons();
+                    
+                    // Запускаем реальное время обновления
+                    startRealTimeUpdate();
+                    
                     document.getElementById('status').textContent = `Загружено: ${new Date().toLocaleTimeString()}`;
                     
                     // Запускаем регулярную синхронизацию только после успешной загрузки
@@ -188,12 +321,24 @@
                 document.getElementById('status').textContent = 'Ожидание инициализации...';
                 return;
             }
+            
+            // Обновляем баланс с процентами перед добавлением
+            updateBalanceWithInterest();
             localBalance++;
             updateDisplay();
         }
         
         function updateDisplay() {
-            document.getElementById('balance').textContent = localBalance;
+            document.getElementById('balance').textContent = localBalance.toFixed(4);
+        }
+        
+        function updateRateButtons() {
+            document.querySelectorAll('.rate-button').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent === `${currentRate}%`) {
+                    btn.classList.add('active');
+                }
+            });
         }
     </script>
 </body>
