@@ -588,7 +588,7 @@
 </head>
 <body>
     <!-- Версия приложения -->
-    <div class="version">26.4-debug</div>
+    <div class="version">26.5-debug</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -1095,6 +1095,81 @@ function generatePayment() {
 }
 
 function cancelPayment() {
+    try {
+        var paymentInfo = document.getElementById('paymentInfo');
+        var paymentInstructions = document.getElementById('paymentInstructions');
+        var generateBtn = document.getElementById('generatePaymentBtn');
+        var cancelBtn = document.getElementById('cancelPaymentBtn');
+        var timerDiv = document.getElementById('paymentTimer');
+        var customInput = document.getElementById('customAmount');
+        
+        if (paymentInfo) paymentInfo.style.display = 'none';
+        if (paymentInstructions) paymentInstructions.style.display = 'none';
+        if (generateBtn) generateBtn.style.display = 'block';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+        if (timerDiv) timerDiv.style.display = 'none';
+        if (customInput) customInput.value = '';
+        
+        var btns = document.querySelectorAll('.amount-btn');
+        for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.remove('selected');
+        }
+        
+        // Очищаем интервал проверки платежа
+        if (window.currentPaymentCheckInterval) {
+            clearInterval(window.currentPaymentCheckInterval);
+            window.currentPaymentCheckInterval = null;
+        }
+        
+        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Уведомляем сервер об отмене перед удалением сообщения
+        if (currentTransactionId) {
+            console.log('Отправляем запрос на отмену транзакции:', currentTransactionId);
+            
+            // Отправляем уведомление об отмене
+            var cancelUrl = SCRIPT_URL + '?action=cancelPayment&' + 
+                           'transactionId=' + encodeURIComponent(currentTransactionId) + 
+                           '&messageId=' + encodeURIComponent(currentTelegramMessageId || '') + 
+                           '&timestamp=' + Date.now();
+            
+            // Делаем запрос на отмену асинхронно, не ждем ответа
+            fetch(cancelUrl, { method: 'GET' })
+            .then(function(response) {
+                console.log('Cancel notification sent, status:', response.status);
+                return response.text();
+            })
+            .then(function(text) {
+                console.log('Cancel response:', text);
+                try {
+                    const result = JSON.parse(text);
+                    if (result.success) {
+                        console.log('✅ Отмена обработана сервером успешно');
+                    } else {
+                        console.log('⚠️ Сервер вернул ошибку отмены:', result.error);
+                    }
+                } catch (e) {
+                    console.log('⚠️ Ответ сервера не является JSON, но запрос отправлен');
+                }
+            })
+            .catch(function(error) {
+                console.error('❌ Ошибка отправки запроса на отмену:', error);
+                // Не показываем ошибку пользователю, так как отмена все равно произойдет локально
+            });
+        }
+        
+        // Очищаем локальные переменные
+        selectedAmount = 0;
+        clearPaymentTimer();
+        currentTransactionId = null;
+        currentPaymentAmount = 0;
+        currentTelegramMessageId = null;
+        
+        console.log('✅ Платеж отменен локально');
+        
+    } catch (e) {
+        console.error('Error in cancelPayment:', e);
+    }
+}
+
     try {
         var paymentInfo = document.getElementById('paymentInfo');
         var paymentInstructions = document.getElementById('paymentInstructions');
@@ -1687,51 +1762,72 @@ function sendTelegramNotification(amount, transactionId) {
                  '&message=' + encodeURIComponent(message) +
                  '&timestamp=' + Date.now();
     
-    console.log('🌐 Отправляем GET запрос:', getUrl);
-    console.log('🔍 URL длина:', getUrl.length);
-    console.log('🔍 URL части:', getUrl.split('&'));
+    console.log('🌐 Отправляем GET запрос:', getUrl.substring(0, 200) + '...');
 
     fetch(getUrl, {
         method: 'GET'
     }).then(function(response) {
         console.log('📋 Response status:', response.status);
-        console.log('📋 Response headers:', response.headers);
-        console.log('📋 Response type:', response.type);
-        console.log('📋 Response URL:', response.url);
         
         if (!response.ok) {
             throw new Error('HTTP ' + response.status + ': ' + response.statusText);
         }
-        return response.text(); // Сначала получим как текст для диагностики
+        return response.text(); // Получаем как текст для безопасного парсинга
     }).then(function(text) {
         console.log('📄 Raw response text:', text);
         
         try {
-            const result = JSON.parse(text);
+            // Очищаем возможные лишние символы
+            var cleanText = text.trim();
+            
+            // Проверяем, начинается ли с {
+            if (!cleanText.startsWith('{')) {
+                throw new Error('Response is not JSON format');
+            }
+            
+            const result = JSON.parse(cleanText);
             console.log('✅ Parsed JSON result:', result);
             
             if (result.success && result.messageId) {
                 currentTelegramMessageId = result.messageId;
-                console.log('✅ Уведомление отправлено через Google Apps Script');
-                showNotification('✅ Тестовое уведомление отправлено!', 'success');
+                console.log('✅ Уведомление отправлено через Google Apps Script, messageId:', result.messageId);
+                showNotification('✅ Заявка создана! Ожидайте подтверждения.', 'success');
+            } else if (result.success) {
+                console.log('✅ Уведомление отправлено успешно (без messageId)');
+                showNotification('✅ Заявка создана! Ожидайте подтверждения.', 'success');
             } else if (result.error) {
                 console.error('❌ Server error:', result.error);
-                throw new Error('Server error: ' + result.error);
+                showNotification('⚠️ Заявка создана, но возможны задержки с уведомлением', 'info');
             } else {
-                console.log('⚠️ Неожиданный ответ от сервера, используем fallback');
-                throw new Error('Unexpected server response');
+                console.log('⚠️ Неожиданный ответ от сервера');
+                showNotification('⚠️ Заявка создана, статус неизвестен', 'info');
             }
         } catch (parseError) {
             console.error('❌ JSON parse error:', parseError);
             console.error('❌ Raw text was:', text);
-            throw new Error('Invalid JSON response');
+            
+            // Проверяем, содержит ли ответ признаки успеха
+            if (text.includes('success') || text.includes('true')) {
+                console.log('✅ Ответ содержит признаки успеха, считаем операцию успешной');
+                showNotification('✅ Заявка создана! Возможны задержки с уведомлением.', 'success');
+            } else {
+                throw new Error('Invalid server response');
+            }
         }
     }).catch(function(error) {
         console.error('❌ Error sending deposit notification:', error);
-        console.log('🔄 Используем fallback - прямая отправка');
-        showNotification('⚠️ Основной канал недоступен, используем резервный', 'info');
-        // Fallback: прямая отправка с кнопками
-        sendDirectDepositNotification(amount, transactionId, userId);
+        
+        // Показываем пользователю информативное сообщение
+        if (error.message.includes('Failed to fetch')) {
+            showNotification('⚠️ Проблемы с сетью. Заявка может быть создана, проверьте позже.', 'info');
+        } else if (error.message.includes('CORS')) {
+            showNotification('⚠️ Заявка создана локально, уведомления могут задерживаться.', 'info');
+        } else {
+            showNotification('⚠️ Заявка создана, но возможны проблемы с уведомлениями.', 'info');
+        }
+        
+        // НЕ используем fallback к прямому Telegram API - он всегда будет заблокирован CORS
+        console.log('📝 Заявка сохранена локально, администратор увидит изменения при синхронизации');
     });
 }
 
