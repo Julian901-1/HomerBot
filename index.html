@@ -786,7 +786,7 @@
     </div>
   </div>
 
-  <div class="version">v3.2</div>
+  <div class="version">v3.5</div>
 
   <script>
     // Инициализация Telegram WebApp
@@ -994,8 +994,8 @@
             var processResult = processServerData(data);
             complete(true, { success: true,  data, processed: processResult });
           } catch (error) {
-            console.error('❌ Error processing JSONP data:', error);
-            complete(false, 'Error processing data: ' + error.message);
+            console.error('❌ Error processing JSONP ', error);
+            complete(false, 'Error processing  ' + error.message);
           }
         };
 
@@ -1072,7 +1072,7 @@
     // === ОБРАБОТКА ДАННЫХ С СЕРВЕРА ===
     function processServerData(data) {
       try {
-        console.log('📥 Processing server data:', data);
+        console.log('📥 Processing server ', data);
         if (!data || !data.success) {
           console.log('⚠️ Server returned error or not success:', data);
           return { processed: false, reason: 'Server error or not success' };
@@ -1098,7 +1098,7 @@
           return { processed: true, updated: false };
         }
       } catch (e) {
-        console.error('❌ Error processing server data:', e);
+        console.error('❌ Error processing server ', e);
         return { processed: false, error: e.message };
       }
     }
@@ -1192,19 +1192,17 @@
       console.log('- Script URL:', SCRIPT_URL);
       console.log('- Current balance:', currentBalance);
 
-      // Проверяем доступность сервера
-      var testUrl = SCRIPT_URL + '?action=test&t=' + Date.now();
+      // Проверяем доступность сервера через JSONP
       return new Promise(function(resolve, reject) {
-        var script = document.createElement('script');
         var callbackName = 'diag_' + Date.now();
-        var timeoutId;
+        var script, timeoutId;
 
         function cleanup() {
           clearTimeout(timeoutId);
           if (window[callbackName]) {
             delete window[callbackName];
           }
-          if (script.parentNode) {
+          if (script && script.parentNode) {
             script.parentNode.removeChild(script);
           }
         }
@@ -1225,14 +1223,17 @@
           }
         };
 
+        script = document.createElement('script');
+        script.type = 'text/javascript';
         script.onerror = function() {
           console.log('❌ Diagnostics JSONP script load error');
           cleanup();
           resolve(false);
         };
 
-        script.src = testUrl + '&callback=' + callbackName;
-        console.log('🔍 Diagnostics JSONP URL:', script.src);
+        var testUrl = SCRIPT_URL + '?action=test&t=' + Date.now() + '&callback=' + callbackName;
+        script.src = testUrl;
+        console.log('🔍 Diagnostics JSONP URL:', testUrl);
         document.head.appendChild(script);
       });
     }
@@ -1296,8 +1297,6 @@
     function checkPaymentConfirmation() {
       if (!currentTransactionId) return;
 
-      var checkUrl = SCRIPT_URL + '?action=checkPayment&transactionId=' + encodeURIComponent(currentTransactionId) + '&t=' + Date.now();
-      
       // Используем JSONP для проверки статуса
        var callbackName = 'chk_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
        var script, timeoutId;
@@ -1344,8 +1343,9 @@
          cleanup();
        };
 
-       script.src = checkUrl + '&callback=' + callbackName;
-       console.log('🌐 Check payment JSONP URL:', script.src);
+       var checkUrl = SCRIPT_URL + '?action=checkPayment&transactionId=' + encodeURIComponent(currentTransactionId) + '&t=' + Date.now() + '&callback=' + callbackName;
+       script.src = checkUrl;
+       console.log('🌐 Check payment JSONP URL:', checkUrl);
        document.head.appendChild(script);
     }
 
@@ -1355,16 +1355,6 @@
       var message = '💰 Новая заявка на пополнение\nПользователь: ' + userId + '\nСумма: ' + formatNumber(amount.toString()) + ' ⚡\nКомментарий: ' + transactionId + '\nПодтверждаете перевод?';
 
       console.log('Sending deposit notification:', message);
-
-      var getUrl = SCRIPT_URL + '?action=sendNotification&' +
-        'type=deposit&' +
-        'userId=' + encodeURIComponent(userId) +
-        '&amount=' + encodeURIComponent(amount) +
-        '&transactionId=' + encodeURIComponent(transactionId) +
-        '&message=' + encodeURIComponent(message) +
-        '&timestamp=' + Date.now();
-
-      console.log('🌐 Отправляем GET запрос:', getUrl.substring(0, 200) + '...');
 
       // Используем JSONP для отправки уведомления
       var callbackName = 'notif_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
@@ -1407,8 +1397,17 @@
         showNotification('⚠️ Заявка создана локально, уведомления могут задерживаться.', 'info');
       };
 
-      script.src = getUrl + '&callback=' + callbackName;
-      console.log('🌐 Notification JSONP URL:', script.src);
+      var getUrl = SCRIPT_URL + '?action=sendNotification&' +
+        'type=deposit&' +
+        'userId=' + encodeURIComponent(userId) +
+        '&amount=' + encodeURIComponent(amount) +
+        '&transactionId=' + encodeURIComponent(transactionId) +
+        '&message=' + encodeURIComponent(message) +
+        '&timestamp=' + Date.now() +
+        '&callback=' + callbackName;
+        
+      script.src = getUrl;
+      console.log('🌐 Notification JSONP URL:', getUrl);
       document.head.appendChild(script);
     }
 
@@ -1418,15 +1417,6 @@
       var message = '🔄 Пользователь ' + userId + ' сменил стратегию на "' + strategyNames[strategy] + '"';
 
       console.log('Sending strategy notification:', message);
-
-      var getUrl = SCRIPT_URL + '?action=sendNotification&' +
-        'type=strategy_change&' +
-        'userId=' + encodeURIComponent(userId) +
-        '&strategy=' + encodeURIComponent(strategy) +
-        '&message=' + encodeURIComponent(message) +
-        '&timestamp=' + Date.now();
-
-      console.log('Sending strategy notification via JSONP:', getUrl);
 
       // Используем JSONP для отправки уведомления о смене стратегии
       var callbackName = 'strat_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
@@ -1464,8 +1454,16 @@
         cleanup();
       };
 
-      script.src = getUrl + '&callback=' + callbackName;
-      console.log('🌐 Strategy notification JSONP URL:', script.src);
+      var getUrl = SCRIPT_URL + '?action=sendNotification&' +
+        'type=strategy_change&' +
+        'userId=' + encodeURIComponent(userId) +
+        '&strategy=' + encodeURIComponent(strategy) +
+        '&message=' + encodeURIComponent(message) +
+        '&timestamp=' + Date.now() +
+        '&callback=' + callbackName;
+        
+      script.src = getUrl;
+      console.log('🌐 Strategy notification JSONP URL:', getUrl);
       document.head.appendChild(script);
     }
 
@@ -1481,18 +1479,6 @@
       var message = '📤 Новая заявка на вывод\nПользователь: ' + userId + '\nСумма: ' + formatNumber(amount.toFixed(2)) + ' ✧\nТелефон: ' + phone + '\nКомиссия (5%): ' + formatNumber(commission.toFixed(2)) + ' ✧\nК выводу: ' + formatNumber(finalAmount.toFixed(2)) + ' ✧';
 
       console.log('Sending withdraw notification:', message);
-
-      var getUrl = SCRIPT_URL + '?action=sendNotification&' +
-        'type=withdraw&' +
-        'userId=' + encodeURIComponent(userId) +
-        '&amount=' + encodeURIComponent(amount) +
-        '&phone=' + encodeURIComponent(phone) +
-        '&commission=' + encodeURIComponent(commission) +
-        '&finalAmount=' + encodeURIComponent(finalAmount) +
-        '&message=' + encodeURIComponent(message) +
-        '&timestamp=' + Date.now();
-
-      console.log('Sending withdraw notification via JSONP:', getUrl);
 
       // Используем JSONP для отправки уведомления о выводе
       var callbackName = 'wd_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
@@ -1532,8 +1518,19 @@
         showNotification('❌ Ошибка отправки заявки. Попробуйте позже.', 'error');
       };
 
-      script.src = getUrl + '&callback=' + callbackName;
-      console.log('🌐 Withdraw notification JSONP URL:', script.src);
+      var getUrl = SCRIPT_URL + '?action=sendNotification&' +
+        'type=withdraw&' +
+        'userId=' + encodeURIComponent(userId) +
+        '&amount=' + encodeURIComponent(amount) +
+        '&phone=' + encodeURIComponent(phone) +
+        '&commission=' + encodeURIComponent(commission) +
+        '&finalAmount=' + encodeURIComponent(finalAmount) +
+        '&message=' + encodeURIComponent(message) +
+        '&timestamp=' + Date.now() +
+        '&callback=' + callbackName;
+        
+      script.src = getUrl;
+      console.log('🌐 Withdraw notification JSONP URL:', getUrl);
       document.head.appendChild(script);
     }
 
@@ -1556,46 +1553,46 @@
           currentTelegramMessageId = null;
         }
 
-        // Уведомляем сервер об отмене
-        var cancelUrl = SCRIPT_URL + '?action=cancelPayment&' +
-          'transactionId=' + encodeURIComponent(currentTransactionId) +
-          '&messageId=' + encodeURIComponent(currentTelegramMessageId || '') +
-          '&timestamp=' + Date.now();
+        // Уведомляем сервер об отмене через JSONP
+        var cancelCallbackName = 'cancel_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        var cancelScript, cancelTimeoutId;
 
-        // Используем JSONP для отмены
-        var callbackName = 'cancel_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-        var script, timeoutId;
-
-        function cleanup() {
-          clearTimeout(timeoutId);
-          if (window[callbackName]) {
-            delete window[callbackName];
+        function cancelCleanup() {
+          clearTimeout(cancelTimeoutId);
+          if (window[cancelCallbackName]) {
+            delete window[cancelCallbackName];
           }
-          if (script && script.parentNode) {
-            script.parentNode.removeChild(script);
+          if (cancelScript && cancelScript.parentNode) {
+            cancelScript.parentNode.removeChild(cancelScript);
           }
         }
 
-        timeoutId = setTimeout(function () {
+        cancelTimeoutId = setTimeout(function () {
           console.log('⏰ Cancel payment JSONP timeout');
-          cleanup();
+          cancelCleanup();
         }, 5000);
 
-        window[callbackName] = function (data) {
-          cleanup();
+        window[cancelCallbackName] = function (data) {
+          cancelCleanup();
           console.log('Cancel notification sent, result:', data);
         };
 
-        script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.onerror = function (error) {
+        cancelScript = document.createElement('script');
+        cancelScript.type = 'text/javascript';
+        cancelScript.onerror = function (error) {
           console.log('❌ Cancel payment JSONP script failed to load:', error);
-          cleanup();
+          cancelCleanup();
         };
 
-        script.src = cancelUrl + '&callback=' + callbackName;
-        console.log('🌐 Cancel payment JSONP URL:', script.src);
-        document.head.appendChild(script);
+        var cancelUrl = SCRIPT_URL + '?action=cancelPayment&' +
+          'transactionId=' + encodeURIComponent(currentTransactionId) +
+          '&messageId=' + encodeURIComponent(currentTelegramMessageId || '') +
+          '&timestamp=' + Date.now() +
+          '&callback=' + cancelCallbackName;
+          
+        cancelScript.src = cancelUrl;
+        console.log('🌐 Cancel payment JSONP URL:', cancelUrl);
+        document.head.appendChild(cancelScript);
 
         selectedAmount = 0;
         currentTransactionId = null;
