@@ -81,19 +81,21 @@
         }
         
         // URL вашего Google Apps Script
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
+        const SCRIPT_URL = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
         
         async function syncBalance() {
             if (!username) return;
             
             try {
-                const response = await fetch(`${SCRIPT_URL}?action=getBalance&username=${username}`);
+                const response = await fetch(`${SCRIPT_URL}?action=syncBalance&username=${username}&balance=${localBalance}`);
                 const data = await response.json();
                 
                 if (data.success) {
-                    currentBalance = data.balance;
-                    localBalance = currentBalance;
-                    updateDisplay();
+                    // Если в столбце E было значение, устанавливаем его как новый баланс
+                    if (data.forceBalance !== null) {
+                        localBalance = data.forceBalance;
+                        updateDisplay();
+                    }
                     document.getElementById('status').textContent = `Синхронизировано: ${new Date().toLocaleTimeString()}`;
                 } else {
                     document.getElementById('status').textContent = 'Ошибка синхронизации';
