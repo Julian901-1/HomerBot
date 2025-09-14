@@ -587,8 +587,9 @@
     </style>
 </head>
 <body>
+	
     <!-- Версия приложения -->
-    <div class="version">27.7-debug</div>
+    <div class="version">27.8-debug</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -617,6 +618,41 @@
                     Вывести
                 </button>
 				<button onclick="forceBalanceSync()" style="background: red; color: white; padding: 10px;">ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ</button>
+				<!-- В секции кнопок тестирования добавьте: -->
+<button class="btn centered-btn" onclick="runSyncDiagnostics()" style="background: #6c757d; margin-top: 10px;">
+    🔍 ДИАГНОСТИКА: Проверка синхронизации
+</button>
+
+<script>
+function runSyncDiagnostics() {
+    console.log('🔍 Running sync diagnostics...');
+    showNotification('🔍 Запуск диагностики...', 'info');
+    
+    diagnoseSyncIssues()
+        .then(function(serverReachable) {
+            return performReliableSync();
+        })
+        .then(function(result) {
+            const message = result.success ? 
+                '✅ Диагностика пройдена. Синхронизация работает.' : 
+                '⚠️ Обнаружены проблемы с синхронизацией.';
+            
+            showNotification(message, result.success ? 'success' : 'error');
+            
+            // Подробная информация в консоль
+            console.log('📊 Diagnostic Results:', {
+                syncResult: result,
+                currentBalance: currentBalance,
+                currentStrategy: currentStrategy,
+                syncState: syncState
+            });
+        })
+        .catch(function(error) {
+            showNotification('❌ Диагностика не удалась: ' + error.message, 'error');
+            console.error('❌ Diagnostics failed:', error);
+        });
+}
+</script>
             </div>
 
             <div class="current-strategy" id="currentStrategy" onclick="showStrategyPage()">
@@ -1698,23 +1734,23 @@ function tryNoCorsSync() {
 
 // Принудительная синхронизация баланса с сервером
 function forceBalanceSync() {
-    console.log('🔄 Принудительная синхронизация баланса...');
+    console.log('🔄 User requested force sync');
+    showNotification('🔄 Выполняется принудительная синхронизация...', 'info');
     
-    // Очищаем локальные данные
-    localStorage.removeItem('wallet_balance');
-    localStorage.removeItem('last_update_time');
-    
-    // Останавливаем начисления
-    stopInterestAccrual();
-    
-    // Сбрасываем баланс
-    currentBalance = 0;
-    updateBalanceDisplay();
-    
-    // Загружаем с сервера
-    loadBalanceFromSheet();
-    
-    showNotification('🔄 Синхронизация с сервером...', 'info');
+    return performReliableSync()
+        .then(function(result) {
+            if (result.success) {
+                showNotification('✅ Синхронизация завершена успешно!', 'success');
+            } else {
+                showNotification('⚠️ Синхронизация завершена с предупреждениями', 'info');
+            }
+            return result;
+        })
+        .catch(function(error) {
+            console.error('❌ Force sync failed:', error);
+            showNotification('❌ Ошибка синхронизации: ' + error.message, 'error');
+            throw error;
+        });
 }
 
 function getUserName() {
@@ -2351,34 +2387,26 @@ function testGoogleAppsScriptConnection() {
 }
 	
 function initApp() {
-    console.log('initApp called');
+    console.log('initApp called with improved sync');
     
     try {
-        // Инициализация базовых компонентов
+        // Базовая инициализация
         initTelegram();
         loadBalance();
         loadStrategy();
         updateGreeting();
         
-        // Тестируем соединение с сервером (не блокируем запуск при ошибке)
-        setTimeout(function() {
-            testGoogleAppsScriptConnection();
-        }, 1000);
-        
-        // Запускаем синхронизацию только если базовая инициализация прошла успешно
-        setTimeout(function() {
-            startFrequentSync();
-            loadBalanceFromSheet();
-        }, 2000);
+        // Запускаем улучшенную систему синхронизации
+        startImprovedSync();
         
         // Настройка обработчиков событий
         setupEventHandlers();
         
-        console.log('App initialized successfully');
+        console.log('✅ App initialized successfully with improved sync');
         
     } catch (e) {
-        console.error('Error in initApp:', e);
-        showNotification('Ошибка инициализации приложения. Некоторые функции могут не работать.', 'error', 5000);
+        console.error('❌ Error in initApp:', e);
+        showNotification('Ошибка инициализации. Некоторые функции могут не работать.', 'error', 5000);
     }
 }
 
