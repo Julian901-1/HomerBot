@@ -65,30 +65,72 @@
     </div>
 
     <script>
-        let currentBalance = 0;
         let localBalance = 0;
         let username = '';
-        
-        // Инициализация Telegram Web App
-        window.Telegram.WebApp.ready();
-        
-        // Получаем данные пользователя
-        const user = window.Telegram.WebApp.initDataUnsafe?.user;
-        if (user && user.username) {
-            username = user.username;
-        } else {
-            document.getElementById('status').textContent = 'Ошибка: не удалось получить имя пользователя';
-        }
+        let isInitialized = false;
         
         // URL вашего Google Apps Script
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
         
+        // Инициализация Telegram Web App
+        window.Telegram.WebApp.ready();
+        
+        // Для отладки - показываем информацию о пользователе
+        function debugInfo() {
+            const user = window.Telegram.WebApp.initDataUnsafe?.user;
+            console.log('Debug info:', {
+                user: user,
+                username: username,
+                isInitialized: isInitialized,
+                scriptUrl: SCRIPT_URL
+            });
+        }
+        
+        // Функция для получения данных пользователя с повторными попытками
+        function initializeUser() {
+            const user = window.Telegram.WebApp.initDataUnsafe?.user;
+            if (user && user.username) {
+                username = user.username;
+                isInitialized = true;
+                console.log('User initialized:', username);
+                debugInfo();
+                initialLoad();
+                return true;
+            }
+            return false;
+        }
+        
+        // Пытаемся получить данные пользователя сразу
+        if (!initializeUser()) {
+            // Если не получилось, ждем и пробуем еще раз через короткие интервалы
+            let attempts = 0;
+            const maxAttempts = 20;
+            const initInterval = setInterval(() => {
+                attempts++;
+                if (initializeUser() || attempts >= maxAttempts) {
+                    clearInterval(initInterval);
+                    if (!isInitialized) {
+                        document.getElementById('status').textContent = 'Ошибка: не удалось получить имя пользователя';
+                    }
+                }
+            }, 100);
+        }
+        
         async function syncBalance() {
-            if (!username) return;
+            if (!username || !isInitialized) return;
             
             try {
-                const response = await fetch(`${SCRIPT_URL}?action=syncBalance&username=${username}&balance=${localBalance}`);
+                const url = `${SCRIPT_URL}?action=syncBalance&username=${username}&balance=${localBalance}`;
+                console.log('Sync URL:', url);
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
+                console.log('Sync response:', data);
                 
                 if (data.success) {
                     // Если в столбце E было значение, устанавливаем его как новый баланс
@@ -98,21 +140,12 @@
                     }
                     document.getElementById('status').textContent = `Синхронизировано: ${new Date().toLocaleTimeString()}`;
                 } else {
-                    document.getElementById('status').textContent = 'Ошибка синхронизации';
+                    document.getElementById('status').textContent = `Ошибка синхронизации: ${data.error || 'неизвестная ошибка'}`;
                 }
             } catch (error) {
-                document.getElementById('status').textContent = 'Ошибка подключения';
                 console.error('Sync error:', error);
+                document.getElementById('status').textContent = `Ошибка подключения: ${error.message}`;
             }
-        }
-        
-        function addOne() {
-            localBalance++;
-            updateDisplay();
-        }
-        
-        function updateDisplay() {
-            document.getElementById('balance').textContent = localBalance;
         }
         
         // Первоначальная загрузка баланса из таблицы
@@ -120,25 +153,48 @@
             if (!username) return;
             
             try {
-                const response = await fetch(`${SCRIPT_URL}?action=getBalance&username=${username}`);
+                const url = `${SCRIPT_URL}?action=getBalance&username=${username}`;
+                console.log('Load URL:', url);
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
+                console.log('Load response:', data);
                 
                 if (data.success) {
                     localBalance = data.balance;
                     updateDisplay();
                     document.getElementById('status').textContent = `Загружено: ${new Date().toLocaleTimeString()}`;
+                    
+                    // Запускаем регулярную синхронизацию только после успешной загрузки
+                    setInterval(syncBalance, 20000);
                 } else {
-                    document.getElementById('status').textContent = 'Ошибка загрузки';
+                    document.getElementById('status').textContent = `Ошибка загрузки: ${data.error || 'неизвестная ошибка'}`;
                 }
             } catch (error) {
-                document.getElementById('status').textContent = 'Ошибка подключения';
                 console.error('Load error:', error);
+                document.getElementById('status').textContent = `Ошибка подключения при загрузке: ${error.message}`;
+                // При ошибке загрузки все равно запускаем синхронизацию
+                setInterval(syncBalance, 20000);
             }
         }
         
-        // Запуск синхронизации каждые 20 секунд
-        initialLoad(); // Первоначальная загрузка
-        setInterval(syncBalance, 20000);
+        function addOne() {
+            if (!isInitialized) {
+                document.getElementById('status').textContent = 'Ожидание инициализации...';
+                return;
+            }
+            localBalance++;
+            updateDisplay();
+        }
+        
+        function updateDisplay() {
+            document.getElementById('balance').textContent = localBalance;
+        }
     </script>
 </body>
 </html>
