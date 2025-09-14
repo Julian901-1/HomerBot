@@ -101,7 +101,7 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёкь</div>
+        <div class="wallet-title">Кошелёк</div>
         <div class="balance" id="balance">0.0000</div>
         
         <div class="rate-selection">
@@ -285,10 +285,10 @@
         
         // Первоначальная загрузка баланса из таблицы
         async function initialLoad() {
-            if (!username) return;
+            if (!window.username) return;
             
             try {
-                const url = `${SCRIPT_URL}?action=getBalance&username=${username}`;
+                const url = `${SCRIPT_URL}?action=getBalance&username=${window.username}`;
                 console.log('Load URL:', url);
                 
                 const response = await fetch(url);
@@ -301,38 +301,34 @@
                 console.log('Load response:', data);
                 
                 if (data.success) {
-                    // Рассчитываем баланс с учетом времени, прошедшего с последнего обновления
                     if (data.lastUpdate && data.balance > 0) {
                         const lastUpdateTimestamp = new Date(data.lastUpdate).getTime();
                         const timeElapsed = Date.now() - lastUpdateTimestamp;
                         const rate = data.rate || 16;
                         
                         const oldBalance = data.balance;
-                        localBalance = calculateInterest(data.balance, rate, timeElapsed);
-                        currentRate = rate;
+                        window.localBalance = calculateInterest(data.balance, rate, timeElapsed);
+                        window.currentRate = rate;
                         
-                        // Показываем уведомление о добавленных процентах, если есть прирост
-                        const addedAmount = localBalance - oldBalance;
-                        if (addedAmount > 0.0001) { // Показываем только если прирост больше 0.0001
+                        const addedAmount = window.localBalance - oldBalance;
+                        if (addedAmount > 0.0001) {
                             showPopup(`Добавлено с последнего захода в приложение: ${addedAmount.toFixed(4)}`);
                         }
                         
-                        console.log('Calculated balance with interest:', localBalance, 'from', data.balance, 'added:', addedAmount);
+                        console.log('Calculated balance with interest:', window.localBalance, 'from', data.balance, 'added:', addedAmount);
                     } else {
-                        localBalance = data.balance || 0;
-                        currentRate = data.rate || 16;
+                        window.localBalance = data.balance || 0;
+                        window.currentRate = data.rate || 16;
                     }
                     
-                    lastUpdateTime = Date.now();
+                    window.lastUpdateTime = Date.now();
                     updateDisplay();
                     updateRateButtons();
                     
-                    // Запускаем реальное время обновления
                     startRealTimeUpdate();
                     
                     document.getElementById('status').textContent = `Загружено: ${new Date().toLocaleTimeString()}`;
                     
-                    // Запускаем регулярную синхронизацию только после успешной загрузки
                     setInterval(syncBalance, 20000);
                 } else {
                     document.getElementById('status').textContent = `Ошибка загрузки: ${data.error || 'неизвестная ошибка'}`;
@@ -340,7 +336,6 @@
             } catch (error) {
                 console.error('Load error:', error);
                 document.getElementById('status').textContent = `Ошибка подключения при загрузке: ${error.message}`;
-                // При ошибке загрузки все равно запускаем синхронизацию
                 setInterval(syncBalance, 20000);
             }
         }
