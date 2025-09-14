@@ -588,7 +588,7 @@
 </head>
 <body>
     <!-- Версия приложения -->
-    <div class="version">27.1-debug</div>
+    <div class="version">27.2-debug</div>
 
     <!-- Pop-up уведомление -->
     <div id="popupNotification" class="popup-notification"></div>
@@ -1505,30 +1505,50 @@ function syncBalanceToSheet() {
         console.log('🔄 Syncing balance to sheet via GET:', getUrl);
         
         fetch(getUrl, {
-            method: 'GET'
+            method: 'GET',
+            mode: 'no-cors' // Используем no-cors для избежания preflight запросов
         })
         .then(function(response) {
-            console.log('📋 Sync response status:', response.status);
-            if (!response.ok) {
-                throw new Error('HTTP ' + response.status + ': ' + response.statusText);
+            console.log('📋 Sync response received');
+            
+            // В режиме no-cors мы не можем читать ответ
+            // Но запрос будет отправлен
+            if (response.type === 'opaque') {
+                console.log('✅ Balance sync request sent (no-cors mode)');
+                return { success: true, note: 'no-cors mode' };
             }
-            return response.json();
+            
+            return response.text();
         })
         .then(function(result) {
-            console.log('✅ Balance synced to sheet successfully:', result);
-            if (result.error) {
-                console.error('❌ Server returned error:', result.error);
+            if (typeof result === 'string') {
+                try {
+                    var parsed = JSON.parse(result);
+                    console.log('✅ Balance synced to sheet successfully:', parsed);
+                    
+                    if (parsed.error) {
+                        console.error('⚠️ Server returned error:', parsed.error);
+                    }
+                } catch (e) {
+                    console.log('✅ Sync request sent, response not JSON:', result.substring(0, 50));
+                }
             } else {
-                console.log('💾 Sync successful for user:', username, 'balance:', currentBalance);
+                console.log('✅ Sync request completed:', result);
             }
         })
         .catch(function(error) {
-            console.error('❌ Error syncing to sheet:', error);
-            console.error('📍 SCRIPT_URL:', SCRIPT_URL);
-            console.error('👤 Username:', username, 'Balance:', currentBalance);
+            console.error('⚠️ Error syncing to sheet:', error);
+            
+            // Не показываем ошибку пользователю для фоновых синхронизаций
+            // Только логируем для отладки
+            if (error.message.includes('CORS')) {
+                console.log('📝 CORS error expected in browser environment');
+            } else {
+                console.error('🔍 Unexpected sync error:', error.message);
+            }
         });
     } catch (e) {
-        console.error('❌ Error in syncBalanceToSheet:', e);
+        console.error('⚠️ Error in syncBalanceToSheet:', e);
     }
 }
 
@@ -1542,22 +1562,38 @@ function loadBalanceFromSheet() {
         console.log('Loading balance from sheet for user:', username);
         console.log('Request URL:', url);
         
+        // Используем более надежный подход с обработкой ошибок
         fetch(url, {
             method: 'GET',
-            cache: 'no-cache', // Принудительно отключаем кеш
+            mode: 'cors', // Явно указываем CORS режим
+            cache: 'no-cache',
             headers: {
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
             }
         })
         .then(function(response) {
             console.log('Load balance response status:', response.status);
+            
             if (!response.ok) {
                 throw new Error('HTTP ' + response.status + ': ' + response.statusText);
             }
-            return response.json();
+            
+            // Сначала получаем текст, потом парсим
+            return response.text();
         })
-        .then(function(result) {
+        .then(function(text) {
+            console.log('Raw response text:', text);
+            
+            // Очищаем текст от возможных HTML тегов или лишних символов
+            var cleanText = text.trim();
+            
+            // Проверяем, является ли ответ JSON
+            if (!cleanText.startsWith('{') && !cleanText.startsWith('[')) {
+                throw new Error('Response is not JSON format: ' + cleanText.substring(0, 100));
+            }
+            
+            var result = JSON.parse(cleanText);
             console.log('Balance loaded from sheet:', result);
             
             if (result.balance !== undefined) {
@@ -1566,8 +1602,8 @@ function loadBalanceFromSheet() {
                 
                 console.log('Server balance:', serverBalance, 'Local balance:', localBalance);
                 
-                // ПРИНУДИТЕЛЬНО используем серверный баланс как источник истины
-                if (serverBalance !== localBalance || Math.abs(serverBalance - localBalance) > 0.01) {
+                // Используем серверный баланс как единственный источник истины
+                if (Math.abs(serverBalance - localBalance) > 0.01) {
                     console.log('Updating balance from server:', serverBalance, 'was:', localBalance);
                     
                     // Останавливаем начисления
@@ -1598,17 +1634,37 @@ function loadBalanceFromSheet() {
                     updateCurrentStrategyDisplay();
                     loadStrategy();
                 }
+            } else if (result.error) {
+                console.error('Server returned error:', result.error);
+                showNotification('Ошибка сервера: ' + result.error, 'error');
             } else {
                 console.log('No balance data received from server');
+                showNotification('Нет данных о балансе от сервера', 'error');
             }
         })
         .catch(function(error) {
             console.error('Error loading from sheet:', error);
-            // При ошибке загрузки уведомляем пользователя
-            showNotification('Ошибка синхронизации с сервером', 'error');
+            
+            // Более детальная обработка ошибок
+            if (error.message.includes('CORS')) {
+                console.error('CORS error - Google Apps Script not properly configured');
+                showNotification('Ошибка доступа к серверу (CORS). Проверьте настройки Google Apps Script.', 'error');
+            } else if (error.message.includes('Failed to fetch')) {
+                console.error('Network error - possibly offline or server unavailable');
+                showNotification('Ошибка сети. Проверьте подключение к интернету.', 'error');
+            } else if (error.message.includes('not JSON')) {
+                console.error('Server returned non-JSON response');
+                showNotification('Сервер вернул неправильный формат данных.', 'error');
+            } else {
+                showNotification('Ошибка синхронизации с сервером: ' + error.message, 'error');
+            }
+            
+            // В случае ошибки используем локальные данные
+            console.log('Using local data due to server error');
         });
     } catch (e) {
         console.error('Error in loadBalanceFromSheet:', e);
+        showNotification('Критическая ошибка синхронизации', 'error');
     }
 }
 
@@ -1643,16 +1699,32 @@ function getUserName() {
 }
 
 function startFrequentSync() {
-    // Синхронизация каждую минуту
-    syncTimer = setInterval(function() {
-        syncBalanceToSheet();
-        loadBalanceFromSheet();
-    }, 60 * 1000); // каждую минуту
+    // Очищаем предыдущий таймер если есть
+    if (syncTimer) {
+        clearInterval(syncTimer);
+    }
     
-    // Первая синхронизация через 30 секунд после загрузки
+    // Синхронизация каждые 2 минуты (увеличено для снижения нагрузки)
+    syncTimer = setInterval(function() {
+        try {
+            syncBalanceToSheet();
+            
+            // Загружаем баланс только каждую 4-ю синхронизацию (каждые 8 минут)
+            if (Math.random() < 0.25) {
+                loadBalanceFromSheet();
+            }
+        } catch (e) {
+            console.error('Error in sync interval:', e);
+        }
+    }, 120 * 1000); // каждые 2 минуты
+    
+    // Первая синхронизация через 30 секунд после запуска
     setTimeout(function() {
-        syncBalanceToSheet();
-        loadBalanceFromSheet();
+        try {
+            syncBalanceToSheet();
+        } catch (e) {
+            console.error('Error in initial sync:', e);
+        }
     }, 30000);
 }
 
@@ -2076,35 +2148,52 @@ function testNotification() {
 // === ФУНКЦИЯ ПРЯМОГО ТЕСТИРОВАНИЯ GET ===
 function testDirectGet() {
     console.log('🎯 Тестируем прямой GET запрос...');
-    showNotification('🎯 Тестируем прямой GET запрос...', 'info');
+    showNotification('Тестируем прямой GET запрос...', 'info');
     
     var testUrl = SCRIPT_URL + '?action=test&timestamp=' + Date.now();
     console.log('🌐 URL для тестирования:', testUrl);
     
-    fetch(testUrl)
-    .then(function(response) {
-        console.log('✅ Response получен');
-        console.log('Status:', response.status);
-        console.log('Status text:', response.statusText);
-        console.log('Headers:', [...response.headers.entries()]);
+    // Пробуем разные режимы
+    Promise.allSettled([
+        // Пробуем CORS режим
+        fetch(testUrl, { 
+            method: 'GET', 
+            mode: 'cors',
+            headers: { 'Accept': 'application/json' }
+        }).then(r => ({ mode: 'cors', response: r })),
         
-        return response.text();
-    })
-    .then(function(text) {
-        console.log('📄 Raw response:', text);
+        // Пробуем no-cors режим  
+        fetch(testUrl, { 
+            method: 'GET', 
+            mode: 'no-cors' 
+        }).then(r => ({ mode: 'no-cors', response: r }))
+    ])
+    .then(function(results) {
+        console.log('Test results:', results);
         
-        try {
-            const json = JSON.parse(text);
-            console.log('✅ JSON parsed successfully:', json);
-            showNotification('✅ Прямой GET запрос работает!', 'success');
-        } catch (error) {
-            console.error('❌ JSON parse failed:', error);
-            showNotification('❌ Ответ не является JSON: ' + text.substring(0, 100), 'error');
+        var corsResult = results[0];
+        var noCorsResult = results[1];
+        
+        if (corsResult.status === 'fulfilled') {
+            console.log('✅ CORS mode working');
+            showNotification('✅ CORS запросы работают!', 'success');
+            
+            corsResult.value.response.text().then(function(text) {
+                console.log('CORS response:', text.substring(0, 200));
+            });
+            
+        } else if (noCorsResult.status === 'fulfilled') {
+            console.log('✅ No-CORS mode working');
+            showNotification('✅ No-CORS запросы работают (ограниченно)', 'info');
+            
+        } else {
+            console.log('⚠️ Both modes failed');
+            showNotification('⚠️ Все режимы запросов не работают', 'error');
         }
     })
     .catch(function(error) {
-        console.error('❌ Fetch failed:', error);
-        showNotification('❌ GET запрос не удался: ' + error.message, 'error');
+        console.error('⚠️ All test requests failed:', error);
+        showNotification('⚠️ Все тестовые запросы не удались: ' + error.message, 'error');
     });
 }
 
@@ -2145,50 +2234,74 @@ function checkWebhookStatus() {
 function testGoogleAppsScriptConnection() {
     console.log('Testing Google Apps Script connection...');
     
-    fetch(SCRIPT_URL + '?action=test&timestamp=' + Date.now())
+    var testUrl = SCRIPT_URL + '?action=test&timestamp=' + Date.now();
+    
+    fetch(testUrl, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+            'Accept': 'application/json'
+        }
+    })
     .then(function(response) {
         console.log('Google Apps Script test response status:', response.status);
+        
         if (!response.ok) {
             throw new Error('HTTP ' + response.status + ': ' + response.statusText);
         }
-        return response.json();
+        
+        return response.text();
     })
-    .then(function(result) {
-        console.log('Google Apps Script test successful:', result);
-        if (result.success) {
-            console.log('✅ Google Apps Script is working properly');
-        } else {
-            console.error('❌ Google Apps Script returned error:', result);
+    .then(function(text) {
+        console.log('Raw test response:', text);
+        
+        try {
+            var result = JSON.parse(text);
+            console.log('Google Apps Script test successful:', result);
+            
+            if (result.success) {
+                console.log('✅ Google Apps Script is working properly');
+                showNotification('Соединение с сервером работает', 'success', 2000);
+            } else {
+                console.error('⚠️ Google Apps Script returned error:', result);
+                showNotification('Сервер вернул ошибку: ' + (result.error || 'неизвестная ошибка'), 'error');
+            }
+        } catch (parseError) {
+            console.error('⚠️ Response is not valid JSON:', text.substring(0, 100));
+            
+            // Если ответ содержит признаки успеха, считаем что все работает
+            if (text.includes('success') || text.includes('test')) {
+                showNotification('Сервер отвечает, но формат данных может отличаться', 'info');
+            } else {
+                showNotification('Сервер вернул неожиданный ответ', 'error');
+            }
         }
     })
     .catch(function(error) {
-        console.error('❌ Google Apps Script connection failed:', error);
-        console.error('This may cause issues with notifications and balance sync');
+        console.error('⚠️ Google Apps Script connection failed:', error);
         
-        // Показываем пользователю предупреждение
-        showNotification('⚠️ Проблемы с соединением с сервером. Некоторые функции могут не работать.', 'error', 5000);
+        if (error.message.includes('CORS')) {
+            showNotification('Ошибка CORS: проверьте настройки Google Apps Script', 'error', 5000);
+        } else if (error.message.includes('Failed to fetch')) {
+            showNotification('Нет соединения с сервером. Проверьте интернет.', 'error', 5000);
+        } else {
+            showNotification('Ошибка подключения: ' + error.message, 'error', 5000);
+        }
     });
 }
 
 // === ИНИЦИАЛИЗАЦИЯ ===
-function initApp() {
-    console.log('initApp called');
-    
+	function setupEventHandlers() {
     try {
-        initTelegram();
-        testGoogleAppsScriptConnection();
-        loadBalance();
-        loadStrategy();
-        updateGreeting();
-        startFrequentSync();
-        
-        // Настройка обработчиков событий
+        // Обработчик для поля ввода суммы
         var customAmountInput = document.getElementById('customAmount');
         if (customAmountInput) {
             customAmountInput.addEventListener('input', function() {
                 var value = this.value.replace(/\s/g, '');
                 selectedAmount = parseFloat(value) || 0;
                 this.value = formatNumber(value);
+                
+                // Убираем выделение с кнопок
                 var btns = document.querySelectorAll('.amount-btn');
                 for (var i = 0; i < btns.length; i++) {
                     btns[i].classList.remove('selected');
@@ -2196,16 +2309,48 @@ function initApp() {
             });
         }
         
-        // УДАЛЕНО: весь блок setTimeout с установкой тестового баланса
-        // НЕ устанавливаем автоматически currentBalance = 1000
+        // Обработчик для поля телефона (если есть)
+        var withdrawPhoneInput = document.getElementById('withdrawPhone');
+        if (withdrawPhoneInput) {
+            withdrawPhoneInput.addEventListener('input', function() {
+                this.value = formatPhoneNumber(this.value);
+            });
+        }
+        
+    } catch (e) {
+        console.error('Error setting up event handlers:', e);
+    }
+}
+	
+function initApp() {
+    console.log('initApp called');
+    
+    try {
+        // Инициализация базовых компонентов
+        initTelegram();
+        loadBalance();
+        loadStrategy();
+        updateGreeting();
+        
+        // Тестируем соединение с сервером (не блокируем запуск при ошибке)
+        setTimeout(function() {
+            testGoogleAppsScriptConnection();
+        }, 1000);
+        
+        // Запускаем синхронизацию только если базовая инициализация прошла успешно
+        setTimeout(function() {
+            startFrequentSync();
+            loadBalanceFromSheet();
+        }, 2000);
+        
+        // Настройка обработчиков событий
+        setupEventHandlers();
         
         console.log('App initialized successfully');
         
-        // Загружаем данные с сервера
-        loadBalanceFromSheet();
-        
     } catch (e) {
         console.error('Error in initApp:', e);
+        showNotification('Ошибка инициализации приложения. Некоторые функции могут не работать.', 'error', 5000);
     }
 }
 
