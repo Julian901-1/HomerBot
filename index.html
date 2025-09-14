@@ -115,8 +115,29 @@
             document.getElementById('balance').textContent = localBalance;
         }
         
+        // Первоначальная загрузка баланса из таблицы
+        async function initialLoad() {
+            if (!username) return;
+            
+            try {
+                const response = await fetch(`${SCRIPT_URL}?action=getBalance&username=${username}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    localBalance = data.balance;
+                    updateDisplay();
+                    document.getElementById('status').textContent = `Загружено: ${new Date().toLocaleTimeString()}`;
+                } else {
+                    document.getElementById('status').textContent = 'Ошибка загрузки';
+                }
+            } catch (error) {
+                document.getElementById('status').textContent = 'Ошибка подключения';
+                console.error('Load error:', error);
+            }
+        }
+        
         // Запуск синхронизации каждые 20 секунд
-        syncBalance(); // Первоначальная загрузка
+        initialLoad(); // Первоначальная загрузка
         setInterval(syncBalance, 20000);
     </script>
 </body>
