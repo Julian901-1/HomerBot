@@ -134,15 +134,9 @@
     // --- State ---
     window.username = null;
     window.isInitialized = false;
-    window.serverBalance = 0;   // C из таблицы — база
-    window.localBalance = 0;    // «живой» баланс
+    window.serverBalance = 0;
     window.currentRate = 16;
     window.pendingRequest = false;
-
-    // Анимация процентов — состояние с непрерывностью
-    let accrualTimer = null;
-    let anim = { active: false, perSec: 0, target: 0, lastTsSec: 0 };
-    let preview = null; // { accruedSoFar, projectedFull, secondsRemain }
 
     // --- UI helpers ---
     function fmtMoney(x) {
@@ -189,7 +183,7 @@
       });
     }
     function updateDisplay() {
-      document.getElementById('balanceValue').textContent = fmtMoney(window.localBalance);
+      document.getElementById('balanceValue').textContent = fmtMoney(window.serverBalance);
       document.getElementById('rateText').textContent = `${window.currentRate}%`;
     }
     function setButtonsWaiting(isWaiting) {
@@ -209,45 +203,6 @@
       } catch { return 'marulin'; }
     }
 
-    // --- Accrual animation with continuity ---
-    function applyPreviewContinuously(newPreview) {
-      // 1) добиваем до «сейчас» прежнюю анимацию (чтобы не было скачка)
-      const nowSec = Math.floor(Date.now() / 1000);
-      if (anim.active) {
-        const elapsed = Math.max(0, nowSec - anim.lastTsSec);
-        window.localBalance += anim.perSec * elapsed;
-        // ограничим по таргету
-        if (anim.perSec >= 0) { if (window.localBalance > anim.target) window.localBalance = anim.target; }
-        else { if (window.localBalance < anim.target) window.localBalance = anim.target; }
-        updateDisplay();
-      }
-
-      // 2) задаём новый таргет и новый наклон «в секунду» — от текущего локального значения
-      const newTarget = window.serverBalance + (Number(newPreview.projectedFull) || 0);
-      let remain = Math.max(1, Number(newPreview.secondsRemain || 1));
-      const delta = newTarget - window.localBalance;
-      anim.perSec = delta / remain;
-      anim.target = newTarget;
-      anim.lastTsSec = nowSec;
-      anim.active = true;
-
-      // 3) перезапускаем таймер
-      if (accrualTimer) clearInterval(accrualTimer);
-      accrualTimer = setInterval(() => {
-        anim.lastTsSec += 1;
-        window.localBalance += anim.perSec;
-        let done = false;
-        if ((anim.perSec >= 0 && window.localBalance >= anim.target) ||
-            (anim.perSec <  0 && window.localBalance <= anim.target) ||
-            --remain <= 0) {
-          window.localBalance = anim.target;
-          done = true;
-        }
-        updateDisplay();
-        if (done) { clearInterval(accrualTimer); accrualTimer = null; anim.active = false; }
-      }, 1000);
-    }
-
     // --- API ---
     async function apiGet(path) { const r = await fetch(`${SCRIPT_URL}${path}`); return r.json(); }
 
@@ -257,37 +212,23 @@
         setGreeting();
         window.isInitialized = true;
 
+        // начальная загрузка
         const data = await apiGet(`?action=getBalance&username=${window.username}&debug=1`);
         if (!data.success) throw new Error(data.error || 'getBalance failed');
         window.serverBalance = Number(data.balance) || 0;
         window.currentRate = Number(data.rate) || 16;
-        window.localBalance = window.serverBalance;
         markRateChip(window.currentRate);
         updateDisplay();
         document.getElementById('status').textContent = 'Готово';
 
-        await refreshPreview();
+        // сразу синк — сервер доначислит проценты «по сейчас» и вернёт итог
+        await syncBalance();
 
+        // периодический синк
         setInterval(syncBalance, 20000);
       } catch (e) {
         console.error('Initialization error:', e);
         document.getElementById('status').textContent = 'Ошибка инициализации';
-      }
-    }
-
-    async function refreshPreview() {
-      try {
-        const p = await apiGet(`?action=previewAccrual&username=${window.username}&debug=1`);
-        if (p.success) {
-          preview = {
-            accruedSoFar: Number(p.accruedToNow || 0),
-            projectedFull: Number(p.projectedFull || 0),
-            secondsRemain: Number(p.secondsRemain || 0),
-          };
-          applyPreviewContinuously(preview);
-        }
-      } catch (e) {
-        console.warn('previewAccrual error', e);
       }
     }
 
@@ -312,8 +253,7 @@
             window.pendingRequest = false; setButtonsWaiting(false);
           }
 
-          await refreshPreview();
-
+          updateDisplay();
           document.getElementById('status').textContent = `Синхронизировано: ${new Date().toLocaleTimeString()}`;
         } else {
           document.getElementById('status').textContent = `Ошибка синхронизации: ${data.error || 'неизвестная ошибка'}`;
@@ -367,7 +307,7 @@
         const data = await apiGet(`?action=applyMonthlyInterestNow&username=${window.username}&debug=1`);
         if (data.success && data.ok) {
           window.serverBalance = Number(data.newBalance) || window.serverBalance;
-          await refreshPreview();
+          updateDisplay();
           showPopup(`Проценты начислены\nбаза = ${(data.baseUsed??0).toLocaleString('ru-RU', {maximumFractionDigits:2})}\n% = ${(data.interestAmount??0).toLocaleString('ru-RU', {maximumFractionDigits:2})}`);
         } else {
           showPopup('Не удалось применить проценты');
@@ -389,7 +329,8 @@
           window.currentRate = rate;
           markRateChip(rate);
           showPopup(`Ставка обновлена: ${rate}%`);
-          await refreshPreview(); // перестраиваем анимацию без скачка
+          // после смены ставки — сразу синхронизируемся, чтобы серверное доначисление отразилось в C
+          await syncBalance();
         } else {
           showPopup('Не удалось сменить ставку');
         }
