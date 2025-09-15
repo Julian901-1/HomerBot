@@ -18,12 +18,10 @@
     .page { display: none; }
     .page.active { display: block; }
 
-    /* Header / Greeting */
     .hero { display: grid; place-items: center; margin: 24px 0 10px; text-align: center; }
     .hello { font-size: 26px; font-weight: 800; letter-spacing: .2px; margin: 0 0 4px; }
     .subtle { opacity: .7; font-size: 13px; }
 
-    /* Balance card */
     .card { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; padding: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
     .balanceWrap { display: grid; place-items: center; margin: 10px 0 6px; }
     .balanceLabel { opacity: .7; font-size: 14px; margin-bottom: 6px; }
@@ -59,7 +57,6 @@
 </head>
 <body>
   <div class="wrap">
-    <!-- Top bar -->
     <div class="topbar">
       <div class="title">HomerBot</div>
       <div class="tabs">
@@ -68,7 +65,6 @@
       </div>
     </div>
 
-    <!-- Wallet page -->
     <div class="page active" id="pageWallet">
       <div class="hero">
         <div id="hello" class="hello">Добрый день</div>
@@ -95,7 +91,6 @@
       <div id="status" class="status">Инициализация…</div>
     </div>
 
-    <!-- How it works -->
     <div class="page" id="pageHow">
       <div class="back" onclick="openTab('wallet')">← Назад</div>
       <div class="card">
@@ -108,11 +103,10 @@
           <div class="chip" data-rate="17" onclick="pickRate(this)">17%</div>
           <div class="chip" data-rate="18" onclick="pickRate(this)">18%</div>
         </div>
-        <div class="p" style="opacity:.75">Смена ставки учитывается корректно: проценты за часть месяца до смены — по старой ставке, после — по новой.</div>
+        <div class="p" style="opacity:.75">Смена ставки учитывается корректно: проценты до смены — по старой ставке, после — по новой.</div>
       </div>
     </div>
 
-    <!-- Deposit page -->
     <div class="page" id="pageDeposit">
       <div class="back" onclick="openTab('wallet')">← К кошельку</div>
       <div class="card">
@@ -123,7 +117,6 @@
       </div>
     </div>
 
-    <!-- Withdraw page -->
     <div class="page" id="pageWithdraw">
       <div class="back" onclick="openTab('wallet')">← К кошельку</div>
       <div class="card">
@@ -142,12 +135,13 @@
     window.username = null;
     window.isInitialized = false;
     window.serverBalance = 0;   // C из таблицы — база
-    window.localBalance = 0;    // рисуем сюда «живой» баланс
+    window.localBalance = 0;    // «живой» баланс
     window.currentRate = 16;
     window.pendingRequest = false;
 
-    // Для локальной «анимации»
+    // Анимация процентов — состояние с непрерывностью
     let accrualTimer = null;
+    let anim = { active: false, perSec: 0, target: 0, lastTsSec: 0 };
     let preview = null; // { accruedSoFar, projectedFull, secondsRemain }
 
     // --- UI helpers ---
@@ -187,7 +181,7 @@
         else if (h >= 17) txt = 'Добрый вечер';
         document.getElementById('hello').textContent = `${txt}, ${user}`;
         document.getElementById('helloSub').textContent = 'МСК';
-      } catch { /* no-op */ }
+      } catch {}
     }
     function markRateChip(rate) {
       document.querySelectorAll('.chip').forEach(ch => {
@@ -215,34 +209,47 @@
       } catch { return 'marulin'; }
     }
 
-    // --- Accrual animation ---
-    function startAccrualAnimation() {
-      if (!preview) return;
-      if (accrualTimer) clearInterval(accrualTimer);
-
-      // serverBalance + accruedSoFar уже должно совпадать с серверной логикой на «сейчас»
-      const start = window.serverBalance + (preview.accruedSoFar || 0);
-      let target  = window.serverBalance + (preview.projectedFull || 0);
-      let remain  = Math.max(1, Number(preview.secondsRemain || 1)); // сек до конца месяца
-
-      // Защитно выставим локальный на текущий старт
-      window.localBalance = start;
-      updateDisplay();
-
-      accrualTimer = setInterval(() => {
-        if (remain <= 0) { clearInterval(accrualTimer); accrualTimer = null; window.localBalance = target; updateDisplay(); return; }
-        const step = (target - start) / Math.max(1, Number(preview.secondsRemain)); // равномерная «добавка в секунду»
-        window.localBalance += step;
-        remain -= 1;
+    // --- Accrual animation with continuity ---
+    function applyPreviewContinuously(newPreview) {
+      // 1) добиваем до «сейчас» прежнюю анимацию (чтобы не было скачка)
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (anim.active) {
+        const elapsed = Math.max(0, nowSec - anim.lastTsSec);
+        window.localBalance += anim.perSec * elapsed;
+        // ограничим по таргету
+        if (anim.perSec >= 0) { if (window.localBalance > anim.target) window.localBalance = anim.target; }
+        else { if (window.localBalance < anim.target) window.localBalance = anim.target; }
         updateDisplay();
+      }
+
+      // 2) задаём новый таргет и новый наклон «в секунду» — от текущего локального значения
+      const newTarget = window.serverBalance + (Number(newPreview.projectedFull) || 0);
+      let remain = Math.max(1, Number(newPreview.secondsRemain || 1));
+      const delta = newTarget - window.localBalance;
+      anim.perSec = delta / remain;
+      anim.target = newTarget;
+      anim.lastTsSec = nowSec;
+      anim.active = true;
+
+      // 3) перезапускаем таймер
+      if (accrualTimer) clearInterval(accrualTimer);
+      accrualTimer = setInterval(() => {
+        anim.lastTsSec += 1;
+        window.localBalance += anim.perSec;
+        let done = false;
+        if ((anim.perSec >= 0 && window.localBalance >= anim.target) ||
+            (anim.perSec <  0 && window.localBalance <= anim.target) ||
+            --remain <= 0) {
+          window.localBalance = anim.target;
+          done = true;
+        }
+        updateDisplay();
+        if (done) { clearInterval(accrualTimer); accrualTimer = null; anim.active = false; }
       }, 1000);
     }
 
-    // --- API calls ---
-    async function apiGet(path) {
-      const r = await fetch(`${SCRIPT_URL}${path}`);
-      return r.json();
-    }
+    // --- API ---
+    async function apiGet(path) { const r = await fetch(`${SCRIPT_URL}${path}`); return r.json(); }
 
     async function initializeUser() {
       try {
@@ -250,20 +257,17 @@
         setGreeting();
         window.isInitialized = true;
 
-        // начальная загрузка
         const data = await apiGet(`?action=getBalance&username=${window.username}&debug=1`);
         if (!data.success) throw new Error(data.error || 'getBalance failed');
         window.serverBalance = Number(data.balance) || 0;
         window.currentRate = Number(data.rate) || 16;
-        window.localBalance = window.serverBalance; // старт
+        window.localBalance = window.serverBalance;
         markRateChip(window.currentRate);
         updateDisplay();
         document.getElementById('status').textContent = 'Готово';
 
-        // запрос превью процентов на месяц
         await refreshPreview();
 
-        // периодический синк
         setInterval(syncBalance, 20000);
       } catch (e) {
         console.error('Initialization error:', e);
@@ -280,7 +284,7 @@
             projectedFull: Number(p.projectedFull || 0),
             secondsRemain: Number(p.secondsRemain || 0),
           };
-          startAccrualAnimation();
+          applyPreviewContinuously(preview);
         }
       } catch (e) {
         console.warn('previewAccrual error', e);
@@ -292,7 +296,6 @@
       try {
         const data = await apiGet(`?action=syncBalance&username=${window.username}&balance=${encodeURIComponent(window.serverBalance)}&rate=${encodeURIComponent(window.currentRate)}&timestamp=${Date.now()}&debug=1`);
         if (data.success) {
-          // пересинхронить базовый баланс и ставку
           if (typeof data.balance === 'number' && isFinite(data.balance)) {
             window.serverBalance = Number(data.balance);
           }
@@ -301,7 +304,6 @@
             markRateChip(window.currentRate);
           }
 
-          // доставить ответ админа
           if (data.adminResponse && window.pendingRequest) {
             const resp = String(data.adminResponse).trim().toLowerCase();
             const shortId = data.adminResponseShortId || (data.adminResponseId ? (String(data.adminResponseId).split('-')[1] || '') : '');
@@ -310,7 +312,6 @@
             window.pendingRequest = false; setButtonsWaiting(false);
           }
 
-          // обновить превью и анимацию
           await refreshPreview();
 
           document.getElementById('status').textContent = `Синхронизировано: ${new Date().toLocaleTimeString()}`;
@@ -366,7 +367,6 @@
         const data = await apiGet(`?action=applyMonthlyInterestNow&username=${window.username}&debug=1`);
         if (data.success && data.ok) {
           window.serverBalance = Number(data.newBalance) || window.serverBalance;
-          // После имитации — пересчитать превью и перезапустить анимацию
           await refreshPreview();
           showPopup(`Проценты начислены\nбаза = ${(data.baseUsed??0).toLocaleString('ru-RU', {maximumFractionDigits:2})}\n% = ${(data.interestAmount??0).toLocaleString('ru-RU', {maximumFractionDigits:2})}`);
         } else {
@@ -389,8 +389,7 @@
           window.currentRate = rate;
           markRateChip(rate);
           showPopup(`Ставка обновлена: ${rate}%`);
-          // важно: обновить превью, чтобы учесть смену ставки в текущем месяце
-          await refreshPreview();
+          await refreshPreview(); // перестраиваем анимацию без скачка
         } else {
           showPopup('Не удалось сменить ставку');
         }
@@ -400,7 +399,6 @@
       }
     }
 
-    // Init
     (function init() {
       const tg = window.Telegram?.WebApp;
       try { tg?.expand?.(); } catch {}
