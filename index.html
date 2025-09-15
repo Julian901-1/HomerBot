@@ -101,7 +101,7 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёк2</div>
+        <div class="wallet-title">Кошелёк5</div>
         <div class="balance" id="balance">0.0000</div>
         
         <div class="rate-selection">
@@ -239,8 +239,6 @@
                     }
                     
                     if (data.adminResponse) {
-                        console.log('Processing admin response:', data.adminResponse, 'Current pending:', window.pendingRequest);
-                        
                         if (data.adminResponse === 'approved') {
                             showPopup('Администратор одобрил добавление единицы');
                             window.localBalance++;
@@ -248,8 +246,6 @@
                         } else if (data.adminResponse === 'rejected') {
                             showPopup('Администратор НЕ одобрил добавление единицы');
                         }
-                        
-                        // Всегда сбрасываем состояние ожидания при получении ответа
                         window.pendingRequest = false;
                         document.getElementById('addButton').textContent = '+1';
                         document.getElementById('addButton').disabled = false;
