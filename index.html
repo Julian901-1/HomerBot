@@ -3,26 +3,55 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>HomerBot</title>
+  <title>HomerBot — Кошелёк</title>
   <style>
     :root { color-scheme: light dark; }
-    body { margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
-    .wrap { padding: 16px; max-width: 640px; margin: 0 auto; }
-    h1 { font-size: 20px; margin: 0 0 12px; }
-    .balance { display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
-    .balance .value { font-size: 32px; font-weight: 700; }
-    .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-    .btn { padding: 10px 16px; border: 0; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 16px; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif; background: var(--bg, #0b0c10); color: var(--fg, #e8eaed); }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 12px 16px 48px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0 10px; position: sticky; top: 0; background: inherit; z-index: 5; }
+    .tabs { display: flex; gap: 8px; }
+    .tab { padding: 8px 12px; border-radius: 10px; cursor: pointer; font-weight: 600; border: 1px solid rgba(255,255,255,.12); opacity: .8; }
+    .tab.active { background: rgba(255,255,255,.08); opacity: 1; }
+    .title { font-size: 16px; opacity: .8; }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* Header / Greeting */
+    .hero { display: grid; place-items: center; margin: 24px 0 10px; text-align: center; }
+    .hello { font-size: 26px; font-weight: 800; letter-spacing: .2px; margin: 0 0 4px; }
+    .subtle { opacity: .7; font-size: 13px; }
+
+    /* Balance card */
+    .card { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; padding: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .balanceWrap { display: grid; place-items: center; margin: 10px 0 6px; }
+    .balanceLabel { opacity: .7; font-size: 14px; margin-bottom: 6px; }
+    .balanceValue { font-variant-numeric: tabular-nums; font-size: 40px; font-weight: 800; letter-spacing: .3px; }
+    .rateRow { display: flex; justify-content: center; gap: 8px; margin-top: 8px; opacity: .9; font-weight: 600; }
+
+    .row { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+    .btn { padding: 14px 16px; border-radius: 12px; border: 0; cursor: pointer; font-weight: 700; font-size: 16px; }
     .btn-primary { background: #4c8bf5; color: #fff; }
-    .btn-secondary { background: #e0e0e0; color: #111; }
-    .btn-accent { background: #0ea5e9; color: #fff; }
+    .btn-secondary { background: #2d2f36; color: #fff; border: 1px solid rgba(255,255,255,.12); }
+    .btn-ghost { background: transparent; border: 1px dashed rgba(255,255,255,.25); color: #fff; }
     .btn:disabled { opacity: .6; cursor: default; }
-    .status { margin-top: 10px; opacity: .8; font-size: 13px; }
-    .rate { margin-top: 12px; display: flex; gap: 6px; align-items: center; }
+
+    .back { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 12px; font-weight: 600; opacity: .85; cursor: pointer; }
+    .h2 { font-size: 18px; font-weight: 800; margin: 6px 0 10px; }
+    .p { opacity: .85; line-height: 1.5; margin: 8px 0; }
+    .strong { font-weight: 800; }
+
+    .ratePicker { display: flex; gap: 8px; margin: 10px 0 6px; }
+    .chip { padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.15); cursor: pointer; font-weight: 700; opacity: .9; }
+    .chip.active { background: rgba(76,139,245,.2); border-color: #4c8bf5; }
+
+    .status { margin-top: 10px; opacity: .7; font-size: 13px; text-align: center; }
+
     .popup{
       position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-      background: rgba(20,20,20,.9); color: #fff; padding: 12px 16px; border-radius: 10px;
-      font-size: 14px; z-index: 9999; max-width: 90vw; text-align: center; box-shadow: 0 6px 20px rgba(0,0,0,.25);
+      background: rgba(20,20,20,.92); color: #fff; padding: 12px 14px; border-radius: 12px;
+      font-size: 14px; z-index: 9999; max-width: 92vw; text-align: center; box-shadow: 0 6px 26px rgba(0,0,0,.35);
       white-space: pre-line;
     }
   </style>
@@ -30,37 +59,102 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>HomerBot</h1>
-
-    <div class="balance">
-      <span>Баланс:</span>
-      <span id="balanceValue" class="value">—</span>
-      <span id="currency">ед.</span>
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="title">HomerBot</div>
+      <div class="tabs">
+        <div class="tab active" id="tabWallet" onclick="openTab('wallet')">Кошелёк</div>
+        <div class="tab" id="tabHow" onclick="openTab('how')">Как это работает</div>
+      </div>
     </div>
 
-    <div class="row">
-      <button id="addButton" class="btn btn-primary" onclick="sendDeposit(100000)">+100&nbsp;тыс.</button>
-      <button id="withdrawButton" class="btn btn-secondary" onclick="sendWithdraw(100000)">–100&nbsp;тыс.</button>
-      <button id="simulateButton" class="btn btn-accent" onclick="simulateMonthlyInterest()">Имитация месяца</button>
+    <!-- Wallet page -->
+    <div class="page active" id="pageWallet">
+      <div class="hero">
+        <div id="hello" class="hello">Добрый день</div>
+        <div class="subtle" id="helloSub">МСК</div>
+      </div>
+
+      <div class="card">
+        <div class="balanceWrap">
+          <div class="balanceLabel">Баланс</div>
+          <div class="balanceValue" id="balanceValue">—</div>
+          <div class="rateRow">
+            <div>Ставка:</div>
+            <div id="rateText">—%</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:16px">
+          <button class="btn btn-primary" onclick="openTab('deposit')">Депозит</button>
+          <button class="btn btn-secondary" onclick="openTab('withdraw')">Вывод</button>
+          <button class="btn btn-ghost" id="simulateButton" onclick="simulateMonthlyInterest()">Имитация месяца</button>
+        </div>
+      </div>
+
+      <div id="status" class="status">Инициализация…</div>
     </div>
 
-    <div class="rate">
-      <span>Ставка:</span>
-      <strong id="rateText">—%</strong>
+    <!-- How it works -->
+    <div class="page" id="pageHow">
+      <div class="back" onclick="openTab('wallet')">← Назад</div>
+      <div class="card">
+        <div class="h2"><span class="strong">Мы берём ответственность за ваши финансы.</span> Тут должен быть текст Тут должен быть текст. Тут должен быть текст Тут должен быть текст.</div>
+        <div class="p"><span class="strong">Вы сами выбираете.</span> Тут должен быть текст Тут должен быть текст. Тут должен быть текст Тут должен быть текст.</div>
+
+        <div class="h2" style="margin-top:14px">Выбор ставки</div>
+        <div class="ratePicker">
+          <div class="chip" data-rate="16" onclick="pickRate(this)">16%</div>
+          <div class="chip" data-rate="17" onclick="pickRate(this)">17%</div>
+          <div class="chip" data-rate="18" onclick="pickRate(this)">18%</div>
+        </div>
+        <div class="p" style="opacity:.75">Смена ставки учитывается корректно: проценты за часть месяца до смены — по старой ставке, после — по новой.</div>
+      </div>
     </div>
 
-    <div id="status" class="status">Инициализация…</div>
+    <!-- Deposit page -->
+    <div class="page" id="pageDeposit">
+      <div class="back" onclick="openTab('wallet')">← К кошельку</div>
+      <div class="card">
+        <div class="h2">Депозит</div>
+        <div class="row" style="margin-top:12px">
+          <button id="addButton" class="btn btn-primary" onclick="sendDeposit(100000)">+100 000</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Withdraw page -->
+    <div class="page" id="pageWithdraw">
+      <div class="back" onclick="openTab('wallet')">← К кошельку</div>
+      <div class="card">
+        <div class="h2">Вывод</div>
+        <div class="row" style="margin-top:12px">
+          <button id="withdrawButton" class="btn btn-secondary" onclick="sendWithdraw(100000)">–100 000</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
     const SCRIPT_URL = (window.scriptUrl || (window.SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec'));
 
+    // --- State ---
     window.username = null;
     window.isInitialized = false;
-    window.localBalance = 0;
+    window.serverBalance = 0;   // C из таблицы — база
+    window.localBalance = 0;    // рисуем сюда «живой» баланс
     window.currentRate = 16;
     window.pendingRequest = false;
 
+    // Для локальной «анимации»
+    let accrualTimer = null;
+    let preview = null; // { accruedSoFar, projectedFull, secondsRemain }
+
+    // --- UI helpers ---
+    function fmtMoney(x) {
+      const n = Number(x) || 0;
+      return n.toLocaleString('ru-RU', {minimumFractionDigits: 3, maximumFractionDigits: 3});
+    }
     function showPopup(text, timeout = 2500) {
       const el = document.createElement('div');
       el.className = 'popup';
@@ -68,30 +162,108 @@
       document.body.appendChild(el);
       setTimeout(() => { el.style.transition = 'opacity .25s ease'; el.style.opacity = '0'; setTimeout(() => el.remove(), 250); }, timeout);
     }
+    function openTab(id) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      if (id === 'wallet') {
+        document.getElementById('pageWallet').classList.add('active');
+        document.getElementById('tabWallet').classList.add('active');
+      } else if (id === 'how') {
+        document.getElementById('pageHow').classList.add('active');
+        document.getElementById('tabHow').classList.add('active');
+      } else if (id === 'deposit') {
+        document.getElementById('pageDeposit').classList.add('active');
+      } else if (id === 'withdraw') {
+        document.getElementById('pageWithdraw').classList.add('active');
+      }
+    }
+    function setGreeting() {
+      try {
+        const nowMsk = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
+        const h = nowMsk.getHours();
+        const user = window.username || 'пользователь';
+        let txt = 'Добрый день';
+        if (h >= 22 || h < 6) txt = 'Доброй ночи';
+        else if (h >= 17) txt = 'Добрый вечер';
+        document.getElementById('hello').textContent = `${txt}, ${user}`;
+        document.getElementById('helloSub').textContent = 'МСК';
+      } catch { /* no-op */ }
+    }
+    function markRateChip(rate) {
+      document.querySelectorAll('.chip').forEach(ch => {
+        ch.classList.toggle('active', String(ch.dataset.rate) === String(rate));
+      });
+    }
     function updateDisplay() {
-      document.getElementById('balanceValue').textContent = (Number(window.localBalance) || 0).toFixed(2);
+      document.getElementById('balanceValue').textContent = fmtMoney(window.localBalance);
       document.getElementById('rateText').textContent = `${window.currentRate}%`;
     }
-    function setButtonsWaiting(isWaiting, labelDeposit = null, labelWithdraw = null) {
-      const addBtn = document.getElementById('addButton');
-      const minusBtn = document.getElementById('withdrawButton');
-      if (addBtn) { addBtn.textContent = labelDeposit ?? (isWaiting ? 'Ожидание…' : '+100 тыс.'); addBtn.disabled = !!isWaiting; }
-      if (minusBtn){ minusBtn.textContent = labelWithdraw ?? (isWaiting ? 'Ожидание…' : '–100 тыс.'); minusBtn.disabled = !!isWaiting; }
+    function setButtonsWaiting(isWaiting) {
+      const add = document.getElementById('addButton');
+      const wd  = document.getElementById('withdrawButton');
+      if (add) { add.disabled = !!isWaiting; add.textContent = isWaiting ? 'Ожидание…' : '+100 000'; }
+      if (wd)  { wd.disabled  = !!isWaiting; wd.textContent  = isWaiting ? 'Ожидание…' : '–100 000'; }
     }
+
+    // --- TG user ---
     function getTelegramUser() {
       try {
         const tg = window.Telegram?.WebApp; tg?.expand?.();
         const initDataUnsafe = tg?.initDataUnsafe || {}; const user = initDataUnsafe.user || null;
         if (user && user.username) return user.username;
-        return 'marulin'; // fallback для тестов
+        return 'marulin'; // fallback
       } catch { return 'marulin'; }
+    }
+
+    // --- Accrual animation ---
+    function startAccrualAnimation() {
+      if (!preview) return;
+      if (accrualTimer) clearInterval(accrualTimer);
+
+      // serverBalance + accruedSoFar уже должно совпадать с серверной логикой на «сейчас»
+      const start = window.serverBalance + (preview.accruedSoFar || 0);
+      let target  = window.serverBalance + (preview.projectedFull || 0);
+      let remain  = Math.max(1, Number(preview.secondsRemain || 1)); // сек до конца месяца
+
+      // Защитно выставим локальный на текущий старт
+      window.localBalance = start;
+      updateDisplay();
+
+      accrualTimer = setInterval(() => {
+        if (remain <= 0) { clearInterval(accrualTimer); accrualTimer = null; window.localBalance = target; updateDisplay(); return; }
+        const step = (target - start) / Math.max(1, Number(preview.secondsRemain)); // равномерная «добавка в секунду»
+        window.localBalance += step;
+        remain -= 1;
+        updateDisplay();
+      }, 1000);
+    }
+
+    // --- API calls ---
+    async function apiGet(path) {
+      const r = await fetch(`${SCRIPT_URL}${path}`);
+      return r.json();
     }
 
     async function initializeUser() {
       try {
         window.username = getTelegramUser();
+        setGreeting();
         window.isInitialized = true;
-        await initialLoad();
+
+        // начальная загрузка
+        const data = await apiGet(`?action=getBalance&username=${window.username}&debug=1`);
+        if (!data.success) throw new Error(data.error || 'getBalance failed');
+        window.serverBalance = Number(data.balance) || 0;
+        window.currentRate = Number(data.rate) || 16;
+        window.localBalance = window.serverBalance; // старт
+        markRateChip(window.currentRate);
+        updateDisplay();
+        document.getElementById('status').textContent = 'Готово';
+
+        // запрос превью процентов на месяц
+        await refreshPreview();
+
+        // периодический синк
         setInterval(syncBalance, 20000);
       } catch (e) {
         console.error('Initialization error:', e);
@@ -99,106 +271,47 @@
       }
     }
 
-    async function initialLoad() {
-      const url = `${SCRIPT_URL}?action=getBalance&username=${window.username}&debug=1`;
-      const r = await fetch(url); const data = await r.json();
-      if (data.success) {
-        window.localBalance = Number(data.balance) || 0;
-        window.currentRate = Number(data.rate) || 16;
-        updateDisplay();
-        document.getElementById('status').textContent = 'Готово';
-      } else {
-        document.getElementById('status').textContent = `Ошибка загрузки: ${data.error || 'неизвестная ошибка'}`;
-      }
-    }
-
-    async function sendDeposit(amount) {
-      window.pendingRequest = true; setButtonsWaiting(true);
+    async function refreshPreview() {
       try {
-        const url = `${SCRIPT_URL}?action=requestDeposit&username=${window.username}&amount=${encodeURIComponent(amount)}`;
-        const response = await fetch(url); const data = await response.json();
-        if (data.success) {
-          const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
-          showPopup(shortId ? `Запрос на изменение баланса отправлен [#${shortId}]` : 'Запрос на изменение баланса отправлен');
-        } else {
-          showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
-          window.pendingRequest = false; setButtonsWaiting(false);
-        }
-      } catch (error) {
-        console.error('Deposit request error:', error);
-        showPopup('Ошибка отправки запроса'); window.pendingRequest = false; setButtonsWaiting(false);
-      }
-    }
-
-    async function sendWithdraw(amount) {
-      window.pendingRequest = true; setButtonsWaiting(true);
-      try {
-        const url = `${SCRIPT_URL}?action=requestWithdraw&username=${window.username}&amount=${encodeURIComponent(amount)}`;
-        const response = await fetch(url); const data = await response.json();
-        if (data.success) {
-          const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
-          showPopup(shortId ? `Запрос на изменение баланса отправлен [#${shortId}]` : 'Запрос на изменение баланса отправлен');
-        } else {
-          showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
-          window.pendingRequest = false; setButtonsWaiting(false);
-        }
-      } catch (error) {
-        console.error('Withdraw request error:', error);
-        showPopup('Ошибка отправки запроса'); window.pendingRequest = false; setButtonsWaiting(false);
-      }
-    }
-
-    async function simulateMonthlyInterest() {
-      try {
-        const btn = document.getElementById('simulateButton');
-        if (btn) { btn.disabled = true; btn.textContent = 'Начисление…'; }
-        const url = `${SCRIPT_URL}?action=applyMonthlyInterestNow&username=${window.username}&debug=1`;
-        const response = await fetch(url); const data = await response.json();
-
-        if (data.success && data.ok) {
-          if (typeof data.newBalance === 'number') { window.localBalance = Number(data.newBalance); updateDisplay(); }
-          const base = (typeof data.baseUsed === 'number') ? data.baseUsed.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) : '—';
-          const interest = (typeof data.interestAmount === 'number') ? data.interestAmount.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) : '0';
-          showPopup(`Проценты начислены\nбаза = ${base}\n% = ${interest}`);
-          document.getElementById('status').textContent = `Синхронизировано: ${new Date().toLocaleTimeString()} (имитация месяца)`;
-        } else {
-          showPopup('Не удалось применить проценты (см. консоль)');
+        const p = await apiGet(`?action=previewAccrual&username=${window.username}&debug=1`);
+        if (p.success) {
+          preview = {
+            accruedSoFar: Number(p.accruedToNow || 0),
+            projectedFull: Number(p.projectedFull || 0),
+            secondsRemain: Number(p.secondsRemain || 0),
+          };
+          startAccrualAnimation();
         }
       } catch (e) {
-        console.error('Simulate error:', e);
-        showPopup('Ошибка применения процентов');
-      } finally {
-        const btn = document.getElementById('simulateButton');
-        if (btn) { btn.disabled = false; btn.textContent = 'Имитация месяца'; }
+        console.warn('previewAccrual error', e);
       }
     }
 
     async function syncBalance() {
       if (!window.username || !window.isInitialized) return;
       try {
-        const url = `${SCRIPT_URL}?action=syncBalance&username=${window.username}`
-          + `&balance=${encodeURIComponent(window.localBalance)}`
-          + `&rate=${encodeURIComponent(window.currentRate)}`
-          + `&timestamp=${Date.now()}&debug=1`;
-
-        const response = await fetch(url);
-        const data = await response.json();
-
+        const data = await apiGet(`?action=syncBalance&username=${window.username}&balance=${encodeURIComponent(window.serverBalance)}&rate=${encodeURIComponent(window.currentRate)}&timestamp=${Date.now()}&debug=1`);
         if (data.success) {
-          if (typeof data.balance === 'number' && Number.isFinite(data.balance)) window.localBalance = Number(data.balance);
-          if (typeof data.rate === 'number' && Number.isFinite(data.rate)) window.currentRate = Number(data.rate);
-          updateDisplay();
+          // пересинхронить базовый баланс и ставку
+          if (typeof data.balance === 'number' && isFinite(data.balance)) {
+            window.serverBalance = Number(data.balance);
+          }
+          if (typeof data.rate === 'number' && isFinite(data.rate)) {
+            window.currentRate = Number(data.rate);
+            markRateChip(window.currentRate);
+          }
 
+          // доставить ответ админа
           if (data.adminResponse && window.pendingRequest) {
             const resp = String(data.adminResponse).trim().toLowerCase();
             const shortId = data.adminResponseShortId || (data.adminResponseId ? (String(data.adminResponseId).split('-')[1] || '') : '');
-            if (resp === 'approved') {
-              showPopup(shortId ? `[#${shortId}] Администратор одобрил операцию изменения баланса` : 'Администратор одобрил операцию изменения баланса');
-            } else if (resp === 'rejected') {
-              showPopup(shortId ? `[#${shortId}] Администратор НЕ одобрил операцию изменения баланса` : 'Администратор НЕ одобрил операцию изменения баланса');
-            }
+            if (resp === 'approved') showPopup(shortId ? `[#${shortId}] Операция одобрена` : 'Операция одобрена');
+            if (resp === 'rejected') showPopup(shortId ? `[#${shortId}] Операция отклонена` : 'Операция отклонена');
             window.pendingRequest = false; setButtonsWaiting(false);
           }
+
+          // обновить превью и анимацию
+          await refreshPreview();
 
           document.getElementById('status').textContent = `Синхронизировано: ${new Date().toLocaleTimeString()}`;
         } else {
@@ -210,7 +323,89 @@
       }
     }
 
-    initializeUser();
+    async function sendDeposit(amount) {
+      window.pendingRequest = true; setButtonsWaiting(true);
+      try {
+        const data = await apiGet(`?action=requestDeposit&username=${window.username}&amount=${encodeURIComponent(amount)}`);
+        if (data.success) {
+          const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
+          showPopup(shortId ? `Запрос отправлен [#${shortId}]` : 'Запрос отправлен');
+        } else {
+          showPopup('Ошибка: ' + (data.error || 'неизвестно'));
+          window.pendingRequest = false; setButtonsWaiting(false);
+        }
+      } catch (error) {
+        console.error('Deposit error:', error);
+        showPopup('Ошибка отправки запроса');
+        window.pendingRequest = false; setButtonsWaiting(false);
+      }
+    }
+
+    async function sendWithdraw(amount) {
+      window.pendingRequest = true; setButtonsWaiting(true);
+      try {
+        const data = await apiGet(`?action=requestWithdraw&username=${window.username}&amount=${encodeURIComponent(amount)}`);
+        if (data.success) {
+          const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
+          showPopup(shortId ? `Запрос отправлен [#${shortId}]` : 'Запрос отправлен');
+        } else {
+          showPopup('Ошибка: ' + (data.error || 'неизвестно'));
+          window.pendingRequest = false; setButtonsWaiting(false);
+        }
+      } catch (error) {
+        console.error('Withdraw error:', error);
+        showPopup('Ошибка отправки запроса');
+        window.pendingRequest = false; setButtonsWaiting(false);
+      }
+    }
+
+    async function simulateMonthlyInterest() {
+      try {
+        const btn = document.getElementById('simulateButton');
+        if (btn) { btn.disabled = true; btn.textContent = 'Начисление…'; }
+        const data = await apiGet(`?action=applyMonthlyInterestNow&username=${window.username}&debug=1`);
+        if (data.success && data.ok) {
+          window.serverBalance = Number(data.newBalance) || window.serverBalance;
+          // После имитации — пересчитать превью и перезапустить анимацию
+          await refreshPreview();
+          showPopup(`Проценты начислены\nбаза = ${(data.baseUsed??0).toLocaleString('ru-RU', {maximumFractionDigits:2})}\n% = ${(data.interestAmount??0).toLocaleString('ru-RU', {maximumFractionDigits:2})}`);
+        } else {
+          showPopup('Не удалось применить проценты');
+        }
+      } catch (e) {
+        console.error('Simulate error:', e);
+        showPopup('Ошибка применения процентов');
+      } finally {
+        const btn = document.getElementById('simulateButton');
+        if (btn) { btn.disabled = false; btn.textContent = 'Имитация месяца'; }
+      }
+    }
+
+    async function pickRate(el) {
+      const rate = Number(el?.dataset?.rate || 16);
+      try {
+        const data = await apiGet(`?action=setRate&username=${window.username}&rate=${rate}`);
+        if (data.success) {
+          window.currentRate = rate;
+          markRateChip(rate);
+          showPopup(`Ставка обновлена: ${rate}%`);
+          // важно: обновить превью, чтобы учесть смену ставки в текущем месяце
+          await refreshPreview();
+        } else {
+          showPopup('Не удалось сменить ставку');
+        }
+      } catch (e) {
+        console.error('setRate error', e);
+        showPopup('Ошибка смены ставки');
+      }
+    }
+
+    // Init
+    (function init() {
+      const tg = window.Telegram?.WebApp;
+      try { tg?.expand?.(); } catch {}
+      initializeUser();
+    })();
   </script>
 </body>
 </html>
