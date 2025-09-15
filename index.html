@@ -101,7 +101,7 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёк677</div>
+        <div class="wallet-title">Кошелёк777</div>
         <div class="balance" id="balance">0.0000</div>
         
         <div class="rate-selection">
@@ -351,42 +351,43 @@ if (data.adminResponse && window.pendingRequest) {
             sendAdminRequest();
         }
         
-        async function sendAdminRequest() {
-            window.pendingRequest = true;
-            document.getElementById('addButton').textContent = 'Ожидание...';
-            document.getElementById('addButton').disabled = true;
-            
-            try {
-                const url = `${SCRIPT_URL}?action=requestAddOne&username=${window.username}`;
-                console.log('Sending admin request URL:', url);
-                
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                console.log('Admin request response:', data);
-                
-                if (data.success) {
-                    sconst shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
-        if (shortId) {
-          showPopup(`Запрос отправлен администратору [#${shortId}]`);
-        } else {
-          showPopup('Запрос отправлен администратору');
-        }
+async function sendAdminRequest() {
+  window.pendingRequest = true;
+  const btn = document.getElementById('addButton'); // <-- добавили
+  btn.textContent = 'Ожидание...';
+  btn.disabled = true;
+
+  try {
+    const url = `${SCRIPT_URL}?action=requestAddOne&username=${window.username}`;
+    console.log('Sending admin request URL:', url);
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    console.log('Admin request response:', data);
+
+    if (data.success) {
+      const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
+      if (shortId) {
+        showPopup(`Запрос отправлен администратору [#${shortId}]`);
       } else {
-        showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
-        window.pendingRequest = false;
-        btn.textContent = '+1';
-        btn.disabled = false;
+        showPopup('Запрос отправлен администратору');
       }
-    } catch (error) {
-      console.error('Admin request error:', error);
-      showPopup('Ошибка отправки запроса');
+    } else {
+      showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
       window.pendingRequest = false;
       btn.textContent = '+1';
       btn.disabled = false;
     }
+  } catch (error) {
+    console.error('Admin request error:', error);
+    showPopup('Ошибка отправки запроса');
+    window.pendingRequest = false;
+    btn.textContent = '+1';
+    btn.disabled = false;
   }
-        
+}
+       
         function showPopup(message) {
             const popup = document.createElement('div');
             popup.style.cssText = `
