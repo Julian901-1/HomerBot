@@ -101,7 +101,7 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёк5</div>
+        <div class="wallet-title">Кошелёк67</div>
         <div class="balance" id="balance">0.0000</div>
         
         <div class="rate-selection">
@@ -238,12 +238,13 @@
                         updateDisplay();
                     }
                     
-                    if (data.adminResponse) {
-                        if (data.adminResponse === 'approved') {
+                if (data.adminResponse && window.pendingRequest) {
+                        const resp = String(data.adminResponse).trim().toLowerCase();
+                        if (resp === 'approved') {
                             showPopup('Администратор одобрил добавление единицы');
                             window.localBalance++;
                             updateDisplay();
-                        } else if (data.adminResponse === 'rejected') {
+                        } else if (resp === 'rejected') {
                             showPopup('Администратор НЕ одобрил добавление единицы');
                         }
                         window.pendingRequest = false;
