@@ -101,7 +101,7 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёк66</div>
+        <div class="wallet-title">Кошелёк666</div>
         <div class="balance" id="balance">0.0000</div>
         
         <div class="rate-selection">
@@ -185,7 +185,9 @@
             const now = Date.now();
             const timeElapsed = now - window.lastUpdateTime;
             
-            if (timeElapsed > 0 && window.localBalance > 0) {
+            if (!Number.isFinite(window.localBalance)) {
+                window.localBalance = 0; 
+            } if (timeElapsed > 0 && window.localBalance > 0) {
                 window.localBalance = calculateInterest(window.localBalance, window.currentRate, timeElapsed);
             }
             
@@ -435,9 +437,11 @@ if (data.adminResponse && window.pendingRequest) {
             };
         }
         
-        function updateDisplay() {
-            document.getElementById('balance').textContent = window.localBalance.toFixed(4);
-        }
+    function updateDisplay() {
+    const n = Number(window.localBalance);
+    const safe = Number.isFinite(n) ? n : 0;
+    document.getElementById('balance').textContent = safe.toFixed(4);
+}
         
         function updateRateButtons() {
             document.querySelectorAll('.rate-button').forEach(btn => {
