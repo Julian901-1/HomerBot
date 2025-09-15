@@ -221,7 +221,7 @@
             updateBalanceWithInterest();
             
             try {
-                const url = `${SCRIPT_URL}?action=syncBalance&username=${window.username}&balance=${window.localBalance}&rate=${window.currentRate}&timestamp=${Date.now()}`;
+                const url = `${SCRIPT_URL}?action=syncBalance&username=${window.username}&balance=${window.localBalance}&rate=${window.currentRate}&timestamp=${Date.now()}&debug=1`;
                 console.log('Sync URL:', url);
                 
                 const response = await fetch(url);
