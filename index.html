@@ -101,7 +101,7 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёк666</div>
+        <div class="wallet-title">Кошелёк676</div>
         <div class="balance" id="balance">0.0000</div>
         
         <div class="rate-selection">
@@ -232,6 +232,10 @@
                 
                 const data = await response.json();
                 console.log('Sync response:', data);
+                if (data.debug) {
+  console.debug('Sync debug:', data.debug);
+}
+
                 
                 if (data.success) {
 const hasAuthoritativeBalance =
