@@ -246,15 +246,14 @@ updateDisplay();
 if (data.adminResponse && window.pendingRequest) {
   const resp = String(data.adminResponse).trim().toLowerCase();
   const respId = String(data.adminResponseId || '');
-
   const lastId = localStorage.getItem('lastProcessedAdminId') || '';
+
   if (respId && respId === lastId) {
     // уже обрабатывали — игнор
   } else {
     if (resp === 'approved') {
       showPopup('Администратор одобрил добавление единицы');
-      window.localBalance++;
-      updateDisplay();
+      // Не увеличиваем локально: сервер уже увеличил C и вернёт forceBalance
     } else if (resp === 'rejected') {
       showPopup('Администратор НЕ одобрил добавление единицы');
     }
@@ -265,6 +264,7 @@ if (data.adminResponse && window.pendingRequest) {
   btn.textContent = '+1';
   btn.disabled = false;
 }
+
 
                     
                     if (data.rate && data.rate !== window.currentRate) {
