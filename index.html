@@ -101,7 +101,7 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёк</div>
+        <div class="wallet-title">Кошелёк6</div>
         <div class="balance" id="balance">0.0000</div>
         
         <div class="rate-selection">
@@ -118,14 +118,14 @@
     </div>
 
     <script>
-        // Глобальные переменные
-        var localBalance = 0;
-        var username = '';
-        var isInitialized = false;
-        var currentRate = 16;
-        var lastUpdateTime = Date.now();
-        var realTimeUpdateInterval = null;
-        var pendingRequest = false;
+        // Объявляем все переменные через window для глобального доступа
+        window.localBalance = 0;
+        window.username = '';
+        window.isInitialized = false;
+        window.currentRate = 16;
+        window.lastUpdateTime = Date.now();
+        window.realTimeUpdateInterval = null;
+        window.pendingRequest = false;
         
         // URL вашего Google Apps Script
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
@@ -133,27 +133,26 @@
         // Инициализация Telegram Web App
         window.Telegram.WebApp.ready();
         
-        // Для отладки - показываем информацию о пользователе
+        // Для отладки
         function debugInfo() {
             const user = window.Telegram.WebApp.initDataUnsafe?.user;
             console.log('Debug info:', {
                 user: user,
-                username: username,
-                isInitialized: isInitialized,
+                username: window.username,
+                isInitialized: window.isInitialized,
                 scriptUrl: SCRIPT_URL,
-                currentRate: currentRate,
-                localBalance: localBalance,
-                pendingRequest: pendingRequest
+                currentRate: window.currentRate,
+                localBalance: window.localBalance,
+                pendingRequest: window.pendingRequest
             });
         }
         
-        // Функция для получения данных пользователя с повторными попытками
         function initializeUser() {
             const user = window.Telegram.WebApp.initDataUnsafe?.user;
             if (user && user.username) {
-                username = user.username;
-                isInitialized = true;
-                console.log('User initialized:', username);
+                window.username = user.username;
+                window.isInitialized = true;
+                console.log('User initialized:', window.username);
                 debugInfo();
                 initialLoad();
                 return true;
@@ -161,63 +160,51 @@
             return false;
         }
         
-        // Пытаемся получить данные пользователя сразу
         if (!initializeUser()) {
-            // Если не получилось, ждем и пробуем еще раз через короткие интервалы
             let attempts = 0;
             const maxAttempts = 20;
             const initInterval = setInterval(() => {
                 attempts++;
                 if (initializeUser() || attempts >= maxAttempts) {
                     clearInterval(initInterval);
-                    if (!isInitialized) {
+                    if (!window.isInitialized) {
                         document.getElementById('status').textContent = 'Ошибка: не удалось получить имя пользователя';
                     }
                 }
             }, 100);
         }
         
-        // Расчет процентного начисления
         function calculateInterest(balance, rate, timeElapsedMs) {
-            // Годовая ставка переводится в секундную
             const annualRate = rate / 100;
             const secondlyRate = annualRate / (365 * 24 * 60 * 60);
             const timeElapsedSeconds = timeElapsedMs / 1000;
-            
-            // Сложные проценты: A = P * (1 + r)^t
             return balance * Math.pow(1 + secondlyRate, timeElapsedSeconds);
         }
         
-        // Обновление баланса с процентами в реальном времени
         function updateBalanceWithInterest() {
             const now = Date.now();
-            const timeElapsed = now - lastUpdateTime;
+            const timeElapsed = now - window.lastUpdateTime;
             
-            if (timeElapsed > 0 && localBalance > 0) {
-                localBalance = calculateInterest(localBalance, currentRate, timeElapsed);
+            if (timeElapsed > 0 && window.localBalance > 0) {
+                window.localBalance = calculateInterest(window.localBalance, window.currentRate, timeElapsed);
             }
             
-            lastUpdateTime = now;
+            window.lastUpdateTime = now;
             updateDisplay();
         }
         
-        // Запуск реального времени обновления
         function startRealTimeUpdate() {
-            if (realTimeUpdateInterval) {
-                clearInterval(realTimeUpdateInterval);
+            if (window.realTimeUpdateInterval) {
+                clearInterval(window.realTimeUpdateInterval);
             }
             
-            realTimeUpdateInterval = setInterval(updateBalanceWithInterest, 100);
+            window.realTimeUpdateInterval = setInterval(updateBalanceWithInterest, 100);
         }
         
-        // Установка процентной ставки
         function setRate(rate) {
-            // Обновляем баланс с текущей ставкой перед сменой
             updateBalanceWithInterest();
+            window.currentRate = rate;
             
-            currentRate = rate;
-            
-            // Обновляем активную кнопку
             document.querySelectorAll('.rate-button').forEach(btn => {
                 btn.classList.remove('active');
             });
@@ -227,13 +214,12 @@
         }
         
         async function syncBalance() {
-            if (!username || !isInitialized) return;
+            if (!window.username || !window.isInitialized) return;
             
-            // Обновляем баланс с процентами перед синхронизацией
             updateBalanceWithInterest();
             
             try {
-                const url = `${SCRIPT_URL}?action=syncBalance&username=${username}&balance=${localBalance}&rate=${currentRate}&timestamp=${Date.now()}`;
+                const url = `${SCRIPT_URL}?action=syncBalance&username=${window.username}&balance=${window.localBalance}&rate=${window.currentRate}&timestamp=${Date.now()}`;
                 console.log('Sync URL:', url);
                 
                 const response = await fetch(url);
@@ -246,30 +232,27 @@
                 console.log('Sync response:', data);
                 
                 if (data.success) {
-                    // Если в столбце E было значение, устанавливаем его как новый баланс
                     if (data.forceBalance !== null) {
-                        localBalance = data.forceBalance;
-                        lastUpdateTime = Date.now();
+                        window.localBalance = data.forceBalance;
+                        window.lastUpdateTime = Date.now();
                         updateDisplay();
                     }
                     
-                    // Проверяем ответы администратора
                     if (data.adminResponse) {
                         if (data.adminResponse === 'approved') {
                             showPopup('Администратор одобрил добавление единицы');
-                            localBalance++;
+                            window.localBalance++;
                             updateDisplay();
                         } else if (data.adminResponse === 'rejected') {
                             showPopup('Администратор НЕ одобрил добавление единицы');
                         }
-                        pendingRequest = false;
+                        window.pendingRequest = false;
                         document.getElementById('addButton').textContent = '+1';
                         document.getElementById('addButton').disabled = false;
                     }
                     
-                    // Проверяем, изменилась ли ставка
-                    if (data.rate && data.rate !== currentRate) {
-                        currentRate = data.rate;
+                    if (data.rate && data.rate !== window.currentRate) {
+                        window.currentRate = data.rate;
                         updateRateButtons();
                     }
                     
@@ -283,7 +266,6 @@
             }
         }
         
-        // Первоначальная загрузка баланса из таблицы
         async function initialLoad() {
             if (!window.username) return;
             
@@ -341,43 +323,53 @@
         }
         
         function addOne() {
-            console.log('addOne called, pendingRequest:', pendingRequest, 'isInitialized:', isInitialized);
+            console.log('addOne called, pendingRequest:', window.pendingRequest, 'isInitialized:', window.isInitialized, 'username:', window.username);
             
-            if (!isInitialized) {
+            if (!window.isInitialized) {
                 document.getElementById('status').textContent = 'Ожидание инициализации...';
                 return;
             }
             
-            if (pendingRequest) {
+            if (window.pendingRequest) {
                 showPopup('Ожидается подтверждение администратора');
                 return;
             }
             
-            // Отправляем запрос администратору
             sendAdminRequest();
         }
         
         async function sendAdminRequest() {
-            pendingRequest = true;
+            window.pendingRequest = true;
             document.getElementById('addButton').textContent = 'Ожидание...';
             document.getElementById('addButton').disabled = true;
             
             try {
-                const url = `${SCRIPT_URL}?action=requestAddOne&username=${username}`;
-                await fetch(url);
-                showPopup('Запрос отправлен администратору');
+                const url = `${SCRIPT_URL}?action=requestAddOne&username=${window.username}`;
+                console.log('Sending admin request URL:', url);
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                console.log('Admin request response:', data);
+                
+                if (data.success) {
+                    showPopup('Запрос отправлен администратору');
+                } else {
+                    showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
+                    window.pendingRequest = false;
+                    document.getElementById('addButton').textContent = '+1';
+                    document.getElementById('addButton').disabled = false;
+                }
             } catch (error) {
                 console.error('Admin request error:', error);
                 showPopup('Ошибка отправки запроса');
-                pendingRequest = false;
+                window.pendingRequest = false;
                 document.getElementById('addButton').textContent = '+1';
                 document.getElementById('addButton').disabled = false;
             }
         }
         
-        // Функция показа popup уведомлений
         function showPopup(message) {
-            // Создаем popup элемент
             const popup = document.createElement('div');
             popup.style.cssText = `
                 position: fixed;
@@ -398,7 +390,6 @@
             `;
             popup.textContent = message;
             
-            // Создаем затемняющий фон
             const overlay = document.createElement('div');
             overlay.style.cssText = `
                 position: fixed;
@@ -410,11 +401,9 @@
                 z-index: 999;
             `;
             
-            // Добавляем на страницу
             document.body.appendChild(overlay);
             document.body.appendChild(popup);
             
-            // Убираем через 3 секунды
             setTimeout(() => {
                 if (document.body.contains(popup)) {
                     document.body.removeChild(popup);
@@ -424,7 +413,6 @@
                 }
             }, 3000);
             
-            // Убираем при клике на overlay
             overlay.onclick = () => {
                 if (document.body.contains(popup)) {
                     document.body.removeChild(popup);
@@ -436,13 +424,13 @@
         }
         
         function updateDisplay() {
-            document.getElementById('balance').textContent = localBalance.toFixed(4);
+            document.getElementById('balance').textContent = window.localBalance.toFixed(4);
         }
         
         function updateRateButtons() {
             document.querySelectorAll('.rate-button').forEach(btn => {
                 btn.classList.remove('active');
-                if (btn.textContent === `${currentRate}%`) {
+                if (btn.textContent === `${window.currentRate}%`) {
                     btn.classList.add('active');
                 }
             });
