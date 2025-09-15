@@ -1,461 +1,303 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Кошелёк</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: var(--tg-theme-bg-color, #ffffff);
-            color: var(--tg-theme-text-color, #000000);
-            text-align: center;
-        }
-        
-        .wallet-container {
-            max-width: 300px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-        
-        .wallet-title {
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 20px;
-        }
-        
-        .balance {
-            font-size: 48px;
-            font-weight: bold;
-            margin: 30px 0;
-            color: var(--tg-theme-button-color, #0088cc);
-        }
-        
-        .add-button {
-            background-color: var(--tg-theme-button-color, #0088cc);
-            color: var(--tg-theme-button-text-color, #ffffff);
-            border: none;
-            border-radius: 8px;
-            padding: 12px 24px;
-            font-size: 18px;
-            cursor: pointer;
-            margin: 20px 0;
-        }
-        
-        .add-button:hover {
-            opacity: 0.8;
-        }
-        
-        .add-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .rate-selection {
-            margin: 20px 0;
-            text-align: center;
-        }
-        
-        .rate-title {
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        
-        .rate-buttons {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-        }
-        
-        .rate-button {
-            background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
-            color: var(--tg-theme-text-color, #000000);
-            border: 2px solid transparent;
-            border-radius: 8px;
-            padding: 8px 16px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .rate-button.active {
-            background-color: var(--tg-theme-button-color, #0088cc);
-            color: var(--tg-theme-button-text-color, #ffffff);
-            border-color: var(--tg-theme-button-color, #0088cc);
-        }
-        
-        .rate-button:hover {
-            opacity: 0.8;
-        }
-        
-        .status {
-            font-size: 12px;
-            color: var(--tg-theme-hint-color, #999999);
-            margin-top: 20px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover"
+  />
+  <title>HomerBot</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .wrap { padding: 16px; max-width: 640px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    .balance {
+      display: flex; align-items: baseline; gap: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+    .balance .value { font-size: 32px; font-weight: 700; }
+    .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .btn {
+      padding: 10px 16px; border: 0; border-radius: 10px; cursor: pointer;
+      font-weight: 600; font-size: 16px;
+    }
+    .btn-primary { background: #4c8bf5; color: #fff; }
+    .btn-secondary { background: #e0e0e0; color: #111; }
+    .btn:disabled { opacity: 0.6; cursor: default; }
+    .status { margin-top: 10px; opacity: 0.8; font-size: 13px; }
+    .rate { margin-top: 12px; display: flex; gap: 6px; align-items: center; }
+    .popup {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      background: rgba(20,20,20,.9); color: #fff; padding: 12px 16px; border-radius: 10px;
+      font-size: 14px; z-index: 9999; max-width: 90vw; text-align: center;
+      box-shadow: 0 6px 20px rgba(0,0,0,.25);
+    }
+  </style>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-    <div class="wallet-container">
-        <div class="wallet-title">Кошелёк777</div>
-        <div class="balance" id="balance">0.0000</div>
-        
-        <div class="rate-selection">
-            <div class="rate-title">Процентная ставка</div>
-            <div class="rate-buttons">
-                <button class="rate-button active" onclick="setRate(16)">16%</button>
-                <button class="rate-button" onclick="setRate(17)">17%</button>
-                <button class="rate-button" onclick="setRate(18)">18%</button>
-            </div>
-        </div>
-        
-        <button class="add-button" id="addButton" onclick="addOne()">+1</button>
-        <div class="status" id="status">Загрузка...</div>
+  <div class="wrap">
+    <h1>HomerBot</h1>
+
+    <div class="balance">
+      <span>Баланс:</span>
+      <span id="balanceValue" class="value">—</span>
+      <span id="currency">ед.</span>
     </div>
 
-    <script>
-        // Объявляем все переменные через window для глобального доступа
-        window.localBalance = 0;
-        window.username = '';
-        window.isInitialized = false;
-        window.currentRate = 16;
-        window.lastUpdateTime = Date.now();
-        window.realTimeUpdateInterval = null;
-        window.pendingRequest = false;
-        
-        // URL вашего Google Apps Script
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
-        
-        // Инициализация Telegram Web App
-        window.Telegram.WebApp.ready();
-        
-        // Для отладки
-        function debugInfo() {
-            const user = window.Telegram.WebApp.initDataUnsafe?.user;
-            console.log('Debug info:', {
-                user: user,
-                username: window.username,
-                isInitialized: window.isInitialized,
-                scriptUrl: SCRIPT_URL,
-                currentRate: window.currentRate,
-                localBalance: window.localBalance,
-                pendingRequest: window.pendingRequest
-            });
-        }
-        
-        function initializeUser() {
-            const user = window.Telegram.WebApp.initDataUnsafe?.user;
-            if (user && user.username) {
-                window.username = user.username;
-                window.isInitialized = true;
-                console.log('User initialized:', window.username);
-                debugInfo();
-                initialLoad();
-                return true;
-            }
-            return false;
-        }
-        
-        if (!initializeUser()) {
-            let attempts = 0;
-            const maxAttempts = 20;
-            const initInterval = setInterval(() => {
-                attempts++;
-                if (initializeUser() || attempts >= maxAttempts) {
-                    clearInterval(initInterval);
-                    if (!window.isInitialized) {
-                        document.getElementById('status').textContent = 'Ошибка: не удалось получить имя пользователя';
-                    }
-                }
-            }, 100);
-        }
-        
-        function calculateInterest(balance, rate, timeElapsedMs) {
-            const annualRate = rate / 100;
-            const secondlyRate = annualRate / (365 * 24 * 60 * 60);
-            const timeElapsedSeconds = timeElapsedMs / 1000;
-            return balance * Math.pow(1 + secondlyRate, timeElapsedSeconds);
-        }
-        
-        function updateBalanceWithInterest() {
-            const now = Date.now();
-            const timeElapsed = now - window.lastUpdateTime;
-            
-            if (!Number.isFinite(window.localBalance)) {
-                window.localBalance = 0; 
-            } if (timeElapsed > 0 && window.localBalance > 0) {
-                window.localBalance = calculateInterest(window.localBalance, window.currentRate, timeElapsed);
-            }
-            
-            window.lastUpdateTime = now;
-            updateDisplay();
-        }
-        
-        function startRealTimeUpdate() {
-            if (window.realTimeUpdateInterval) {
-                clearInterval(window.realTimeUpdateInterval);
-            }
-            
-            window.realTimeUpdateInterval = setInterval(updateBalanceWithInterest, 100);
-        }
-        
-        function setRate(rate) {
-            updateBalanceWithInterest();
-            window.currentRate = rate;
-            
-            document.querySelectorAll('.rate-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            event.target.classList.add('active');
-            
-            console.log('Rate changed to:', rate);
-        }
-        
-        async function syncBalance() {
-            if (!window.username || !window.isInitialized) return;
-            
-            updateBalanceWithInterest();
-            
-            try {
-                const url = `${SCRIPT_URL}?action=syncBalance&username=${window.username}&balance=${window.localBalance}&rate=${window.currentRate}&timestamp=${Date.now()}&debug=1`;
-                console.log('Sync URL:', url);
-                
-                const response = await fetch(url);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const data = await response.json();
-                console.log('Sync response:', data);
-                if (data.debug) {
-  console.debug('Sync debug:', data.debug);
-}
+    <div class="row">
+      <button id="addButton" class="btn btn-primary" onclick="sendAdminRequest()">+1</button>
+      <button id="withdrawButton" class="btn btn-secondary" onclick="sendWithdrawRequest()">–1</button>
+    </div>
 
-                
-                if (data.success) {
-const hasAuthoritativeBalance =
-typeof data.forceBalance === 'number' && Number.isFinite(data.forceBalance);
-if (hasAuthoritativeBalance) {
-window.localBalance = data.forceBalance;
-window.lastUpdateTime = Date.now();
-updateDisplay();
-}
-                    
-if (data.adminResponse && window.pendingRequest) {
-          const resp = String(data.adminResponse).trim().toLowerCase();
-          const shortId = data.adminResponseShortId || (data.adminResponseId ? (String(data.adminResponseId).split('-')[1] || '') : '');
+    <div class="rate">
+      <span>Ставка:</span>
+      <strong id="rateText">—%</strong>
+    </div>
 
-          if (resp === 'approved') {
-            showPopup(shortId ? `[#${shortId}] Администратор одобрил добавление единицы`
-                              : 'Администратор одобрил добавление единицы');
-          } else if (resp === 'rejected') {
-            showPopup(shortId ? `[#${shortId}] Администратор НЕ одобрил добавление единицы`
-                              : 'Администратор НЕ одобрил добавление единицы');
+    <div id="status" class="status">Инициализация…</div>
+  </div>
+
+  <script>
+    // === Конфиг ===
+    const SCRIPT_URL = (window.scriptUrl
+      || (window.SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec'));
+
+    // === Глобальные переменные состояния ===
+    window.username = null;
+    window.isInitialized = false;
+
+    // Баланс на клиенте — теперь это просто "зеркало" сервера
+    window.localBalance = 0;
+    window.currentRate = 16;
+
+    // Флажок ожидания решения админа
+    window.pendingRequest = false;
+
+    // === Утилиты ===
+    function showPopup(text, timeout = 2500) {
+      const el = document.createElement('div');
+      el.className = 'popup';
+      el.textContent = text;
+      document.body.appendChild(el);
+      setTimeout(() => {
+        el.style.transition = 'opacity .25s ease';
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 250);
+      }, timeout);
+    }
+
+    function updateDisplay() {
+      document.getElementById('balanceValue').textContent = (Number(window.localBalance) || 0).toFixed(2);
+      document.getElementById('rateText').textContent = `${window.currentRate}%`;
+    }
+
+    function getTelegramUser() {
+      try {
+        const tg = window.Telegram?.WebApp;
+        tg?.expand?.();
+        const initDataUnsafe = tg?.initDataUnsafe || {};
+        const user = initDataUnsafe.user || null;
+        if (user && user.username) return user.username;
+        // fallback (если тестируем в браузере)
+        return 'marulin';
+      } catch (e) {
+        console.warn('Telegram user resolve error:', e);
+        return 'marulin';
+      }
+    }
+
+    // === Инициализация ===
+    async function initializeUser() {
+      try {
+        window.username = getTelegramUser();
+        window.isInitialized = true;
+
+        console.log('User initialized:', window.username);
+
+        // начальная загрузка с сервера
+        await initialLoad();
+
+        // периодическая синхронизация
+        setInterval(syncBalance, 20000);
+      } catch (e) {
+        console.error('Initialization error:', e);
+        document.getElementById('status').textContent = 'Ошибка инициализации';
+      }
+    }
+
+    // Первичная загрузка
+    async function initialLoad() {
+      const url = `${SCRIPT_URL}?action=getBalance&username=${window.username}&debug=1`;
+      console.log('Load URL:', url);
+
+      const r = await fetch(url);
+      const data = await r.json();
+
+      console.log('Load response:', data);
+      if (data.debug) console.debug('Load debug:', data.debug);
+
+      if (data.success) {
+        window.localBalance = Number(data.balance) || 0;
+        window.currentRate = Number(data.rate) || 16;
+        updateDisplay();
+        document.getElementById('status').textContent = 'Готово';
+      } else {
+        document.getElementById('status').textContent =
+          `Ошибка загрузки: ${data.error || 'неизвестная ошибка'}`;
+      }
+    }
+
+    // === Запросы администратору ===
+
+    // +1 (депозит)
+    async function sendAdminRequest() {
+      window.pendingRequest = true;
+
+      const btn = document.getElementById('addButton');
+      btn.textContent = 'Ожидание...';
+      btn.disabled = true;
+
+      try {
+        const url = `${SCRIPT_URL}?action=requestAddOne&username=${window.username}`;
+        console.log('Sending admin request URL:', url);
+
+        const response = await fetch(url);
+        const data = await response.json();
+        console.log('Admin request response:', data);
+
+        if (data.success) {
+          const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
+          if (shortId) {
+            showPopup(`Запрос на изменение баланса отправлен [#${shortId}]`);
+          } else {
+            showPopup('Запрос на изменение баланса отправлен');
           }
-
+        } else {
+          showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
           window.pendingRequest = false;
-          const btn = document.getElementById('addButton');
           btn.textContent = '+1';
           btn.disabled = false;
         }
-
-        if (data.rate && data.rate !== window.currentRate) {
-          window.currentRate = data.rate;
-          updateRateButtons();
-        }
-
-        document.getElementById('status').textContent = `Синхронизировано: ${new Date().toLocaleTimeString()}`;
-      } else {
-        document.getElementById('status').textContent = `Ошибка синхронизации: ${data.error || 'неизвестная ошибка'}`;
+      } catch (error) {
+        console.error('Admin request error:', error);
+        showPopup('Ошибка отправки запроса');
+        window.pendingRequest = false;
+        btn.textContent = '+1';
+        btn.disabled = false;
       }
-    } catch (error) {
-      console.error('Sync error:', error);
-      document.getElementById('status').textContent = `Ошибка подключения: ${error.message}`;
     }
-  }
-        
-        async function initialLoad() {
-            if (!window.username) return;
-            
-            try {
-                const url = `${SCRIPT_URL}?action=getBalance&username=${window.username}`;
-                console.log('Load URL:', url);
-                
-                const response = await fetch(url);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const data = await response.json();
-                console.log('Load response:', data);
-                
-                if (data.success) {
-                    if (data.lastUpdate && data.balance > 0) {
-                        const lastUpdateTimestamp = new Date(data.lastUpdate).getTime();
-                        const timeElapsed = Date.now() - lastUpdateTimestamp;
-                        const rate = data.rate || 16;
-                        
-                        const oldBalance = data.balance;
-                        window.localBalance = calculateInterest(data.balance, rate, timeElapsed);
-                        window.currentRate = rate;
-                        
-                        const addedAmount = window.localBalance - oldBalance;
-                        if (addedAmount > 0.0001) {
-                            showPopup(`Добавлено с последнего захода в приложение: ${addedAmount.toFixed(4)}`);
-                        }
-                        
-                        console.log('Calculated balance with interest:', window.localBalance, 'from', data.balance, 'added:', addedAmount);
-                    } else {
-                        window.localBalance = data.balance || 0;
-                        window.currentRate = data.rate || 16;
-                    }
-                    
-                    window.lastUpdateTime = Date.now();
-                    updateDisplay();
-                    updateRateButtons();
-                    
-                    startRealTimeUpdate();
-                    
-                    document.getElementById('status').textContent = `Загружено: ${new Date().toLocaleTimeString()}`;
-                    
-                    setInterval(syncBalance, 20000);
-                } else {
-                    document.getElementById('status').textContent = `Ошибка загрузки: ${data.error || 'неизвестная ошибка'}`;
-                }
-            } catch (error) {
-                console.error('Load error:', error);
-                document.getElementById('status').textContent = `Ошибка подключения при загрузке: ${error.message}`;
-                setInterval(syncBalance, 20000);
-            }
+
+    // –1 (вывод)
+    async function sendWithdrawRequest() {
+      window.pendingRequest = true;
+
+      const btnMinus = document.getElementById('withdrawButton');
+      btnMinus.textContent = 'Ожидание...';
+      btnMinus.disabled = true;
+
+      try {
+        const url = `${SCRIPT_URL}?action=requestWithdrawOne&username=${window.username}`;
+        console.log('Sending withdraw request URL:', url);
+
+        const response = await fetch(url);
+        const data = await response.json();
+        console.log('Withdraw request response:', data);
+
+        if (data.success) {
+          const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
+          if (shortId) {
+            showPopup(`Запрос на изменение баланса отправлен [#${shortId}]`);
+          } else {
+            showPopup('Запрос на изменение баланса отправлен');
+          }
+        } else {
+          showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
+          window.pendingRequest = false;
+          btnMinus.textContent = '–1';
+          btnMinus.disabled = false;
         }
-        
-        function addOne() {
-            console.log('addOne called, pendingRequest:', window.pendingRequest, 'isInitialized:', window.isInitialized, 'username:', window.username);
-            
-            if (!window.isInitialized) {
-                document.getElementById('status').textContent = 'Ожидание инициализации...';
-                return;
-            }
-            
-            if (window.pendingRequest) {
-                showPopup('Ожидается подтверждение администратора');
-                return;
-            }
-            
-            sendAdminRequest();
-        }
-        
-async function sendAdminRequest() {
-  window.pendingRequest = true;
-  const btn = document.getElementById('addButton'); // <-- добавили
-  btn.textContent = 'Ожидание...';
-  btn.disabled = true;
-
-  try {
-    const url = `${SCRIPT_URL}?action=requestAddOne&username=${window.username}`;
-    console.log('Sending admin request URL:', url);
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    console.log('Admin request response:', data);
-
-    if (data.success) {
-      const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
-      if (shortId) {
-        showPopup(`Запрос отправлен администратору [#${shortId}]`);
-      } else {
-        showPopup('Запрос отправлен администратору');
+      } catch (error) {
+        console.error('Withdraw request error:', error);
+        showPopup('Ошибка отправки запроса');
+        window.pendingRequest = false;
+        btnMinus.textContent = '–1';
+        btnMinus.disabled = false;
       }
-    } else {
-      showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
-      window.pendingRequest = false;
-      btn.textContent = '+1';
-      btn.disabled = false;
     }
-  } catch (error) {
-    console.error('Admin request error:', error);
-    showPopup('Ошибка отправки запроса');
-    window.pendingRequest = false;
-    btn.textContent = '+1';
-    btn.disabled = false;
-  }
-}
-       
-        function showPopup(message) {
-            const popup = document.createElement('div');
-            popup.style.cssText = `
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background-color: var(--tg-theme-bg-color, #ffffff);
-                color: var(--tg-theme-text-color, #000000);
-                border: 2px solid var(--tg-theme-button-color, #0088cc);
-                border-radius: 12px;
-                padding: 20px;
-                max-width: 280px;
-                text-align: center;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-                z-index: 1000;
-                font-size: 16px;
-                line-height: 1.4;
-            `;
-            popup.textContent = message;
-            
-            const overlay = document.createElement('div');
-            overlay.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: rgba(0,0,0,0.5);
-                z-index: 999;
-            `;
-            
-            document.body.appendChild(overlay);
-            document.body.appendChild(popup);
-            
-            setTimeout(() => {
-                if (document.body.contains(popup)) {
-                    document.body.removeChild(popup);
-                }
-                if (document.body.contains(overlay)) {
-                    document.body.removeChild(overlay);
-                }
-            }, 3000);
-            
-            overlay.onclick = () => {
-                if (document.body.contains(popup)) {
-                    document.body.removeChild(popup);
-                }
-                if (document.body.contains(overlay)) {
-                    document.body.removeChild(overlay);
-                }
-            };
+
+    // === Периодическая синхронизация (без клиентских процентов!) ===
+    async function syncBalance() {
+      if (!window.username || !window.isInitialized) return;
+
+      try {
+        // Баланс на клиенте больше не «растёт» сам; мы шлём текущее зеркальное значение
+        const url = `${SCRIPT_URL}?action=syncBalance&username=${window.username}`
+          + `&balance=${encodeURIComponent(window.localBalance)}`
+          + `&rate=${encodeURIComponent(window.currentRate)}`
+          + `&timestamp=${Date.now()}`
+          + `&debug=1`;
+
+        console.log('Sync URL:', url);
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+        const data = await response.json();
+        console.log('Sync response:', data);
+        if (data.debug) console.debug('Sync debug:', data.debug);
+
+        if (data.success) {
+          // Сервер — источник истины
+          if (typeof data.balance === 'number' && Number.isFinite(data.balance)) {
+            window.localBalance = Number(data.balance);
+          }
+          if (typeof data.rate === 'number' && Number.isFinite(data.rate)) {
+            window.currentRate = Number(data.rate);
+          }
+          updateDisplay();
+
+          // Одноразовый ответ админа (с коротким ID)
+          if (data.adminResponse && window.pendingRequest) {
+            const resp = String(data.adminResponse).trim().toLowerCase();
+            const shortId = data.adminResponseShortId
+              || (data.adminResponseId ? (String(data.adminResponseId).split('-')[1] || '') : '');
+
+            if (resp === 'approved') {
+              showPopup(shortId
+                ? `[#${shortId}] Администратор одобрил операцию изменения баланса`
+                : 'Администратор одобрил операцию изменения баланса');
+            } else if (resp === 'rejected') {
+              showPopup(shortId
+                ? `[#${shortId}] Администратор НЕ одобрил операцию изменения баланса`
+                : 'Администратор НЕ одобрил операцию изменения баланса');
+            }
+
+            // Сбрасываем ожидание и ОТЖИМАЕМ обе кнопки
+            window.pendingRequest = false;
+
+            const addBtn = document.getElementById('addButton');
+            if (addBtn) { addBtn.textContent = '+1'; addBtn.disabled = false; }
+
+            const minusBtn = document.getElementById('withdrawButton');
+            if (minusBtn) { minusBtn.textContent = '–1'; minusBtn.disabled = false; }
+          }
+
+          document.getElementById('status').textContent =
+            `Синхронизировано: ${new Date().toLocaleTimeString()}`;
+        } else {
+          document.getElementById('status').textContent =
+            `Ошибка синхронизации: ${data.error || 'неизвестная ошибка'}`;
         }
-        
-    function updateDisplay() {
-    const n = Number(window.localBalance);
-    const safe = Number.isFinite(n) ? n : 0;
-    document.getElementById('balance').textContent = safe.toFixed(4);
-}
-        
-        function updateRateButtons() {
-            document.querySelectorAll('.rate-button').forEach(btn => {
-                btn.classList.remove('active');
-                if (btn.textContent === `${window.currentRate}%`) {
-                    btn.classList.add('active');
-                }
-            });
-        }
-    </script>
+      } catch (error) {
+        console.error('Sync error:', error);
+        document.getElementById('status').textContent = `Ошибка подключения: ${error.message}`;
+      }
+    }
+
+    // === Старт ===
+    initializeUser();
+  </script>
 </body>
 </html>
