@@ -9,29 +9,23 @@
   <title>HomerBot</title>
   <style>
     :root { color-scheme: light dark; }
-    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    body { margin: 0; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
     .wrap { padding: 16px; max-width: 640px; margin: 0 auto; }
     h1 { font-size: 20px; margin: 0 0 12px; }
-    .balance {
-      display: flex; align-items: baseline; gap: 8px;
-      font-variant-numeric: tabular-nums;
-    }
+    .balance { display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
     .balance .value { font-size: 32px; font-weight: 700; }
     .row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-    .btn {
-      padding: 10px 16px; border: 0; border-radius: 10px; cursor: pointer;
-      font-weight: 600; font-size: 16px;
-    }
+    .btn { padding: 10px 16px; border: 0; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 16px; }
     .btn-primary { background: #4c8bf5; color: #fff; }
     .btn-secondary { background: #e0e0e0; color: #111; }
-    .btn:disabled { opacity: 0.6; cursor: default; }
-    .status { margin-top: 10px; opacity: 0.8; font-size: 13px; }
+    .btn-accent { background: #0ea5e9; color: #fff; }
+    .btn:disabled { opacity: .6; cursor: default; }
+    .status { margin-top: 10px; opacity: .8; font-size: 13px; }
     .rate { margin-top: 12px; display: flex; gap: 6px; align-items: center; }
-    .popup {
+    .popup{
       position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
       background: rgba(20,20,20,.9); color: #fff; padding: 12px 16px; border-radius: 10px;
-      font-size: 14px; z-index: 9999; max-width: 90vw; text-align: center;
-      box-shadow: 0 6px 20px rgba(0,0,0,.25);
+      font-size: 14px; z-index: 9999; max-width: 90vw; text-align: center; box-shadow: 0 6px 20px rgba(0,0,0,.25);
     }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -47,8 +41,9 @@
     </div>
 
     <div class="row">
-      <button id="addButton" class="btn btn-primary" onclick="sendAdminRequest()">+1</button>
-      <button id="withdrawButton" class="btn btn-secondary" onclick="sendWithdrawRequest()">–1</button>
+      <button id="addButton" class="btn btn-primary" onclick="sendDeposit(100000)">+100&nbsp;тыс.</button>
+      <button id="withdrawButton" class="btn btn-secondary" onclick="sendWithdraw(100000)">–100&nbsp;тыс.</button>
+      <button id="simulateButton" class="btn btn-accent" onclick="simulateMonthlyInterest()">Имитация месяца</button>
     </div>
 
     <div class="rate">
@@ -64,15 +59,15 @@
     const SCRIPT_URL = (window.scriptUrl
       || (window.SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec'));
 
-    // === Глобальные переменные состояния ===
+    // === Глобальное состояние ===
     window.username = null;
     window.isInitialized = false;
 
-    // Баланс на клиенте — теперь это просто "зеркало" сервера
+    // Баланс на клиенте — зеркало сервера
     window.localBalance = 0;
     window.currentRate = 16;
 
-    // Флажок ожидания решения админа
+    // Флаг: есть ожидающая заявка (депозит/вывод)
     window.pendingRequest = false;
 
     // === Утилиты ===
@@ -93,6 +88,19 @@
       document.getElementById('rateText').textContent = `${window.currentRate}%`;
     }
 
+    function setButtonsWaiting(isWaiting, labelDeposit = null, labelWithdraw = null) {
+      const addBtn = document.getElementById('addButton');
+      const minusBtn = document.getElementById('withdrawButton');
+      if (addBtn) {
+        addBtn.textContent = labelDeposit ?? (isWaiting ? 'Ожидание…' : '+100 тыс.');
+        addBtn.disabled = !!isWaiting;
+      }
+      if (minusBtn) {
+        minusBtn.textContent = labelWithdraw ?? (isWaiting ? 'Ожидание…' : '–100 тыс.');
+        minusBtn.disabled = !!isWaiting;
+      }
+    }
+
     function getTelegramUser() {
       try {
         const tg = window.Telegram?.WebApp;
@@ -100,8 +108,7 @@
         const initDataUnsafe = tg?.initDataUnsafe || {};
         const user = initDataUnsafe.user || null;
         if (user && user.username) return user.username;
-        // fallback (если тестируем в браузере)
-        return 'marulin';
+        return 'marulin'; // fallback для тестов
       } catch (e) {
         console.warn('Telegram user resolve error:', e);
         return 'marulin';
@@ -115,11 +122,7 @@
         window.isInitialized = true;
 
         console.log('User initialized:', window.username);
-
-        // начальная загрузка с сервера
         await initialLoad();
-
-        // периодическая синхронизация
         setInterval(syncBalance, 20000);
       } catch (e) {
         console.error('Initialization error:', e);
@@ -127,7 +130,6 @@
       }
     }
 
-    // Первичная загрузка
     async function initialLoad() {
       const url = `${SCRIPT_URL}?action=getBalance&username=${window.username}&debug=1`;
       console.log('Load URL:', url);
@@ -149,23 +151,18 @@
       }
     }
 
-    // === Запросы администратору ===
-
-    // +1 (депозит)
-    async function sendAdminRequest() {
+    // === Заявки администратору ===
+    async function sendDeposit(amount) {
       window.pendingRequest = true;
-
-      const btn = document.getElementById('addButton');
-      btn.textContent = 'Ожидание...';
-      btn.disabled = true;
+      setButtonsWaiting(true);
 
       try {
-        const url = `${SCRIPT_URL}?action=requestAddOne&username=${window.username}`;
-        console.log('Sending admin request URL:', url);
+        const url = `${SCRIPT_URL}?action=requestDeposit&username=${window.username}&amount=${encodeURIComponent(amount)}`;
+        console.log('Sending deposit request URL:', url);
 
         const response = await fetch(url);
         const data = await response.json();
-        console.log('Admin request response:', data);
+        console.log('Deposit request response:', data);
 
         if (data.success) {
           const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
@@ -177,28 +174,22 @@
         } else {
           showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
           window.pendingRequest = false;
-          btn.textContent = '+1';
-          btn.disabled = false;
+          setButtonsWaiting(false);
         }
       } catch (error) {
-        console.error('Admin request error:', error);
+        console.error('Deposit request error:', error);
         showPopup('Ошибка отправки запроса');
         window.pendingRequest = false;
-        btn.textContent = '+1';
-        btn.disabled = false;
+        setButtonsWaiting(false);
       }
     }
 
-    // –1 (вывод)
-    async function sendWithdrawRequest() {
+    async function sendWithdraw(amount) {
       window.pendingRequest = true;
-
-      const btnMinus = document.getElementById('withdrawButton');
-      btnMinus.textContent = 'Ожидание...';
-      btnMinus.disabled = true;
+      setButtonsWaiting(true);
 
       try {
-        const url = `${SCRIPT_URL}?action=requestWithdrawOne&username=${window.username}`;
+        const url = `${SCRIPT_URL}?action=requestWithdraw&username=${window.username}&amount=${encodeURIComponent(amount)}`;
         console.log('Sending withdraw request URL:', url);
 
         const response = await fetch(url);
@@ -215,24 +206,58 @@
         } else {
           showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
           window.pendingRequest = false;
-          btnMinus.textContent = '–1';
-          btnMinus.disabled = false;
+          setButtonsWaiting(false);
         }
       } catch (error) {
         console.error('Withdraw request error:', error);
         showPopup('Ошибка отправки запроса');
         window.pendingRequest = false;
-        btnMinus.textContent = '–1';
-        btnMinus.disabled = false;
+        setButtonsWaiting(false);
       }
     }
 
-    // === Периодическая синхронизация (без клиентских процентов!) ===
+    // === Имитация смены месяца (начислить проценты за текущий месяц прямо сейчас) ===
+    async function simulateMonthlyInterest() {
+      try {
+        const btn = document.getElementById('simulateButton');
+        if (btn) { btn.disabled = true; btn.textContent = 'Начисление…'; }
+
+        const url = `${SCRIPT_URL}?action=applyMonthlyInterestNow&username=${window.username}&debug=1`;
+        console.log('Simulate monthly interest URL:', url);
+
+        const response = await fetch(url);
+        const data = await response.json();
+        console.log('Simulate response:', data);
+        if (data.debug) console.debug('Simulate debug:', data.debug);
+
+        if (data.success && data.ok) {
+          // обновим локальный баланс зеркально
+          if (typeof data.newBalance === 'number') {
+            window.localBalance = Number(data.newBalance);
+            updateDisplay();
+          }
+          const base = (typeof data.baseUsed === 'number') ? data.baseUsed.toLocaleString('ru-RU') : '—';
+          const interest = (typeof data.interestAmount === 'number') ? data.interestAmount.toLocaleString('ru-RU') : '0';
+          showPopup(`Проценты начислены:\nбаза=${base}, %=${interest}`);
+          document.getElementById('status').textContent =
+            `Синхронизировано: ${new Date().toLocaleTimeString()} (имитация месяца)`;
+        } else {
+          showPopup('Не удалось применить проценты (см. консоль)');
+        }
+      } catch (e) {
+        console.error('Simulate error:', e);
+        showPopup('Ошибка применения процентов');
+      } finally {
+        const btn = document.getElementById('simulateButton');
+        if (btn) { btn.disabled = false; btn.textContent = 'Имитация месяца'; }
+      }
+    }
+
+    // === Периодическая синхронизация (клиент ничего не начисляет сам) ===
     async function syncBalance() {
       if (!window.username || !window.isInitialized) return;
 
       try {
-        // Баланс на клиенте больше не «растёт» сам; мы шлём текущее зеркальное значение
         const url = `${SCRIPT_URL}?action=syncBalance&username=${window.username}`
           + `&balance=${encodeURIComponent(window.localBalance)}`
           + `&rate=${encodeURIComponent(window.currentRate)}`
@@ -249,7 +274,6 @@
         if (data.debug) console.debug('Sync debug:', data.debug);
 
         if (data.success) {
-          // Сервер — источник истины
           if (typeof data.balance === 'number' && Number.isFinite(data.balance)) {
             window.localBalance = Number(data.balance);
           }
@@ -258,7 +282,7 @@
           }
           updateDisplay();
 
-          // Одноразовый ответ админа (с коротким ID)
+          // Одноразовый ответ админа (approved/rejected) с коротким ID
           if (data.adminResponse && window.pendingRequest) {
             const resp = String(data.adminResponse).trim().toLowerCase();
             const shortId = data.adminResponseShortId
@@ -274,14 +298,9 @@
                 : 'Администратор НЕ одобрил операцию изменения баланса');
             }
 
-            // Сбрасываем ожидание и ОТЖИМАЕМ обе кнопки
+            // Сбрасываем ожидание и разблокируем обе кнопки
             window.pendingRequest = false;
-
-            const addBtn = document.getElementById('addButton');
-            if (addBtn) { addBtn.textContent = '+1'; addBtn.disabled = false; }
-
-            const minusBtn = document.getElementById('withdrawButton');
-            if (minusBtn) { minusBtn.textContent = '–1'; minusBtn.disabled = false; }
+            setButtonsWaiting(false);
           }
 
           document.getElementById('status').textContent =
