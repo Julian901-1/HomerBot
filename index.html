@@ -234,11 +234,13 @@
                 console.log('Sync response:', data);
                 
                 if (data.success) {
-                    if (data.forceBalance !== null) {
-                        window.localBalance = data.forceBalance;
-                        window.lastUpdateTime = Date.now();
-                        updateDisplay();
-                    }
+const hasAuthoritativeBalance =
+typeof data.forceBalance === 'number' && Number.isFinite(data.forceBalance);
+if (hasAuthoritativeBalance) {
+window.localBalance = data.forceBalance;
+window.lastUpdateTime = Date.now();
+updateDisplay();
+}
                     
                 // в обработке ответа:
 if (data.adminResponse && window.pendingRequest) {
