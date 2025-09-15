@@ -101,7 +101,7 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёк67</div>
+        <div class="wallet-title">Кошелёк66</div>
         <div class="balance" id="balance">0.0000</div>
         
         <div class="rate-selection">
@@ -238,19 +238,30 @@
                         updateDisplay();
                     }
                     
-                if (data.adminResponse && window.pendingRequest) {
-                        const resp = String(data.adminResponse).trim().toLowerCase();
-                        if (resp === 'approved') {
-                            showPopup('Администратор одобрил добавление единицы');
-                            window.localBalance++;
-                            updateDisplay();
-                        } else if (resp === 'rejected') {
-                            showPopup('Администратор НЕ одобрил добавление единицы');
-                        }
-                        window.pendingRequest = false;
-                        document.getElementById('addButton').textContent = '+1';
-                        document.getElementById('addButton').disabled = false;
-                    }
+                // в обработке ответа:
+if (data.adminResponse && window.pendingRequest) {
+  const resp = String(data.adminResponse).trim().toLowerCase();
+  const respId = String(data.adminResponseId || '');
+
+  const lastId = localStorage.getItem('lastProcessedAdminId') || '';
+  if (respId && respId === lastId) {
+    // уже обрабатывали — игнор
+  } else {
+    if (resp === 'approved') {
+      showPopup('Администратор одобрил добавление единицы');
+      window.localBalance++;
+      updateDisplay();
+    } else if (resp === 'rejected') {
+      showPopup('Администратор НЕ одобрил добавление единицы');
+    }
+    if (respId) localStorage.setItem('lastProcessedAdminId', respId);
+  }
+  window.pendingRequest = false;
+  const btn = document.getElementById('addButton');
+  btn.textContent = '+1';
+  btn.disabled = false;
+}
+
                     
                     if (data.rate && data.rate !== window.currentRate) {
                         window.currentRate = data.rate;
