@@ -101,7 +101,7 @@
 </head>
 <body>
     <div class="wallet-container">
-        <div class="wallet-title">Кошелёк676</div>
+        <div class="wallet-title">Кошелёк677</div>
         <div class="balance" id="balance">0.0000</div>
         
         <div class="rate-selection">
@@ -246,45 +246,38 @@ window.lastUpdateTime = Date.now();
 updateDisplay();
 }
                     
-                // в обработке ответа:
 if (data.adminResponse && window.pendingRequest) {
-  const resp = String(data.adminResponse).trim().toLowerCase();
-  const respId = String(data.adminResponseId || '');
-  const lastId = localStorage.getItem('lastProcessedAdminId') || '';
+          const resp = String(data.adminResponse).trim().toLowerCase();
+          const shortId = data.adminResponseShortId || (data.adminResponseId ? (String(data.adminResponseId).split('-')[1] || '') : '');
 
-  if (respId && respId === lastId) {
-    // уже обрабатывали — игнор
-  } else {
-    if (resp === 'approved') {
-      showPopup('Администратор одобрил добавление единицы');
-      // Не увеличиваем локально: сервер уже увеличил C и вернёт forceBalance
-    } else if (resp === 'rejected') {
-      showPopup('Администратор НЕ одобрил добавление единицы');
-    }
-    if (respId) localStorage.setItem('lastProcessedAdminId', respId);
-  }
-  window.pendingRequest = false;
-  const btn = document.getElementById('addButton');
-  btn.textContent = '+1';
-  btn.disabled = false;
-}
+          if (resp === 'approved') {
+            showPopup(shortId ? `[#${shortId}] Администратор одобрил добавление единицы`
+                              : 'Администратор одобрил добавление единицы');
+          } else if (resp === 'rejected') {
+            showPopup(shortId ? `[#${shortId}] Администратор НЕ одобрил добавление единицы`
+                              : 'Администратор НЕ одобрил добавление единицы');
+          }
 
-
-                    
-                    if (data.rate && data.rate !== window.currentRate) {
-                        window.currentRate = data.rate;
-                        updateRateButtons();
-                    }
-                    
-                    document.getElementById('status').textContent = `Синхронизировано: ${new Date().toLocaleTimeString()}`;
-                } else {
-                    document.getElementById('status').textContent = `Ошибка синхронизации: ${data.error || 'неизвестная ошибка'}`;
-                }
-            } catch (error) {
-                console.error('Sync error:', error);
-                document.getElementById('status').textContent = `Ошибка подключения: ${error.message}`;
-            }
+          window.pendingRequest = false;
+          const btn = document.getElementById('addButton');
+          btn.textContent = '+1';
+          btn.disabled = false;
         }
+
+        if (data.rate && data.rate !== window.currentRate) {
+          window.currentRate = data.rate;
+          updateRateButtons();
+        }
+
+        document.getElementById('status').textContent = `Синхронизировано: ${new Date().toLocaleTimeString()}`;
+      } else {
+        document.getElementById('status').textContent = `Ошибка синхронизации: ${data.error || 'неизвестная ошибка'}`;
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      document.getElementById('status').textContent = `Ошибка подключения: ${error.message}`;
+    }
+  }
         
         async function initialLoad() {
             if (!window.username) return;
@@ -373,21 +366,26 @@ if (data.adminResponse && window.pendingRequest) {
                 console.log('Admin request response:', data);
                 
                 if (data.success) {
-                    showPopup('Запрос отправлен администратору');
-                } else {
-                    showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
-                    window.pendingRequest = false;
-                    document.getElementById('addButton').textContent = '+1';
-                    document.getElementById('addButton').disabled = false;
-                }
-            } catch (error) {
-                console.error('Admin request error:', error);
-                showPopup('Ошибка отправки запроса');
-                window.pendingRequest = false;
-                document.getElementById('addButton').textContent = '+1';
-                document.getElementById('addButton').disabled = false;
-            }
+                    sconst shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
+        if (shortId) {
+          showPopup(`Запрос отправлен администратору [#${shortId}]`);
+        } else {
+          showPopup('Запрос отправлен администратору');
         }
+      } else {
+        showPopup('Ошибка отправки запроса: ' + (data.error || 'неизвестная ошибка'));
+        window.pendingRequest = false;
+        btn.textContent = '+1';
+        btn.disabled = false;
+      }
+    } catch (error) {
+      console.error('Admin request error:', error);
+      showPopup('Ошибка отправки запроса');
+      window.pendingRequest = false;
+      btn.textContent = '+1';
+      btn.disabled = false;
+    }
+  }
         
         function showPopup(message) {
             const popup = document.createElement('div');
