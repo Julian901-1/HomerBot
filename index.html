@@ -43,14 +43,8 @@
       background: var(--bg-primary);
       position: relative;
     }
-
-    .logo {
-      font-family: 'Comfortaa', cursive;
-      font-size: 24px;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
     
+    /* Header & Nav Redesign */
     .header {
       position: sticky;
       top: 0;
@@ -61,6 +55,7 @@
       padding: 12px 20px;
     }
     .header-content { display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-family: 'Comfortaa', cursive; font-size: 24px; font-weight: 700; color: var(--text-primary); }
 
     .bottom-nav {
       position: fixed;
@@ -78,76 +73,76 @@
     }
     .nav-items { display: flex; justify-content: space-around; align-items: center; }
     .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 12px; border-radius: 12px; cursor: pointer; transition: all 0.2s ease; opacity: 0.6; }
-    .nav-item.active { opacity: 1; background: var(--glass-bg); }
+    .nav-item.active { opacity: 1; background: rgba(255,255,255,0.1); }
     .nav-item:hover { opacity: 1; transform: translateY(-2px); }
     .nav-icon { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; }
     .nav-label { font-size: 11px; font-weight: 500; }
-    
-    .modal-overlay {
-        background: rgba(0,0,0,0.6);
-        backdrop-filter: blur(8px);
-    }
 
-    /* --- Other styles from previous version --- */
-    .profile-btn { width: 40px; height: 40px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; }
-    .profile-btn:hover { background: var(--glass-bg); transform: scale(1.05); }
-    .page { display: none; padding: 20px 20px 120px; min-height: calc(100vh - 72px); }
+    /* Modal Overlay */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: none; align-items: flex-end; justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: var(--bg-primary);
+      border-radius: 24px 24px 0 0;
+      width: 100%; max-width: 430px; max-height: 90vh;
+      overflow-y: auto; padding: 24px;
+      animation: slideUp 0.3s ease;
+      border-top: 1px solid var(--glass-border);
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+    /* General Styles */
+    .page { display: none; padding: 20px 20px 120px; }
     .page.active { display: block; }
     .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 20px; padding: 24px; margin-bottom: 16px; backdrop-filter: blur(10px); }
-    .glass-card { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 20px; padding: 24px; margin-bottom: 16px; backdrop-filter: blur(20px); }
-    .balance-section { text-align: center; margin-bottom: 24px; }
+    .glass-card { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 20px; padding: 16px; margin-bottom: 12px; backdrop-filter: blur(20px); }
+    .balance-section { text-align: center; }
     .balance-label { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
-    .balance-main { font-size: 42px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px; font-variant-numeric: tabular-nums; display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .balance-currency { font-size: 16px; color: var(--text-muted); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; position: relative; }
-    .currency-arrow { font-size: 10px; opacity: 0.7; }
+    .balance-main { font-size: 42px; font-weight: 800; font-variant-numeric: tabular-nums; }
     .balance-stats { display: flex; justify-content: space-between; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
-    .balance-stat { text-align: center; }
+    .balance-stat { flex: 1; text-align: center; }
     .stat-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
     .stat-value { font-size: 16px; font-weight: 700; }
     .stat-positive { color: var(--success); }
-    .stat-warning { color: var(--warning); }
-    .next-accrual { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 14px; color: var(--text-secondary); text-align: center; }
-    .next-accrual-amount { color: var(--success); font-weight: 600; }
     .btn-group { display: flex; gap: 12px; margin-bottom: 24px; }
     .btn { flex: 1; padding: 16px 24px; border-radius: 16px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 8px; }
     .btn-primary { background: var(--accent); color: white; }
     .btn-primary:hover { background: var(--accent-hover); transform: translateY(-2px); }
     .btn-secondary { background: var(--glass-bg); border: 1px solid var(--border); color: var(--text-primary); }
     .btn-secondary:hover { background: var(--bg-card); transform: translateY(-2px); }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
-    .strategies-section h2 { font-size: 20px; font-weight: 700; margin-bottom: 16px; color: var(--text-primary); }
+    .strategies-section h2 { font-size: 20px; font-weight: 700; margin-bottom: 16px; }
     .strategy-cards { display: flex; flex-direction: column; gap: 12px; }
     .strategy-card { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 20px; cursor: pointer; transition: all 0.2s ease; }
     .strategy-card:hover { background: var(--bg-card); transform: translateY(-2px); }
     .strategy-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .strategy-name { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+    .strategy-name { font-size: 18px; font-weight: 700; }
     .strategy-rate { font-size: 24px; font-weight: 800; color: var(--accent); }
     .strategy-description { font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; }
     .strategy-features { display: flex; gap: 8px; flex-wrap: wrap; }
     .feature-tag { padding: 4px 8px; background: var(--glass-bg); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: var(--text-secondary); }
-    .status{ position:fixed; top:80px; right:20px; padding:8px 12px; border-radius:12px; background:var(--glass-bg); border:1px solid var(--border); font-size:12px; backdrop-filter:blur(10px); z-index:90; transform:translateX(130%); opacity:0; transition:transform .35s ease, opacity .35s ease; pointer-events:none; }
-    .status.show{ transform:translateX(0); opacity:1; }
-    .status.loading{ color:var(--warning); }
-    .status.synced{  color:var(--success); }
-    .status.error{   color:var(--error); }
-    .modal-overlay.active { display: flex; }
-    .modal { background: var(--bg-primary); border-radius: 24px 24px 0 0; width: 100%; max-width: 430px; max-height: 90vh; overflow-y: auto; padding: 24px; animation: slideUp 0.3s ease; }
-    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .status { position:fixed; top:80px; right:20px; padding:8px 12px; border-radius:12px; background:var(--glass-bg); border:1px solid var(--border); font-size:12px; backdrop-filter:blur(10px); z-index:90; transform:translateX(130%); opacity:0; transition:transform .35s ease, opacity .35s ease; pointer-events:none; }
+    .status.show { transform:translateX(0); opacity:1; }
+    .status.loading { color:var(--warning); }
+    .status.synced { color:var(--success); }
+    .status.error { color:var(--error); }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     .modal-title { font-size: 20px; font-weight: 700; }
-    .close-btn { width: 32px; height: 32px; border: none; background: var(--glass-bg); border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-    .method-cards { display: flex; flex-direction: column; gap: 12px; }
-    .method-card { background: var(--glass-bg); border: 1px solid var(--border); border-radius: 16px; padding: 20px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 16px; }
-    .method-card.disabled { opacity: 0.5; cursor: not-allowed; }
-    .method-card:not(.disabled):hover { background: var(--bg-card); transform: translateY(-2px); }
-    .method-icon { width: 48px; height: 48px; border-radius: 12px; background: var(--accent); display: flex; align-items: center; justify-content: center; }
-    .method-info h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
-    .method-info p { font-size: 14px; color: var(--text-secondary); }
+    .close-btn { width: 32px; height: 32px; border: none; background: var(--glass-bg); border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; }
     .popup { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: rgba(20,20,20,0.95); color: white; padding: 16px 20px; border-radius: 16px; font-size: 14px; z-index: 9999; max-width: 90vw; text-align: center; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); white-space: pre-line; }
     .filter-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
     .filter-chip { padding: 8px 16px; background: var(--glass-bg); border: 1px solid var(--border); border-radius: 20px; font-size: 14px; cursor: pointer; transition: all 0.2s; }
     .filter-chip.active { background: var(--accent); color: white; border-color: var(--accent); }
     .filter-chip:hover:not(.active) { background: var(--bg-card); transform: translateY(-1px); }
+    .amount-input { width: 100%; padding: 16px; background: var(--glass-bg); border: 1px solid var(--border); border-radius: 12px; color: var(--text-primary); font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 16px; }
+    .input-field { flex: 1; padding: 12px; background: var(--glass-bg); border: 1px solid var(--border); border-radius: 12px; color: var(--text-primary); font-size: 16px; }
+    .profile-btn { width: 40px; height: 40px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; }
+    .profile-btn:hover { background: var(--glass-bg); transform: scale(1.05); }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -164,65 +159,65 @@
 
     <div id="status" class="status loading">Подключение...</div>
 
-    <div class="page active" id="pageHome">
-      <div class="card">
-        <div class="balance-section">
-          <div class="balance-label">Общий баланс</div>
-          <div class="balance-main">
-            <span id="balanceValue">—</span>
-          </div>
-          <div class="balance-stats">
-            <div class="balance-stat"><div class="stat-label">Свободно</div><div class="stat-value" id="freeBalance">—</div></div>
-            <div class="balance-stat"><div class="stat-label">Инвестировано</div><div class="stat-value stat-positive" id="investedBalance">—</div></div>
-            <div class="balance-stat"><div class="stat-label">Доход сегодня</div><div class="stat-value stat-positive" id="todayIncome">+0.00</div></div>
-          </div>
-        </div>
-      </div>
-      <div class="btn-group">
-        <button class="btn btn-primary" onclick="openModal('deposit')">Депозит</button>
-        <button class="btn btn-secondary" onclick="openModal('withdraw')">Вывод</button>
-      </div>
-      <div class="strategies-section">
-        <h2>Инвестиционные стратегии</h2>
-        <div class="strategy-cards">
-          <div class="strategy-card" onclick="openModal('strategy1')">
-            <div class="strategy-header"><div class="strategy-name">Гибкая</div><div class="strategy-rate">16%</div></div>
-            <div class="strategy-description">Вывод в любое время без штрафа</div>
-            <div class="strategy-features"><span class="feature-tag">Без заморозки</span><span class="feature-tag">Банковские вклады</span></div>
-          </div>
-          <div class="strategy-card" onclick="openModal('strategy30')">
-            <div class="strategy-header"><div class="strategy-name">30 дней</div><div class="strategy-rate">17%</div></div>
-            <div class="strategy-description">Заморозка 30 дней • Досрочный вывод — теряются проценты текущего периода</div>
-            <div class="strategy-features"><span class="feature-tag">Заморозка на 30 дней</span><span class="feature-tag">ЦФА</span></div>
-          </div>
-          <div class="strategy-card" onclick="openModal('strategy90')">
-            <div class="strategy-header"><div class="strategy-name">90 дней</div><div class="strategy-rate">18%</div></div>
-            <div class="strategy-description">Заморозка 90 дней • Досрочный вывод — теряются проценты текущего периода</div>
-            <div class="strategy-features"><span class="feature-tag">Заморозка на 90 дней</span><span class="feature-tag">Займы</span></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="page" id="pagePortfolio">
-      <div class="card">
-        <h2 style="margin-bottom: 16px;">Мой портфель</h2>
-        <div id="portfolio-list"></div>
-        <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;" id="portfolio-placeholder">Здесь будет отображаться информация о ваших активных инвестициях.</p>
-      </div>
-    </div>
-    
-    <div class="page" id="pageHistory">
-        <div class="card">
-            <h2 style="margin-bottom: 16px;">История операций</h2>
-            <div class="filter-chips">
-                <div class="filter-chip active" onclick="applyHistoryFilter(this, 'all')">Все</div>
-                <div class="filter-chip" onclick="applyHistoryFilter(this, 'deposit')">Депозит</div>
-                <div class="filter-chip" onclick="applyHistoryFilter(this, 'withdraw')">Вывод</div>
-                <div class="filter-chip" onclick="applyHistoryFilter(this, 'invest')">Инвестиции</div>
+    <div id="pageContainer">
+        <div class="page active" id="pageHome">
+            <div class="card">
+                <div class="balance-section">
+                    <div class="balance-label">Общий баланс</div>
+                    <div class="balance-main" id="balanceValue">—</div>
+                    <div class="balance-stats">
+                        <div class="balance-stat"><div class="stat-label">Свободно</div><div class="stat-value" id="freeBalance">—</div></div>
+                        <div class="balance-stat"><div class="stat-label">Инвестировано</div><div class="stat-value stat-positive" id="investedBalance">—</div></div>
+                        <div class="balance-stat"><div class="stat-label">Доход сегодня</div><div class="stat-value stat-positive" id="todayIncome">+0.00</div></div>
+                    </div>
+                </div>
             </div>
-            <div id="history-list"></div>
-            <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;" id="history-placeholder">История ваших депозитов, выводов и начислений появится здесь.</p>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="openModal('deposit')">Депозит</button>
+                <button class="btn btn-secondary" onclick="openModal('withdraw')">Вывод</button>
+            </div>
+            <div class="strategies-section">
+                <h2>Инвестиционные стратегии</h2>
+                <div class="strategy-cards">
+                    <div class="strategy-card" onclick="openModal('strategy1')">
+                        <div class="strategy-header"><div class="strategy-name">Гибкая</div><div class="strategy-rate">16%</div></div>
+                        <div class="strategy-description">Вывод в любое время без штрафа</div>
+                        <div class="strategy-features"><span class="feature-tag">Без заморозки</span></div>
+                    </div>
+                    <div class="strategy-card" onclick="openModal('strategy30')">
+                        <div class="strategy-header"><div class="strategy-name">30 дней</div><div class="strategy-rate">17%</div></div>
+                        <div class="strategy-description">Заморозка 30 дней • Досрочный вывод — теряются проценты текущего периода</div>
+                        <div class="strategy-features"><span class="feature-tag">Заморозка на 30 дней</span></div>
+                    </div>
+                    <div class="strategy-card" onclick="openModal('strategy90')">
+                        <div class="strategy-header"><div class="strategy-name">90 дней</div><div class="strategy-rate">18%</div></div>
+                        <div class="strategy-description">Заморозка 90 дней • Досрочный вывод — теряются проценты текущего периода</div>
+                        <div class="strategy-features"><span class="feature-tag">Заморозка на 90 дней</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="page" id="pagePortfolio">
+            <div class="card">
+                <h2 style="margin-bottom: 16px;">Мой портфель</h2>
+                <div id="portfolio-list"></div>
+                <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;" id="portfolio-placeholder">Здесь будет отображаться информация о ваших активных инвестициях.</p>
+            </div>
+        </div>
+        
+        <div class="page" id="pageHistory">
+            <div class="card">
+                <h2 style="margin-bottom: 16px;">История операций</h2>
+                <div class="filter-chips">
+                    <div class="filter-chip active" onclick="applyHistoryFilter(this, 'all')">Все</div>
+                    <div class="filter-chip" onclick="applyHistoryFilter(this, 'deposit')">Депозит</div>
+                    <div class="filter-chip" onclick="applyHistoryFilter(this, 'withdraw')">Вывод</div>
+                    <div class="filter-chip" onclick="applyHistoryFilter(this, 'invest')">Инвестиции</div>
+                </div>
+                <div id="history-list"></div>
+                <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;" id="history-placeholder">История ваших депозитов, выводов и начислений появится здесь.</p>
+            </div>
         </div>
     </div>
 
@@ -238,49 +233,64 @@
   <div class="modal-overlay" id="modalProfile">
     <div class="modal">
       <div class="modal-header"><h2 class="modal-title">Профиль</h2><button class="close-btn" onclick="closeModal('profile')">✕</button></div>
-      <div class="card" style="text-align: center; margin-bottom: 16px;">
-        <h3 id="profileUsername">—</h3><p style="color: var(--text-secondary); font-size: 14px;">Telegram пользователь</p>
-      </div>
+      <div class="card" style="text-align: center; margin: 0;"><h3 id="profileUsername">—</h3><p style="color: var(--text-secondary); font-size: 14px;">Telegram пользователь</p></div>
     </div>
   </div>
   
+  <div class="modal-overlay" id="modalDeposit"><div class="modal"><div class="modal-header"><h2 class="modal-title">Депозит</h2><button class="close-btn" onclick="closeModal('deposit')">✕</button></div><p>Здесь будет форма для депозита...</p></div></div>
+  <div class="modal-overlay" id="modalWithdraw"><div class="modal"><div class="modal-header"><h2 class="modal-title">Вывод</h2><button class="close-btn" onclick="closeModal('withdraw')">✕</button></div><p>Здесь будет форма для вывода...</p></div></div>
+  
+  <div class="modal-overlay" id="modalStrategy1"><div class="modal"><div class="modal-header"><h2 class="modal-title">Гибкая 16%</h2><button class="close-btn" onclick="closeModal('strategy1')">✕</button></div><button class="btn btn-primary" onclick="openNewInvestment('16')" style="width: 100%;">Инвестировать</button></div></div>
+  <div class="modal-overlay" id="modalStrategy30"><div class="modal"><div class="modal-header"><h2 class="modal-title">30 дней 17%</h2><button class="close-btn" onclick="closeModal('strategy30')">✕</button></div><button class="btn btn-primary" onclick="openNewInvestment('17')" style="width: 100%;">Инвестировать</button></div></div>
+  <div class="modal-overlay" id="modalStrategy90"><div class="modal"><div class="modal-header"><h2 class="modal-title">90 дней 18%</h2><button class="close-btn" onclick="closeModal('strategy90')">✕</button></div><button class="btn btn-primary" onclick="openNewInvestment('18')" style="width: 100%;">Инвестировать</button></div></div>
+
+  <div class="modal-overlay" id="modalNewInvestment">
+    <div class="modal">
+      <div class="modal-header"><h2 class="modal-title">Новая инвестиция</h2><button class="close-btn" onclick="closeModal('newInvestment')">✕</button></div>
+      <div class="input-field" id="niStrategyReadonly" style="text-align:center;font-weight:700;margin-bottom:12px;">—</div>
+      <input type="text" class="amount-input" id="niAmount" placeholder="0" oninput="this.value = this.value.replace(/[^\d]/g, '')">
+      <button class="btn btn-primary" style="width:100%" id="niConfirmBtn">Подтвердить</button>
+    </div>
+  </div>
+
   <script>
     const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
-
+    
     // --- State ---
     window.username = null;
     window.isInitialized = false;
     window.serverState = { balance: 0, rate: 16, monthBase: 0 };
-    window.pendingRequest = false;
+    window.lastChosenRate = null;
     
-    // --- UI helpers ---
-    function fmtMoney(x) { return (Number(x) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
-
+    // --- UI Helpers ---
+    const fmtMoney = (x) => (Number(x) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    
     function showPopup(text, timeout = 3000) {
       const el = document.createElement('div');
       el.className = 'popup';
       el.textContent = text;
       document.body.appendChild(el);
-      setTimeout(() => { 
-        el.style.transition = 'opacity .25s ease, transform .25s ease'; 
-        el.style.opacity = '0'; 
+      setTimeout(() => {
+        el.style.transition = 'opacity .25s ease, transform .25s ease';
+        el.style.opacity = '0';
         el.style.transform = 'translateX(-50%) translateY(10px)';
-        setTimeout(() => el.remove(), 250); 
+        setTimeout(() => el.remove(), 250);
       }, timeout);
     }
-    
-    let __statusHideTimer=null;
-    function setStatus(text, type='loading', hold = false){
-        const el=document.getElementById('status'); if(!el) return;
-        el.textContent = text;
-        el.className = `status ${type} show`;
-        if(__statusHideTimer) clearTimeout(__statusHideTimer);
-        if(!hold){
-            __statusHideTimer = setTimeout(() => el.classList.remove('show'), 2000);
-        }
+
+    let statusHideTimer = null;
+    function setStatus(text, type = 'loading', hold = false) {
+      const el = document.getElementById('status');
+      if (!el) return;
+      el.textContent = text;
+      el.className = `status ${type} show`;
+      if (statusHideTimer) clearTimeout(statusHideTimer);
+      if (!hold) {
+        statusHideTimer = setTimeout(() => el.classList.remove('show'), 2000);
+      }
     }
 
-    function openPage(pageId){
+    function openPage(pageId) {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.getElementById(`page${pageId}`).classList.add('active');
       document.querySelectorAll('.nav-item').forEach(n => {
@@ -291,34 +301,47 @@
       });
     }
 
-    function openModal(modalId) { document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`)?.classList.add('active'); }
-    function closeModal(modalId) { document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`)?.classList.remove('active'); }
+    function openModal(modalId) { document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`).classList.add('active'); }
+    function closeModal(modalId) { document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`).classList.remove('active'); }
     document.addEventListener('click', (e) => { if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('active'); });
 
     function applyHistoryFilter(element, type) {
-        document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
-        element.classList.add('active');
-        document.querySelectorAll('#history-list .history-item').forEach(item => {
-            item.style.display = (type === 'all' || item.dataset.type === type) ? 'block' : 'none';
-        });
+      document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
+      element.classList.add('active');
+      let hasVisibleItems = false;
+      document.querySelectorAll('#history-list .history-item').forEach(item => {
+        const isVisible = (type === 'all' || item.dataset.type === type);
+        item.style.display = isVisible ? 'block' : 'none';
+        if (isVisible) hasVisibleItems = true;
+      });
+       document.getElementById('history-placeholder').style.display = hasVisibleItems ? 'none' : 'block';
+    }
+    
+    function openNewInvestment(rate) {
+        window.lastChosenRate = rate;
+        const name = rate==='16' ? 'Гибкая 16%' : (rate==='17' ? '30 дней 17%' : '90 дней 18%');
+        document.getElementById('niStrategyReadonly').textContent = name;
+        document.getElementById('niAmount').value = '';
+        ['strategy1', 'strategy30', 'strategy90'].forEach(m => closeModal(m));
+        openModal('newInvestment');
     }
 
     // --- Data Rendering ---
     function updateDashboard(data) {
-        window.serverState = { ...window.serverState, ...data };
-        const { balance, monthBase } = window.serverState;
-        document.getElementById('balanceValue').textContent = fmtMoney(balance);
-        document.getElementById('freeBalance').textContent = fmtMoney(balance);
-        document.getElementById('investedBalance').textContent = fmtMoney(monthBase);
-        document.getElementById('profileUsername').textContent = window.username || 'Пользователь';
+      window.serverState = { ...window.serverState, ...data };
+      const { balance, monthBase } = window.serverState;
+      document.getElementById('balanceValue').textContent = fmtMoney(balance);
+      document.getElementById('freeBalance').textContent = fmtMoney(balance - monthBase);
+      document.getElementById('investedBalance').textContent = fmtMoney(monthBase);
+      document.getElementById('profileUsername').textContent = window.username || 'Пользователь';
     }
-
+    
     function renderHistory(history) {
         const list = document.getElementById('history-list');
         const placeholder = document.getElementById('history-placeholder');
         if (!list || !placeholder) return;
         list.innerHTML = '';
-        if (history.length === 0) {
+        if (!history || history.length === 0) {
             placeholder.style.display = 'block';
             return;
         }
@@ -332,52 +355,63 @@
             const date = new Date(item.date);
             const timeStr = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear().toString().slice(-2)} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
             
-            let title = '';
-            let subTitle = '';
+            let title = '', amountStr = '', subTitle = '';
+            const absAmount = Math.abs(item.amount);
+
             switch(item.type) {
-                case 'DEPOSIT': title = 'Депозит'; break;
-                case 'WITHDRAW': title = 'Вывод'; break;
+                case 'DEPOSIT': title = 'Депозит'; amountStr = `+${fmtMoney(absAmount)}`; break;
+                case 'WITHDRAW': title = 'Вывод'; amountStr = `-${fmtMoney(absAmount)}`; break;
                 case 'INVEST': 
                     title = 'Инвестиция';
-                    subTitle = `<div style="font-size: 12px; color: var(--text-secondary);">Стратегия: ${item.rate || serverState.rate}%</div>`;
+                    amountStr = `${fmtMoney(absAmount)}`;
+                    subTitle = `<div style="font-size: 12px; color: var(--text-secondary);">Стратегия: ${serverState.rate}%</div>`;
                     break;
             }
 
-            el.innerHTML = `<b>${title}</b> ${subTitle} · ${fmtMoney(item.amount)} · #${item.shortId} · <span style="color:var(--text-muted)">${timeStr}</span>`;
+            el.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <b>${title}</b>
+                        ${subTitle}
+                        <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">#${item.shortId} · ${timeStr}</div>
+                    </div>
+                    <div style="font-weight: 700; font-size: 16px;">${amountStr} ₽</div>
+                </div>`;
             list.appendChild(el);
         });
+        applyHistoryFilter(document.querySelector('.filter-chip.active'), document.querySelector('.filter-chip.active').onclick.toString().split("'")[1]);
     }
 
     function renderPortfolio(portfolio) {
-        const list = document.getElementById('portfolio-list');
-        const placeholder = document.getElementById('portfolio-placeholder');
-        if (!list || !placeholder) return;
-        list.innerHTML = '';
-        if (portfolio.length === 0) {
-            placeholder.style.display = 'block';
-            return;
-        }
-        placeholder.style.display = 'none';
-        portfolio.forEach(item => {
-            const el = document.createElement('div');
-            el.className = 'glass-card';
-            el.innerHTML = `<b>#${item.shortId}</b> · ${fmtMoney(item.amount)} ₽ · ${item.rate}%`;
-            list.appendChild(el);
-        });
+      const list = document.getElementById('portfolio-list');
+      const placeholder = document.getElementById('portfolio-placeholder');
+      if (!list || !placeholder) return;
+      list.innerHTML = '';
+      if (!portfolio || portfolio.length === 0) {
+        placeholder.style.display = 'block';
+        return;
+      }
+      placeholder.style.display = 'none';
+      portfolio.forEach(item => {
+        const el = document.createElement('div');
+        el.className = 'glass-card';
+        el.innerHTML = `<b>#${item.shortId}</b> · ${fmtMoney(item.amount)} ₽ · <b>${item.rate}%</b>`;
+        list.appendChild(el);
+      });
     }
 
-    // --- API ---
-    async function apiGet(path) { 
-      const r = await fetch(`${SCRIPT_URL}${path}`); 
-      return r.json(); 
+    // --- API & Logic ---
+    async function apiGet(path) {
+      const r = await fetch(`${SCRIPT_URL}${path}`);
+      if (!r.ok) throw new Error(`Network response was not ok: ${r.statusText}`);
+      return r.json();
     }
     
-    async function initializeUser() {
+    async function initializeApp() {
       try {
         const tg = window.Telegram?.WebApp;
         tg?.expand?.();
         window.username = (tg?.initDataUnsafe?.user?.username) || 'marulin'; // Fallback for testing
-        window.isInitialized = true;
         
         setStatus('Загрузка данных...', 'loading', true);
         
@@ -387,12 +421,12 @@
         updateDashboard(data);
         renderHistory(data.history);
         renderPortfolio(data.portfolio);
-        await refreshTodayIncome(); // First calculation
+        await refreshTodayIncome();
         
         setStatus('Синхронизировано', 'synced');
         
-        setInterval(syncBalance, 20000); // Periodic sync
-        setInterval(refreshTodayIncome, 60000); // Refresh income every minute
+        setInterval(syncBalance, 20000);
+        setInterval(refreshTodayIncome, 60000);
         
       } catch (e) {
         console.error('Initialization error:', e);
@@ -401,7 +435,6 @@
     }
 
     async function syncBalance() {
-      if (!window.username || !window.isInitialized) return;
       try {
         const data = await apiGet(`?action=syncBalance&username=${window.username}&balance=${serverState.balance}&rate=${serverState.rate}&timestamp=${Date.now()}`);
         if (data.success) {
@@ -417,39 +450,49 @@
     }
 
     async function refreshTodayIncome() {
-        if (!window.username) return;
-        try {
-            const res = await apiGet(`?action=previewAccrual&username=${window.username}`);
-            if (!res.success) return;
+      try {
+        const res = await apiGet(`?action=previewAccrual&username=${window.username}`);
+        if (!res.success) return;
 
-            const todayKey = `accrual_start_${window.username}_${new Date().toLocaleDateString('en-CA')}`;
-            let startOfDayAccrued = localStorage.getItem(todayKey);
+        const todayKey = `accrual_start_${window.username}_${new Date().toLocaleDateString('en-CA')}`;
+        let startOfDayAccrued = localStorage.getItem(todayKey);
 
-            if (startOfDayAccrued === null) {
-                startOfDayAccrued = res.accruedToNow || 0;
-                localStorage.setItem(todayKey, startOfDayAccrued);
-            }
-
-            const todayIncome = Math.max(0, (res.accruedToNow || 0) - Number(startOfDayAccrued));
-            document.getElementById('todayIncome').textContent = `+${fmtMoney(todayIncome)}`;
-        } catch (e) {
-            console.warn('Could not refresh today income', e);
+        if (startOfDayAccrued === null) {
+          startOfDayAccrued = res.accruedToNow || 0;
+          localStorage.setItem(todayKey, startOfDayAccrued);
         }
+
+        const todayIncome = Math.max(0, (res.accruedToNow || 0) - Number(startOfDayAccrued));
+        document.getElementById('todayIncome').textContent = `+${fmtMoney(todayIncome)}`;
+      } catch (e) { /* silent fail */ }
     }
-
-    (function init() {
-      const tg = window.Telegram?.WebApp;
-      try { 
-        tg?.expand?.(); 
-        tg?.ready?.();
-        if (tg?.themeParams) {
-          const theme = tg.themeParams;
-          document.documentElement.style.setProperty('--bg-primary', theme.bg_color || '#0a0b0f');
-          document.documentElement.style.setProperty('--text-primary', theme.text_color || '#e8eaed');
+    
+    document.getElementById('niConfirmBtn').addEventListener('click', async function() {
+        const amount = parseInt(document.getElementById('niAmount').value) || 0;
+        const rate = window.lastChosenRate;
+        if (!rate || amount <= 0) {
+            showPopup('Введите корректную сумму.');
+            return;
         }
-      } catch {}
-      initializeUser();
-    })();
+        
+        this.disabled = true;
+        try {
+            const resp = await apiGet(`?action=logStrategyInvestment&username=${window.username}&rate=${rate}&amount=${amount}`);
+            if (resp.success) {
+                showPopup('Инвестиция создана!');
+                closeModal('newInvestment');
+                initializeApp(); // Reload all data
+            } else {
+                showPopup('Ошибка: ' + (resp.error || 'неизвестно'));
+            }
+        } catch (e) {
+            showPopup('Ошибка сети');
+        } finally {
+            this.disabled = false;
+        }
+    });
+
+    initializeApp();
   </script>
 </body>
 </html>
