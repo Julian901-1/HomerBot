@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>HomerBot — Инвестиционный Кошелёк</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&display=swap" rel="stylesheet">
   <style>
     :root { 
       color-scheme: light dark;
@@ -19,7 +22,7 @@
       --success: #34d399;
       --warning: #fbbf24;
       --error: #f87171;
-      --glass-bg: rgba(255,255,255,0.03);
+      --glass-bg: rgba(20, 22, 30, 0.7);
       --glass-border: rgba(255,255,255,0.1);
     }
 
@@ -41,48 +44,24 @@
       position: relative;
     }
 
-    /* Header */
+    .logo {
+      font-family: 'Comfortaa', cursive;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    
     .header {
       position: sticky;
       top: 0;
       z-index: 100;
-      background: var(--bg-primary);
+      background: rgba(10, 11, 15, 0.5);
       backdrop-filter: blur(20px);
       border-bottom: 1px solid var(--border);
       padding: 12px 20px;
     }
+    .header-content { display: flex; justify-content: space-between; align-items: center; }
 
-    .header-content {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .logo {
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-
-    .profile-btn {
-      width: 40px;
-      height: 40px;
-      border-radius: 12px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .profile-btn:hover {
-      background: var(--glass-bg);
-      transform: scale(1.05);
-    }
-
-    /* Navigation */
     .bottom-nav {
       position: fixed;
       bottom: 0;
@@ -92,785 +71,83 @@
       max-width: 430px;
       background: var(--glass-bg);
       backdrop-filter: blur(20px);
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--glass-border);
       padding: 12px 20px 20px;
       z-index: 100;
+      border-radius: 24px 24px 0 0;
+    }
+    .nav-items { display: flex; justify-content: space-around; align-items: center; }
+    .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 12px; border-radius: 12px; cursor: pointer; transition: all 0.2s ease; opacity: 0.6; }
+    .nav-item.active { opacity: 1; background: var(--glass-bg); }
+    .nav-item:hover { opacity: 1; transform: translateY(-2px); }
+    .nav-icon { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; }
+    .nav-label { font-size: 11px; font-weight: 500; }
+    
+    .modal-overlay {
+        background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(8px);
     }
 
-    .nav-items {
-      display: flex;
-      justify-content: space-around;
-      align-items: center;
-    }
-
-    .nav-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      padding: 8px 12px;
-      border-radius: 12px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      opacity: 0.6;
-    }
-
-    .nav-item.active {
-      opacity: 1;
-      background: var(--glass-bg);
-    }
-
-    .nav-item:hover {
-      opacity: 1;
-      transform: translateY(-2px);
-    }
-
-    .nav-icon {
-      width: 24px;
-      height: 24px;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 2;
-    }
-
-    .nav-label {
-      font-size: 11px;
-      font-weight: 500;
-    }
-
-    /* Pages */
-    .page {
-      display: none;
-      padding: 20px 20px 100px;
-      min-height: calc(100vh - 72px);
-    }
-
-    .page.active {
-      display: block;
-    }
-
-    /* Cards */
-    .card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 24px;
-      margin-bottom: 16px;
-      backdrop-filter: blur(10px);
-    }
-
-    .glass-card {
-      background: var(--glass-bg);
-      border: 1px solid var(--glass-border);
-      border-radius: 20px;
-      padding: 24px;
-      margin-bottom: 16px;
-      backdrop-filter: blur(20px);
-    }
-
-    /* Balance Section */
-    .balance-section {
-      text-align: center;
-      margin-bottom: 24px;
-    }
-
-    .balance-label {
-      font-size: 14px;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
-    }
-
-    .balance-main {
-      font-size: 42px;
-      font-weight: 800;
-      color: var(--text-primary);
-      margin-bottom: 8px;
-      font-variant-numeric: tabular-nums;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-
-    .balance-currency {
-      font-size: 16px;
-      color: var(--text-muted);
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
-      position: relative;
-    }
-
-    .currency-arrow {
-      font-size: 10px;
-      opacity: 0.7;
-    }
-
-    .balance-stats {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 20px;
-      padding-top: 20px;
-      border-top: 1px solid var(--border);
-    }
-
-    .balance-stat {
-      text-align: center;
-    }
-
-    .stat-label {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-bottom: 4px;
-    }
-
-    .stat-value {
-      font-size: 16px;
-      font-weight: 700;
-    }
-
+    /* --- Other styles from previous version --- */
+    .profile-btn { width: 40px; height: 40px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; }
+    .profile-btn:hover { background: var(--glass-bg); transform: scale(1.05); }
+    .page { display: none; padding: 20px 20px 120px; min-height: calc(100vh - 72px); }
+    .page.active { display: block; }
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 20px; padding: 24px; margin-bottom: 16px; backdrop-filter: blur(10px); }
+    .glass-card { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 20px; padding: 24px; margin-bottom: 16px; backdrop-filter: blur(20px); }
+    .balance-section { text-align: center; margin-bottom: 24px; }
+    .balance-label { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
+    .balance-main { font-size: 42px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px; font-variant-numeric: tabular-nums; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .balance-currency { font-size: 16px; color: var(--text-muted); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; position: relative; }
+    .currency-arrow { font-size: 10px; opacity: 0.7; }
+    .balance-stats { display: flex; justify-content: space-between; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+    .balance-stat { text-align: center; }
+    .stat-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+    .stat-value { font-size: 16px; font-weight: 700; }
     .stat-positive { color: var(--success); }
     .stat-warning { color: var(--warning); }
-
-    .next-accrual {
-      margin-top: 16px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border);
-      font-size: 14px;
-      color: var(--text-secondary);
-      text-align: center;
-    }
-
-    .next-accrual-amount {
-      color: var(--success);
-      font-weight: 600;
-    }
-
-    /* Buttons */
-    .btn-group {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .btn {
-      flex: 1;
-      padding: 16px 24px;
-      border-radius: 16px;
-      border: none;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-
-    .btn-primary {
-      background: var(--accent);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background: var(--accent-hover);
-      transform: translateY(-2px);
-    }
-
-    .btn-secondary {
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-    }
-
-    .btn-secondary:hover {
-      background: var(--bg-card);
-      transform: translateY(-2px);
-    }
-
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      transform: none !important;
-    }
-
-    /* Strategy Cards */
-    .strategies-section h2 {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 16px;
-      color: var(--text-primary);
-    }
-
-    .strategy-cards {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .strategy-card {
-      background: var(--glass-bg);
-      border: 1px solid var(--glass-border);
-      border-radius: 16px;
-      padding: 20px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .strategy-card:hover {
-      background: var(--bg-card);
-      transform: translateY(-2px);
-    }
-
-    .strategy-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-
-    .strategy-name {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-
-    .strategy-rate {
-      font-size: 24px;
-      font-weight: 800;
-      color: var(--accent);
-    }
-
-    .strategy-description {
-      font-size: 14px;
-      color: var(--text-secondary);
-      margin-bottom: 16px;
-    }
-
-    .strategy-features {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .feature-tag {
-      padding: 4px 8px;
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-size: 12px;
-      color: var(--text-secondary);
-    }
-
-/* Status (slide-in/out, держим "loading" пока не сменится) */
-.status{
-  position:fixed; top:80px; right:20px;
-  padding:8px 12px; border-radius:12px;
-  background:var(--glass-bg); border:1px solid var(--border);
-  font-size:12px; backdrop-filter:blur(10px); z-index:90;
-  transform:translateX(130%); opacity:0;
-  transition:transform .35s ease, opacity .35s ease;
-  pointer-events:none;
-}
-.status.show{ transform:translateX(0); opacity:1; }
-.status.loading{ color:var(--warning); }
-.status.synced{  color:var(--success); }
-.status.error{   color:var(--error); }
-
-    /* Modal */
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0,0,0,0.8);
-      backdrop-filter: blur(10px);
-      z-index: 1000;
-      display: none;
-      align-items: flex-end;
-      justify-content: center;
-    }
-
-    .modal-overlay.active {
-      display: flex;
-    }
-
-    .modal {
-      background: var(--bg-primary);
-      border-radius: 24px 24px 0 0;
-      width: 100%;
-      max-width: 430px;
-      max-height: 90vh;
-      overflow-y: auto;
-      padding: 24px;
-      animation: slideUp 0.3s ease;
-    }
-
-    @keyframes slideUp {
-      from { transform: translateY(100%); }
-      to { transform: translateY(0); }
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-    }
-
-    .modal-title {
-      font-size: 20px;
-      font-weight: 700;
-    }
-
-    .close-btn {
-      width: 32px;
-      height: 32px;
-      border: none;
-      background: var(--glass-bg);
-      border-radius: 8px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    /* Deposit Methods */
-    .method-cards {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .method-card {
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 20px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .method-card.disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .method-card:not(.disabled):hover {
-      background: var(--bg-card);
-      transform: translateY(-2px);
-    }
-
-    .method-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
-      background: var(--accent);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .method-info h3 {
-      font-size: 16px;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-
-    .method-info p {
-      font-size: 14px;
-      color: var(--text-secondary);
-    }
-
-    /* Popup */
-    .popup {
-      position: fixed;
-      left: 50%;
-      bottom: 120px;
-      transform: translateX(-50%);
-      background: rgba(20,20,20,0.95);
-      color: white;
-      padding: 16px 20px;
-      border-radius: 16px;
-      font-size: 14px;
-      z-index: 9999;
-      max-width: 90vw;
-      text-align: center;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,0.1);
-      white-space: pre-line;
-    }
-
-    /* Responsive */
-    @media (max-width: 375px) {
-      .balance-main { font-size: 36px; }
-      .btn { padding: 14px 20px; font-size: 15px; }
-      .strategy-rate { font-size: 20px; }
-    }
-
-    /* Loading skeleton */
-    .skeleton {
-      background: linear-gradient(90deg, var(--glass-bg) 25%, var(--bg-card) 50%, var(--glass-bg) 75%);
-      background-size: 200% 100%;
-      animation: loading 1.5s infinite;
-    }
-
-    @keyframes loading {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
-    }
-
-    /* Support button */
-    .support-btn {
-      position: fixed;
-      bottom: 120px;
-      right: 20px;
-      width: 56px;
-      height: 56px;
-      background: #6b7280;
-      border: none;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 90;
-      transition: all 0.2s ease;
-    }
-
-    .support-btn:hover {
-      transform: scale(1.1);
-    }
-
-    /* Development notice */
-    .dev-notice {
-      background: var(--warning);
-      color: #000;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      margin-left: 8px;
-    }
-
-    /* Math formula */
-    .math-formula {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin: 20px 0;
-      font-size: 16px;
-      font-weight: 500;
-    }
-
-    .formula-fraction {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin: 0 8px;
-    }
-
-    .formula-numerator {
-      padding-bottom: 4px;
-      border-bottom: 2px solid var(--text-primary);
-    }
-
-    .formula-denominator {
-      padding-top: 4px;
-    }
-
-    .formula-row {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    /* Toggle switch */
-    .toggle-container {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 12px 0;
-    }
-
-    .toggle-switch {
-      position: relative;
-      width: 48px;
-      height: 24px;
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-
-    .toggle-switch.active {
-      background: var(--accent);
-    }
-
-    .toggle-slider {
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 18px;
-      height: 18px;
-      background: white;
-      border-radius: 50%;
-      transition: transform 0.3s;
-    }
-
-    .toggle-switch.active .toggle-slider {
-      transform: translateX(24px);
-    }
-
-    /* Quick amount buttons */
-    .quick-amounts {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin-bottom: 16px;
-    }
-
-    .quick-amount-btn {
-      padding: 12px;
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      color: var(--text-primary);
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .quick-amount-btn:hover {
-      background: var(--bg-card);
-      transform: translateY(-1px);
-    }
-
-    /* Input with copy */
-    .input-with-copy {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-
-    .input-field {
-      flex: 1;
-      padding: 12px;
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      color: var(--text-primary);
-      font-size: 16px;
-    }
-
-    .copy-btn {
-      width: 40px;
-      height: 40px;
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s;
-    }
-
-    .copy-btn:hover {
-      background: var(--bg-card);
-    }
-
-    .copy-icon {
-      width: 18px;
-      height: 18px;
-      stroke: var(--text-secondary);
-    }
-
-    /* Filter chips */
-    .filter-chips {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-bottom: 16px;
-    }
-
-    .filter-chip {
-      padding: 8px 16px;
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      font-size: 14px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .filter-chip.active {
-      background: var(--accent);
-      color: white;
-      border-color: var(--accent);
-    }
-
-    .filter-chip:hover {
-      transform: translateY(-1px);
-    }
-
-    /* Dropdown */
-    .dropdown {
-      position: relative;
-      margin-bottom: 16px;
-    }
-
-    .dropdown-select {
-      width: 100%;
-      padding: 12px;
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      color: var(--text-primary);
-      font-size: 16px;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .dropdown-arrow {
-      font-size: 12px;
-      transition: transform 0.2s;
-    }
-
-    .dropdown.open .dropdown-arrow {
-      transform: rotate(180deg);
-    }
-
-    .dropdown-menu {
-      position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
-      margin-top: 4px;
-      background: var(--bg-primary);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-      display: none;
-      z-index: 10;
-    }
-
-    .dropdown.open .dropdown-menu {
-      display: block;
-    }
-
-    .dropdown-item {
-      padding: 12px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .dropdown-item:hover {
-      background: var(--glass-bg);
-    }
-
-    /* Currency dropdown */
-    .currency-dropdown {
-      position: absolute;
-      top: 100%;
-      left: 50%;
-      transform: translateX(-50%);
-      margin-top: 8px;
-      background: var(--bg-primary);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 8px;
-      display: none;
-      z-index: 10;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    }
-
-    .currency-dropdown.open {
-      display: block;
-    }
-
-    .currency-option {
-      padding: 8px 16px;
-      cursor: pointer;
-      border-radius: 8px;
-      transition: background 0.2s;
-    }
-
-    .currency-option:hover {
-      background: var(--glass-bg);
-    }
-
-    .currency-option.active {
-      background: var(--accent);
-      color: white;
-    }
-
-    /* Deposit form */
-    .deposit-form {
-      padding: 20px 0;
-    }
-
-    .deposit-form-label {
-      font-size: 14px;
-      color: var(--text-secondary);
-      margin-bottom: 8px;
-    }
-
-    .amount-input {
-      width: 100%;
-      padding: 16px;
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      color: var(--text-primary);
-      font-size: 24px;
-      font-weight: 700;
-      text-align: center;
-      margin-bottom: 16px;
-    }
-
-    .amount-limits {
-      font-size: 12px;
-      color: var(--text-muted);
-      text-align: center;
-      margin-bottom: 16px;
-    }
-
-    /* Graph placeholder */
-    .graph-placeholder {
-      height: 200px;
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-muted);
-      margin-bottom: 16px;
-    }
-
-    .calculation-result {
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      text-align: center;
-    }
+    .next-accrual { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 14px; color: var(--text-secondary); text-align: center; }
+    .next-accrual-amount { color: var(--success); font-weight: 600; }
+    .btn-group { display: flex; gap: 12px; margin-bottom: 24px; }
+    .btn { flex: 1; padding: 16px 24px; border-radius: 16px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-2px); }
+    .btn-secondary { background: var(--glass-bg); border: 1px solid var(--border); color: var(--text-primary); }
+    .btn-secondary:hover { background: var(--bg-card); transform: translateY(-2px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+    .strategies-section h2 { font-size: 20px; font-weight: 700; margin-bottom: 16px; color: var(--text-primary); }
+    .strategy-cards { display: flex; flex-direction: column; gap: 12px; }
+    .strategy-card { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 16px; padding: 20px; cursor: pointer; transition: all 0.2s ease; }
+    .strategy-card:hover { background: var(--bg-card); transform: translateY(-2px); }
+    .strategy-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .strategy-name { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+    .strategy-rate { font-size: 24px; font-weight: 800; color: var(--accent); }
+    .strategy-description { font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; }
+    .strategy-features { display: flex; gap: 8px; flex-wrap: wrap; }
+    .feature-tag { padding: 4px 8px; background: var(--glass-bg); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: var(--text-secondary); }
+    .status{ position:fixed; top:80px; right:20px; padding:8px 12px; border-radius:12px; background:var(--glass-bg); border:1px solid var(--border); font-size:12px; backdrop-filter:blur(10px); z-index:90; transform:translateX(130%); opacity:0; transition:transform .35s ease, opacity .35s ease; pointer-events:none; }
+    .status.show{ transform:translateX(0); opacity:1; }
+    .status.loading{ color:var(--warning); }
+    .status.synced{  color:var(--success); }
+    .status.error{   color:var(--error); }
+    .modal-overlay.active { display: flex; }
+    .modal { background: var(--bg-primary); border-radius: 24px 24px 0 0; width: 100%; max-width: 430px; max-height: 90vh; overflow-y: auto; padding: 24px; animation: slideUp 0.3s ease; }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .modal-title { font-size: 20px; font-weight: 700; }
+    .close-btn { width: 32px; height: 32px; border: none; background: var(--glass-bg); border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .method-cards { display: flex; flex-direction: column; gap: 12px; }
+    .method-card { background: var(--glass-bg); border: 1px solid var(--border); border-radius: 16px; padding: 20px; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; gap: 16px; }
+    .method-card.disabled { opacity: 0.5; cursor: not-allowed; }
+    .method-card:not(.disabled):hover { background: var(--bg-card); transform: translateY(-2px); }
+    .method-icon { width: 48px; height: 48px; border-radius: 12px; background: var(--accent); display: flex; align-items: center; justify-content: center; }
+    .method-info h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .method-info p { font-size: 14px; color: var(--text-secondary); }
+    .popup { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: rgba(20,20,20,0.95); color: white; padding: 16px 20px; border-radius: 16px; font-size: 14px; z-index: 9999; max-width: 90vw; text-align: center; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); white-space: pre-line; }
+    .filter-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .filter-chip { padding: 8px 16px; background: var(--glass-bg); border: 1px solid var(--border); border-radius: 20px; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+    .filter-chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .filter-chip:hover:not(.active) { background: var(--bg-card); transform: translateY(-1px); }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -880,21 +157,12 @@
       <div class="header-content">
         <div class="logo">HomerBot</div>
         <button class="profile-btn" onclick="openModal('profile')">
-          <svg class="nav-icon" viewBox="0 0 24 24">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </button>
       </div>
     </div>
 
     <div id="status" class="status loading">Подключение...</div>
-
-    <button class="support-btn" onclick="showDevPopup('Функция в разработке')">
-      <svg class="nav-icon" viewBox="0 0 24 24" style="color: white;">
-        <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-      </svg>
-    </button>
 
     <div class="page active" id="pageHome">
       <div class="card">
@@ -902,595 +170,92 @@
           <div class="balance-label">Общий баланс</div>
           <div class="balance-main">
             <span id="balanceValue">—</span>
-            <div class="balance-currency" onclick="toggleCurrencyDropdown(event)">
-              <span id="currentCurrency">RUB</span>
-              <span class="currency-arrow">▼</span>
-              <div class="currency-dropdown" id="currencyDropdown">
-                <div class="currency-option active" onclick="selectCurrency('RUB', event)">RUB</div>
-                <div class="currency-option" onclick="selectCurrency('USD', event)">USD</div>
-                <div class="currency-option" onclick="selectCurrency('EUR', event)">EUR</div>
-              </div>
-            </div>
           </div>
-          
           <div class="balance-stats">
-            <div class="balance-stat">
-              <div class="stat-label">Свободно</div>
-              <div class="stat-value" id="freeBalance">—</div>
-            </div>
-            <div class="balance-stat">
-              <div class="stat-label">Инвестировано</div>
-              <div class="stat-value stat-positive" id="investedBalance">—</div>
-            </div>
-            <div class="balance-stat">
-              <div class="stat-label">Доход сегодня</div>
-              <div class="stat-value stat-positive" id="todayIncome">+0.00</div>
-            </div>
-          </div>
-          
-          <div class="next-accrual">
-            Начислим <span class="next-accrual-amount" id="nextAccrualAmount">125.50</span> <span id="nextAccrualDate">завтра</span>
+            <div class="balance-stat"><div class="stat-label">Свободно</div><div class="stat-value" id="freeBalance">—</div></div>
+            <div class="balance-stat"><div class="stat-label">Инвестировано</div><div class="stat-value stat-positive" id="investedBalance">—</div></div>
+            <div class="balance-stat"><div class="stat-label">Доход сегодня</div><div class="stat-value stat-positive" id="todayIncome">+0.00</div></div>
           </div>
         </div>
       </div>
-
       <div class="btn-group">
-        <button class="btn btn-primary" onclick="openModal('deposit')">
-          <svg class="nav-icon" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
-            <path d="M12 5v14m-7-7l7-7 7 7"/>
-          </svg>
-          Депозит
-        </button>
-        <button class="btn btn-secondary" onclick="openModal('withdraw')">
-          <svg class="nav-icon" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
-            <path d="M12 19V5m-7 7l7 7 7-7"/>
-          </svg>
-          Вывод
-        </button>
+        <button class="btn btn-primary" onclick="openModal('deposit')">Депозит</button>
+        <button class="btn btn-secondary" onclick="openModal('withdraw')">Вывод</button>
       </div>
-
       <div class="strategies-section">
         <h2>Инвестиционные стратегии</h2>
-        
         <div class="strategy-cards">
           <div class="strategy-card" onclick="openModal('strategy1')">
-            <div class="strategy-header">
-              <div class="strategy-name">Гибкая</div>
-              <div class="strategy-rate">16%</div>
-            </div>
+            <div class="strategy-header"><div class="strategy-name">Гибкая</div><div class="strategy-rate">16%</div></div>
             <div class="strategy-description">Вывод в любое время без штрафа</div>
-            <div class="strategy-features">
-              <span class="feature-tag">Без заморозки</span>
-              <span class="feature-tag">Банковские вклады</span>
-            </div>
+            <div class="strategy-features"><span class="feature-tag">Без заморозки</span><span class="feature-tag">Банковские вклады</span></div>
           </div>
-
           <div class="strategy-card" onclick="openModal('strategy30')">
-            <div class="strategy-header">
-              <div class="strategy-name">30 дней</div>
-              <div class="strategy-rate">17%</div>
-            </div>
+            <div class="strategy-header"><div class="strategy-name">30 дней</div><div class="strategy-rate">17%</div></div>
             <div class="strategy-description">Заморозка 30 дней • Досрочный вывод — теряются проценты текущего периода</div>
-            <div class="strategy-features">
-              <span class="feature-tag">Заморозка на 30 дней</span>
-              <span class="feature-tag">Банковские вклады</span>
-              <span class="feature-tag">ЦФА</span>
-            </div>
+            <div class="strategy-features"><span class="feature-tag">Заморозка на 30 дней</span><span class="feature-tag">ЦФА</span></div>
           </div>
-
           <div class="strategy-card" onclick="openModal('strategy90')">
-            <div class="strategy-header">
-              <div class="strategy-name">90 дней</div>
-              <div class="strategy-rate">18%</div>
-            </div>
+            <div class="strategy-header"><div class="strategy-name">90 дней</div><div class="strategy-rate">18%</div></div>
             <div class="strategy-description">Заморозка 90 дней • Досрочный вывод — теряются проценты текущего периода</div>
-            <div class="strategy-features">
-              <span class="feature-tag">Заморозка на 90 дней</span>
-              <span class="feature-tag">Банковские вклады</span>
-              <span class="feature-tag">ЦФА</span>
-              <span class="feature-tag">Займы</span>
-            </div>
+            <div class="strategy-features"><span class="feature-tag">Заморозка на 90 дней</span><span class="feature-tag">Займы</span></div>
           </div>
         </div>
-      </div>
-
-      <div style="margin-top: 24px;">
-        <button class="btn btn-secondary" id="simulateButton" onclick="simulateMonthlyInterest()" style="width: 100%;">
-          <svg class="nav-icon" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12,6 12,12 16,14"/>
-          </svg>
-          Имитация месяца
-        </button>
       </div>
     </div>
 
     <div class="page" id="pagePortfolio">
       <div class="card">
         <h2 style="margin-bottom: 16px;">Мой портфель</h2>
-        <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;" id="portfolio-placeholder">
-          Здесь будет отображаться информация о ваших активных инвестициях
-        </p>
+        <div id="portfolio-list"></div>
+        <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;" id="portfolio-placeholder">Здесь будет отображаться информация о ваших активных инвестициях.</p>
       </div>
     </div>
-
-    <div class="page" id="pageCalculator">
-      <div class="card">
-        <h2 style="margin-bottom: 16px;">Калькулятор доходности</h2>
-        
-        <div class="dropdown" id="strategyDropdown">
-          <div class="dropdown-select" onclick="toggleDropdown('strategyDropdown')">
-            <span id="selectedStrategy">Выберите стратегию</span>
-            <span class="dropdown-arrow">▼</span>
-          </div>
-          <div class="dropdown-menu">
-            <div class="dropdown-item" onclick="selectStrategy('Гибкая 16%')">Гибкая 16%</div>
-            <div class="dropdown-item" onclick="selectStrategy('30 дней 17%')">30 дней 17%</div>
-            <div class="dropdown-item" onclick="selectStrategy('90 дней 18%')">90 дней 18%</div>
-          </div>
-        </div>
-
-        <div class="deposit-form-label">Сумма инвестиций</div>
-        <input type="text" class="amount-input" id="calculatorAmount" placeholder="0" oninput="formatAmount(this); calculateProfit()">
-        
-        <div class="graph-placeholder">
-          📈 График доходности
-        </div>
-        
-        <div class="calculation-result">
-          <div style="color: var(--text-secondary); margin-bottom: 8px;">Расчёт доходности</div>
-          <div id="calculationResult" style="font-size: 18px; font-weight: 700;">Выберите стратегию и введите сумму</div>
-        </div>
-      </div>
-    </div>
-
+    
     <div class="page" id="pageHistory">
-      <div class="card">
-        <h2 style="margin-bottom: 16px;">История операций</h2>
-        
-        <div class="filter-chips">
-          <div class="filter-chip active" onclick="toggleFilter(this, 'all')">Все</div>
-          <div class="filter-chip" onclick="toggleFilter(this, 'deposit')">Депозит</div>
-          <div class="filter-chip" onclick="toggleFilter(this, 'withdraw')">Вывод</div>
-          <div class="filter-chip" onclick="toggleFilter(this, 'accrual')">Начисления</div>
-          <div class="filter-chip" onclick="toggleFilter(this, 'strategy')">Инвестиции</div>
+        <div class="card">
+            <h2 style="margin-bottom: 16px;">История операций</h2>
+            <div class="filter-chips">
+                <div class="filter-chip active" onclick="applyHistoryFilter(this, 'all')">Все</div>
+                <div class="filter-chip" onclick="applyHistoryFilter(this, 'deposit')">Депозит</div>
+                <div class="filter-chip" onclick="applyHistoryFilter(this, 'withdraw')">Вывод</div>
+                <div class="filter-chip" onclick="applyHistoryFilter(this, 'invest')">Инвестиции</div>
+            </div>
+            <div id="history-list"></div>
+            <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;" id="history-placeholder">История ваших депозитов, выводов и начислений появится здесь.</p>
         </div>
-        
-        <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;" id="history-placeholder">
-          История ваших депозитов, выводов и начислений появится здесь
-        </p>
-      </div>
     </div>
 
     <div class="bottom-nav">
       <div class="nav-items">
-        <div class="nav-item active" onclick="openPage('home')">
-          <svg class="nav-icon" viewBox="0 0 24 24">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-            <polyline points="9,22 9,12 15,12 15,22"/>
-          </svg>
-          <span class="nav-label">Главная</span>
-        </div>
-        
-        <div class="nav-item" onclick="openPage('portfolio')">
-          <svg class="nav-icon" viewBox="0 0 24 24">
-            <line x1="18" y1="20" x2="18" y2="10"/>
-            <line x1="12" y1="20" x2="12" y2="4"/>
-            <line x1="6" y1="20" x2="6" y2="14"/>
-          </svg>
-          <span class="nav-label">Портфель</span>
-        </div>
-        
-        <div class="nav-item" onclick="openPage('calculator')">
-          <svg class="nav-icon" viewBox="0 0 24 24">
-            <rect x="4" y="4" width="16" height="16" rx="2" ry="2"/>
-            <rect x="9" y="9" width="6" height="6"/>
-            <line x1="9" y1="1" x2="9" y2="4"/>
-            <line x1="15" y1="1" x2="15" y2="4"/>
-            <line x1="9" y1="20" x2="9" y2="23"/>
-            <line x1="15" y1="20" x2="15" y2="23"/>
-          </svg>
-          <span class="nav-label">Калькулятор</span>
-        </div>
-        
-        <div class="nav-item" onclick="openPage('history')">
-          <svg class="nav-icon" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12,6 12,12 16,14"/>
-          </svg>
-          <span class="nav-label">История</span>
-        </div>
+        <div class="nav-item active" onclick="openPage('Home')"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg><span class="nav-label">Главная</span></div>
+        <div class="nav-item" onclick="openPage('Portfolio')"><svg class="nav-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span class="nav-label">Портфель</span></div>
+        <div class="nav-item" onclick="openPage('History')"><svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg><span class="nav-label">История</span></div>
       </div>
     </div>
   </div>
 
-  <div class="modal-overlay" id="modalDeposit">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 class="modal-title">Депозит</h2>
-        <button class="close-btn" onclick="closeModal('deposit')">
-          <svg class="nav-icon" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      
-      <div class="deposit-form-label">Быстрый выбор суммы</div>
-      <div class="quick-amounts">
-        <button class="quick-amount-btn" onclick="setDepositAmount(1000)">1 000 ₽</button>
-        <button class="quick-amount-btn" onclick="setDepositAmount(5000)">5 000 ₽</button>
-        <button class="quick-amount-btn" onclick="setDepositAmount(10000)">10 000 ₽</button>
-        <button class="quick-amount-btn" onclick="setDepositAmount(25000)">25 000 ₽</button>
-        <button class="quick-amount-btn" onclick="setDepositAmount(50000)">50 000 ₽</button>
-        <button class="quick-amount-btn" onclick="setDepositAmount(100000)">100 000 ₽</button>
-      </div>
-      
-      <div class="deposit-form-label">Или введите сумму</div>
-      <input type="text" class="amount-input" id="depositAmount" placeholder="0" oninput="formatAmount(this)">
-      <div class="amount-limits">Лимиты: min 100 ₽ / max 10 000 000 ₽</div>
-      
-      <div class="method-cards">
-        <div class="method-card disabled" onclick="showDevPopup('Функция в разработке')">
-          <div class="method-icon" style="background: #6b7280;">
-            <svg class="nav-icon" viewBox="0 0 24 24" style="color: white;">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
-              <line x1="9" y1="9" x2="9.01" y2="9"/>
-              <line x1="15" y1="9" x2="15.01" y2="9"/>
-            </svg>
-          </div>
-          <div class="method-info">
-            <h3>Криптовалюта <span class="dev-notice">В разработке</span></h3>
-            <p>TON, USDT, другие монеты</p>
-          </div>
-        </div>
-
-        <div class="method-card disabled" onclick="showDevPopup('Функция в разработке')">
-          <div class="method-icon" style="background: #6b7280;">
-            <svg class="nav-icon" viewBox="0 0 24 24" style="color: white;">
-              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
-              <line x1="1" y1="10" x2="23" y2="10"/>
-            </svg>
-          </div>
-          <div class="method-info">
-            <h3>Банковская карта <span class="dev-notice">В разработке</span></h3>
-            <p>Visa, Mastercard, МИР</p>
-          </div>
-        </div>
-
-        <div class="method-card" onclick="showP2PInfo()">
-          <div class="method-icon">
-            <svg class="nav-icon" viewBox="0 0 24 24" style="color: white;">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-            </svg>
-          </div>
-          <div class="method-info">
-            <h3>P2P переводы</h3>
-            <p>Переводы по номеру телефона • 0% комиссия</p>
-          </div>
-        </div>
-      </div>
-      
-      <div style="margin-top: 20px;">
-        <div class="input-with-copy">
-          <input type="text" class="input-field" value="+7 916 643 54 94" readonly>
-          <button class="copy-btn" onclick="copyToClipboard('+79166435494')">
-            <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-            </svg>
-          </button>
-        </div>
-        
-        <div class="deposit-form-label">ID операции</div>
-        <div class="input-with-copy">
-          <input type="text" class="input-field" value="OP-2024-001234" readonly>
-          <button class="copy-btn" onclick="copyToClipboard('OP-2024-001234')">
-            <svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="modalWithdraw">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 class="modal-title">Вывод средств</h2>
-        <button class="close-btn" onclick="closeModal('withdraw')">
-          <svg class="nav-icon" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      
-      <div class="card" style="margin-bottom: 0;">
-        <div style="text-align: center; padding: 40px 20px;">
-          <p style="color: var(--text-secondary); margin-bottom: 16px;">Доступно для вывода</p>
-          <div style="font-size: 28px; font-weight: 800; margin-bottom: 24px;" id="availableBalance">—</div>
-          
-          <div class="method-cards">
-            <div class="method-card" onclick="showWithdrawForm()">
-              <div class="method-icon">
-                <svg class="nav-icon" viewBox="0 0 24 24" style="color: white;">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                </svg>
-              </div>
-              <div class="method-info">
-                <h3>Быстрые платежи (СБП)</h3>
-                <p>Вывод по номеру телефона</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="modalStrategy1">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 class="modal-title">Гибкая стратегия 16%</h2>
-        <button class="close-btn" onclick="closeModal('strategy1')">
-          <svg class="nav-icon" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      
-      <div class="card" style="margin-bottom: 16px;">
-        <h3 style="margin-bottom: 12px; color: var(--accent);">Условия стратегии</h3>
-        <ul style="color: var(--text-secondary); line-height: 1.6;">
-          <li>• Годовая ставка: <strong>16%</strong></li>
-          <li>• Ежемесячная капитализация</li>
-          <li>• Вывод в любое время без штрафа</li>
-          <li>• Моментальное начисление процентов</li>
-        </ul>
-      </div>
-<button class="btn btn-primary" onclick="openNewInvestment('16')" style="width: 100%;">Использовать эту стратегию</button>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="modalStrategy30">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 class="modal-title">Стратегия 30 дней 17%</h2>
-        <button class="close-btn" onclick="closeModal('strategy30')">
-          <svg class="nav-icon" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      
-      <div class="card" style="margin-bottom: 16px;">
-        <h3 style="margin-bottom: 12px; color: var(--accent);">Условия стратегии</h3>
-        <ul style="color: var(--text-secondary); line-height: 1.6;">
-          <li>• Годовая ставка: <strong>17%</strong></li>
-          <li>• Заморозка на 30 дней</li>
-          <li>• Ежемесячная капитализация</li>
-          <li>• Досрочный вывод — теряются проценты текущего периода</li>
-          <li>• Моментальное начисление процентов</li>
-        </ul>
-        
-        <div class="toggle-container">
-          <span>Автопролонгация</span>
-          <div class="toggle-switch" onclick="toggleSwitch(this)">
-            <div class="toggle-slider"></div>
-          </div>
-        </div>
-      </div>
-<button class="btn btn-primary" onclick="openNewInvestment('17')" style="width: 100%;">Использовать эту стратегию</button>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="modalStrategy90">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 class="modal-title">Стратегия 90 дней 18%</h2>
-        <button class="close-btn" onclick="closeModal('strategy90')">
-          <svg class="nav-icon" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      
-      <div class="card" style="margin-bottom: 16px;">
-        <h3 style="margin-bottom: 12px; color: var(--accent);">Условия стратегии</h3>
-        <ul style="color: var(--text-secondary); line-height: 1.6;">
-          <li>• Годовая ставка: <strong>18%</strong></li>
-          <li>• Заморозка на 90 дней</li>
-          <li>• Ежемесячная капитализация</li>
-          <li>• Досрочный вывод — теряются проценты текущего периода</li>
-          <li>• Моментальное начисление процентов</li>
-        </ul>
-        
-        <div class="toggle-container">
-          <span>Автопролонгация</span>
-          <div class="toggle-switch" onclick="toggleSwitch(this)">
-            <div class="toggle-slider"></div>
-          </div>
-        </div>
-      </div>
-<button class="btn btn-primary" onclick="openNewInvestment('18')" style="width: 100%;">Использовать эту стратегию</button>
-    </div>
-  </div>
-
-<div class="modal-overlay" id="modalNewInvestment">
-  <div class="modal">
-    <div class="modal-header">
-      <h2 class="modal-title">Открытие стратегии</h2>
-      <button class="close-btn" onclick="closeModal('newInvestment')">
-        <svg class="nav-icon" viewBox="0 0 24 24" style="width:20px;height:20px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-
-    <div class="deposit-form-label">Стратегия</div>
-    <div class="input-field" id="niStrategyReadonly" style="text-align:center;font-weight:700">—</div>
-
-    <div class="deposit-form-label" style="margin-top:12px">Сумма</div>
-    <input type="text" class="amount-input" id="niAmount" placeholder="0" oninput="formatAmount(this)">
-
-    <label style="display:flex;gap:8px;align-items:center;margin:10px 0 16px;">
-      <input type="checkbox" id="niAgree"> <span>С правилами ознакомлен</span>
-    </label>
-
-    <button class="btn btn-primary" style="width:100%" id="niConfirmBtn" disabled>Подтвердить</button>
-  </div>
-</div>
-
-  
   <div class="modal-overlay" id="modalProfile">
     <div class="modal">
-      <div class="modal-header">
-        <h2 class="modal-title">Профиль</h2>
-        <button class="close-btn" onclick="closeModal('profile')">
-          <svg class="nav-icon" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      
+      <div class="modal-header"><h2 class="modal-title">Профиль</h2><button class="close-btn" onclick="closeModal('profile')">✕</button></div>
       <div class="card" style="text-align: center; margin-bottom: 16px;">
-        <div style="width: 80px; height: 80px; background: var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
-          <svg class="nav-icon" viewBox="0 0 24 24" style="width: 32px; height: 32px; color: white;">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
-        </div>
-        <h3 id="profileUsername">—</h3>
-        <p style="color: var(--text-secondary); font-size: 14px;">Telegram пользователь</p>
-      </div>
-
-      <div class="method-cards">
-        <div class="method-card" onclick="showDevPopup('Функция в разработке')">
-          <div class="method-icon" style="background: #6b7280;">
-            <svg class="nav-icon" viewBox="0 0 24 24" style="color: white;">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-              <circle cx="12" cy="16" r="1"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-          </div>
-          <div class="method-info">
-            <h3>Безопасность <span class="dev-notice">В разработке</span></h3>
-            <p>2FA, подтверждение операций, KYC</p>
-          </div>
-        </div>
-
-        <div class="method-card" onclick="showDevPopup('Функция в разработке')">
-          <div class="method-icon" style="background: #6b7280;">
-            <svg class="nav-icon" viewBox="0 0 24 24" style="color: white;">
-              <path d="M14.828 14.828a4 4 0 0 1-5.656 0M9 10h.01M15 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-            </svg>
-          </div>
-          <div class="method-info">
-            <h3>Уведомления <span class="dev-notice">В разработке</span></h3>
-            <p>Настройка push-уведомлений</p>
-          </div>
-        </div>
-
-        <div class="method-card" onclick="showDevPopup('Функция в разработке')">
-          <div class="method-icon" style="background: #6b7280;">
-            <svg class="nav-icon" viewBox="0 0 24 24" style="color: white;">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/>
-            </svg>
-          </div>
-          <div class="method-info">
-            <h3>Язык <span class="dev-notice">В разработке</span></h3>
-            <p>RU, ENG</p>
-          </div>
-        </div>
-
-        <div class="method-card" onclick="openDocuments()">
-          <div class="method-icon">
-            <svg class="nav-icon" viewBox="0 0 24 24" style="color: white;">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14,2 14,8 20,8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-              <polyline points="10,9 9,9 8,9"/>
-            </svg>
-          </div>
-          <div class="method-info">
-            <h3>Документы</h3>
-            <p>Условия пользования, политика</p>
-          </div>
-        </div>
+        <h3 id="profileUsername">—</h3><p style="color: var(--text-secondary); font-size: 14px;">Telegram пользователь</p>
       </div>
     </div>
   </div>
-
+  
   <script>
-    const SCRIPT_URL = (window.scriptUrl || (window.SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec'));
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
 
     // --- State ---
     window.username = null;
     window.isInitialized = false;
-    window.serverBalance = 0;
-    window.currentRate = 16;
+    window.serverState = { balance: 0, rate: 16, monthBase: 0 };
     window.pendingRequest = false;
-    window.currentCurrency = 'RUB';
-    window.exchangeRates = { RUB: 1, USD: 0.011, EUR: 0.010 };
-    window.__lastChosenStrategy = null; // '16' | '17' | '18'
-
+    
     // --- UI helpers ---
-    function fmtMoney(x) {
-      const n = Number(x) || 0;
-      return n.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-    }
+    function fmtMoney(x) { return (Number(x) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
 
-function openNewInvestment(rateCode){ // '16' | '17' | '18'
-  window.__lastChosenStrategy = String(rateCode);
-  const name = rateCode==='16' ? 'Гибкая 16%' : (rateCode==='17' ? '30 дней 17%' : '90 дней 18%');
-  document.getElementById('niStrategyReadonly').textContent = name;
-  document.getElementById('niAmount').value = '';
-  document.getElementById('niAgree').checked = false;
-  document.getElementById('niConfirmBtn').disabled = true;
-  closeModal('strategy1'); closeModal('strategy30'); closeModal('strategy90');
-  openModal('newInvestment');
-  // Переходим на вкладку «Портфель»
-  openPage('portfolio');
-}
-
-document.getElementById('niAgree').addEventListener('change', function(){
-  document.getElementById('niConfirmBtn').disabled = !this.checked;
-});
-
-document.getElementById('niConfirmBtn').addEventListener('click', async function(){
-  const raw = document.getElementById('niAmount').value;
-  const amount = parseInt(String(raw).replace(/[^\d]/g,'')) || 0;
-  if (!window.__lastChosenStrategy) { showPopup('Не выбрана стратегия'); return; }
-  if (amount <= 0) { showPopup('Введите сумму'); return; }
-  if (!document.getElementById('niAgree').checked) { showPopup('Нужно согласиться с правилами'); return; }
-
-  try {
-    const rate = window.__lastChosenStrategy; // '16' '17' '18'
-    const resp = await apiGet(`?action=logStrategyInvestment&username=${window.username}&rate=${rate}&amount=${amount}`);
-    if (!resp.success) {
-        showPopup('Не удалось создать инвестицию: ' + (resp.error || 'ошибка сервера'));
-        return;
-    }
-    const { requestId, requestShortId } = resp;
-    
-    addPortfolioItem(requestShortId, amount, rate);
-    addHistoryItem('INVEST', amount, requestShortId, `Стратегия ${rate}%`);
-
-    showPopup(`[#${requestShortId}] Открыта стратегия на ${fmtMoney(amount)} ₽`);
-    closeModal('newInvestment');
-  } catch(e){
-    showPopup('Не удалось создать инвестицию');
-  }
-});
-    
     function showPopup(text, timeout = 3000) {
       const el = document.createElement('div');
       el.className = 'popup';
@@ -1503,254 +268,102 @@ document.getElementById('niConfirmBtn').addEventListener('click', async function
         setTimeout(() => el.remove(), 250); 
       }, timeout);
     }
-
-    function showDevPopup(text) {
-      showPopup(text, 2000);
-    }
-
-    // Page navigation
-function openPage(pageId){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.getElementById(`page${pageId.charAt(0).toUpperCase()+pageId.slice(1)}`)?.classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(n=> n.classList.remove('active'));
-  // активируем нужную кнопку
-  document.querySelectorAll('.nav-item').forEach(n=>{
-    const label = n.querySelector('.nav-label')?.textContent?.toLowerCase() || '';
-    const map = { 'главная':'home','портфель':'portfolio','калькулятор':'calculator','история':'history' };
-    if (map[label] === pageId) n.classList.add('active');
-  });
-}
-
-
-    // Modal functions
-    function openModal(modalId) {
-      const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
-      if (modal) {
-        modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-      }
-    }
-
-    function closeModal(modalId) {
-      const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
-      if (modal) {
-        modal.classList.remove('active');
-        document.body.style.overflow = '';
-      }
-    }
-
-function addPortfolioItem(shortId, amount, rateCode){
-  const host = document.querySelector('#pagePortfolio .card');
-  if (!host) return;
-
-  const placeholder = document.getElementById('portfolio-placeholder');
-  if(placeholder) placeholder.style.display = 'none';
-
-  const row = document.createElement('div');
-  row.className = 'glass-card';
-  row.style.marginBottom = '12px';
-  row.innerHTML = `<b>#${shortId}</b> · ${fmtMoney(amount)} ₽ · ${rateCode}%`;
-  host.appendChild(row);
-}
-
-function addHistoryItem(type, amount, shortId, titleOpt){
-    const host = document.querySelector('#pageHistory .card');
-    if (!host) return;
-
-    const placeholder = document.getElementById('history-placeholder');
-    if (placeholder) placeholder.style.display = 'none';
-
-    const row = document.createElement('div');
-    row.className = 'glass-card';
-    row.dataset.type = type.toLowerCase();
     
-    let title, subTitle = '';
-    if (type === 'INVEST') {
-        title = 'Инвестиция';
-        subTitle = `<div style="font-size: 12px; color: var(--text-secondary);">${titleOpt.replace('Стратегия', 'Стратегия:')}</div>`;
-    } else {
-        title = titleOpt || (type === 'deposit' ? 'Депозит' : type === 'withdraw' ? 'Вывод' : 'Инвестиция');
+    let __statusHideTimer=null;
+    function setStatus(text, type='loading', hold = false){
+        const el=document.getElementById('status'); if(!el) return;
+        el.textContent = text;
+        el.className = `status ${type} show`;
+        if(__statusHideTimer) clearTimeout(__statusHideTimer);
+        if(!hold){
+            __statusHideTimer = setTimeout(() => el.classList.remove('show'), 2000);
+        }
     }
 
-    const now = new Date();
-    const timeStr = `${now.getDate().toString().padStart(2, '0')}.${(now.getMonth() + 1).toString().padStart(2, '0')}.${now.getFullYear().toString().slice(-2)} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    
-    row.innerHTML = `<b>${title}</b> ${subTitle} · ${fmtMoney(amount)} · #${shortId} · <span class="muted">${timeStr}</span>`;
-    host.appendChild(row);
-}
-
-
-    
-    // Close modals on overlay click
-    document.addEventListener('click', function(e) {
-      if (e.target.classList.contains('modal-overlay')) {
-        e.target.classList.remove('active');
-        document.body.style.overflow = '';
-      }
-    });
-
-    // Currency functions
-    function toggleCurrencyDropdown(event) {
-      event.stopPropagation();
-      const dropdown = document.getElementById('currencyDropdown');
-      dropdown.classList.toggle('open');
-    }
-
-    function selectCurrency(currency, event) {
-      event.stopPropagation();
-      window.currentCurrency = currency;
-      document.getElementById('currentCurrency').textContent = currency;
-      
-      // Update active state
-      document.querySelectorAll('.currency-option').forEach(opt => opt.classList.remove('active'));
-      event.target.classList.add('active');
-      
-      // Close dropdown
-      document.getElementById('currencyDropdown').classList.remove('open');
-      
-      // Update display
-      updateDisplay();
-    }
-
-    // Close currency dropdown when clicking outside
-    document.addEventListener('click', function() {
-      document.getElementById('currencyDropdown').classList.remove('open');
-    });
-
-    // Toggle functions
-    function toggleSwitch(element) {
-      element.classList.toggle('active');
-    }
-
-    function toggleDropdown(dropdownId) {
-      const dropdown = document.getElementById(dropdownId);
-      dropdown.classList.toggle('open');
-    }
-
-    function selectStrategy(strategy) {
-      document.getElementById('selectedStrategy').textContent = strategy;
-      document.getElementById('strategyDropdown').classList.remove('open');
-      calculateProfit();
-    }
-
-    function toggleFilter(element, type) {
-        document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
-        element.classList.add('active');
-
-        const historyItems = document.querySelectorAll('#pageHistory .glass-card');
-        historyItems.forEach(item => {
-            if (type === 'all' || item.dataset.type === type) {
-                item.style.display = 'block';
-            } else {
-                item.style.display = 'none';
-            }
-        });
-    }
-
-    // Amount formatting
-    function formatAmount(input) {
-      let value = input.value.replace(/[^\d]/g, '');
-      if (value) {
-        value = parseInt(value).toLocaleString('ru-RU');
-      }
-      input.value = value;
-    }
-
-    function setDepositAmount(amount) {
-      const input = document.getElementById('depositAmount');
-      input.value = amount.toLocaleString('ru-RU');
-    }
-
-    function copyToClipboard(text) {
-      navigator.clipboard.writeText(text).then(() => {
-        showPopup('Скопировано в буфер обмена');
+    function openPage(pageId){
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById(`page${pageId}`).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => {
+        n.classList.remove('active');
+        if (n.onclick.toString().includes(`'${pageId}'`)) {
+          n.classList.add('active');
+        }
       });
     }
 
-    function calculateProfit() {
-      const strategy = document.getElementById('selectedStrategy').textContent;
-      const amountStr = document.getElementById('calculatorAmount').value;
-      const amount = parseInt(amountStr.replace(/[^\d]/g, '')) || 0;
-      
-      if (strategy === 'Выберите стратегию' || amount === 0) {
-        document.getElementById('calculationResult').textContent = 'Выберите стратегию и введите сумму';
-        return;
-      }
-      
-      let rate = 0.16;
-      if (strategy.includes('17%')) rate = 0.17;
-      if (strategy.includes('18%')) rate = 0.18;
-      
-      const monthlyProfit = amount * rate / 12;
-      const yearlyProfit = amount * rate;
-      
-      document.getElementById('calculationResult').innerHTML = `
-        <div>Доход в месяц: ${fmtMoney(monthlyProfit)} ₽</div>
-        <div>Доход в год: ${fmtMoney(yearlyProfit)} ₽</div>
-      `;
+    function openModal(modalId) { document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`)?.classList.add('active'); }
+    function closeModal(modalId) { document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`)?.classList.remove('active'); }
+    document.addEventListener('click', (e) => { if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('active'); });
+
+    function applyHistoryFilter(element, type) {
+        document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
+        element.classList.add('active');
+        document.querySelectorAll('#history-list .history-item').forEach(item => {
+            item.style.display = (type === 'all' || item.dataset.type === type) ? 'block' : 'none';
+        });
     }
 
-    // Update display
-    function updateDisplay() {
-      const rate = window.exchangeRates[window.currentCurrency];
-      const balance = window.serverBalance * rate;
-      
-      document.getElementById('balanceValue').textContent = fmtMoney(balance);
-      document.getElementById('freeBalance').textContent = fmtMoney(balance);
-      const invested = (window.monthBase || 0) * rate; // в текущей валюте
-      document.getElementById('investedBalance').textContent = fmtMoney(invested);
-
-      document.getElementById('availableBalance').textContent = fmtMoney(balance);
-      
-      // Update profile
-      document.getElementById('profileUsername').textContent = window.username || 'Пользователь';
-      
-      // Update next accrual
-      const nextAccrual = balance * 0.16 / 365;
-      document.getElementById('nextAccrualAmount').textContent = fmtMoney(nextAccrual);
+    // --- Data Rendering ---
+    function updateDashboard(data) {
+        window.serverState = { ...window.serverState, ...data };
+        const { balance, monthBase } = window.serverState;
+        document.getElementById('balanceValue').textContent = fmtMoney(balance);
+        document.getElementById('freeBalance').textContent = fmtMoney(balance);
+        document.getElementById('investedBalance').textContent = fmtMoney(monthBase);
+        document.getElementById('profileUsername').textContent = window.username || 'Пользователь';
     }
 
-let __statusHideTimer=null, __lastStatusText='';
+    function renderHistory(history) {
+        const list = document.getElementById('history-list');
+        const placeholder = document.getElementById('history-placeholder');
+        if (!list || !placeholder) return;
+        list.innerHTML = '';
+        if (history.length === 0) {
+            placeholder.style.display = 'block';
+            return;
+        }
+        placeholder.style.display = 'none';
 
-function showStatusOnce(text, type='loading', holdMs){
-  const el=document.getElementById('status'); if(!el) return;
-  const t=String(text||'').trim(); const cls=`status ${type}`;
-  if(t===__lastStatusText && el.className===cls) return;
-  __lastStatusText=t; el.textContent=t; el.className=cls; el.classList.add('show');
+        history.forEach(item => {
+            const el = document.createElement('div');
+            el.className = 'glass-card history-item';
+            el.dataset.type = item.type.toLowerCase();
+            
+            const date = new Date(item.date);
+            const timeStr = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear().toString().slice(-2)} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+            
+            let title = '';
+            let subTitle = '';
+            switch(item.type) {
+                case 'DEPOSIT': title = 'Депозит'; break;
+                case 'WITHDRAW': title = 'Вывод'; break;
+                case 'INVEST': 
+                    title = 'Инвестиция';
+                    subTitle = `<div style="font-size: 12px; color: var(--text-secondary);">Стратегия: ${item.rate || serverState.rate}%</div>`;
+                    break;
+            }
 
-  if(__statusHideTimer){ clearTimeout(__statusHideTimer); __statusHideTimer=null; }
-  
-  if(type!=='loading'){
-    const ms = typeof holdMs==='number' ? holdMs : 1800;
-    __statusHideTimer=setTimeout(()=>{ el.classList.remove('show'); }, ms);
-  } else {
-      // Keep "loading" status visible until the next status update
-  }
-}
-function setStatus(text,type='loading'){ showStatusOnce(text,type); }
-
-
-
-    function setButtonsWaiting(isWaiting) {
-      const simulateBtn = document.getElementById('simulateButton');
-      if (simulateBtn) {
-        simulateBtn.disabled = !!isWaiting;
-        simulateBtn.textContent = isWaiting ? 'Начисление...' : 'Имитация месяца';
-      }
+            el.innerHTML = `<b>${title}</b> ${subTitle} · ${fmtMoney(item.amount)} · #${item.shortId} · <span style="color:var(--text-muted)">${timeStr}</span>`;
+            list.appendChild(el);
+        });
     }
 
-    // --- TG user ---
-    function getTelegramUser() {
-      try {
-        const tg = window.Telegram?.WebApp; 
-        tg?.expand?.();
-        const initDataUnsafe = tg?.initDataUnsafe || {}; 
-        const user = initDataUnsafe.user || null;
-        if (user && user.username) return user.username;
-        return 'marulin'; // fallback
-      } catch { 
-        return 'marulin'; 
-      }
+    function renderPortfolio(portfolio) {
+        const list = document.getElementById('portfolio-list');
+        const placeholder = document.getElementById('portfolio-placeholder');
+        if (!list || !placeholder) return;
+        list.innerHTML = '';
+        if (portfolio.length === 0) {
+            placeholder.style.display = 'block';
+            return;
+        }
+        placeholder.style.display = 'none';
+        portfolio.forEach(item => {
+            const el = document.createElement('div');
+            el.className = 'glass-card';
+            el.innerHTML = `<b>#${item.shortId}</b> · ${fmtMoney(item.amount)} ₽ · ${item.rate}%`;
+            list.appendChild(el);
+        });
     }
 
     // --- API ---
@@ -1758,35 +371,29 @@ function setStatus(text,type='loading'){ showStatusOnce(text,type); }
       const r = await fetch(`${SCRIPT_URL}${path}`); 
       return r.json(); 
     }
-
+    
     async function initializeUser() {
       try {
-        window.username = getTelegramUser();
+        const tg = window.Telegram?.WebApp;
+        tg?.expand?.();
+        window.username = (tg?.initDataUnsafe?.user?.username) || 'marulin'; // Fallback for testing
         window.isInitialized = true;
-
-        setStatus('Подключение', 'loading');
-
-        // Initial load
-        const data = await apiGet(`?action=getBalance&username=${window.username}&debug=1`);
-        if (!data.success) throw new Error(data.error || 'getBalance failed');
         
-        window.serverBalance = Number(data.balance) || 0;
-        window.currentRate = Number(data.rate) || 16;
+        setStatus('Загрузка данных...', 'loading', true);
         
-        updateDisplay();
-        try {
-          const gb = await apiGet(`?action=getBalance&username=${window.username}`);
-          if (gb.success) window.monthBase = Number(gb.monthBase || window.monthBase || 0);
-        } catch(_) {}
-
-        await refreshTodayIncome();
+        const data = await apiGet(`?action=getInitialData&username=${window.username}`);
+        if (!data.success) throw new Error(data.error || 'Failed to get initial data');
+        
+        updateDashboard(data);
+        renderHistory(data.history);
+        renderPortfolio(data.portfolio);
+        await refreshTodayIncome(); // First calculation
+        
         setStatus('Синхронизировано', 'synced');
-        window.monthBase = Number(data.monthBase || 0);
-        // Immediate sync
-        await syncBalance();
-
-        // Periodic sync
-        setInterval(syncBalance, 20000);
+        
+        setInterval(syncBalance, 20000); // Periodic sync
+        setInterval(refreshTodayIncome, 60000); // Refresh income every minute
+        
       } catch (e) {
         console.error('Initialization error:', e);
         setStatus('Ошибка подключения', 'error');
@@ -1796,28 +403,10 @@ function setStatus(text,type='loading'){ showStatusOnce(text,type); }
     async function syncBalance() {
       if (!window.username || !window.isInitialized) return;
       try {
-        const data = await apiGet(`?action=syncBalance&username=${window.username}&balance=${encodeURIComponent(window.serverBalance)}&rate=${encodeURIComponent(window.currentRate)}&timestamp=${Date.now()}&debug=1`);
-        
+        const data = await apiGet(`?action=syncBalance&username=${window.username}&balance=${serverState.balance}&rate=${serverState.rate}&timestamp=${Date.now()}`);
         if (data.success) {
-          if (typeof data.balance === 'number' && isFinite(data.balance)) {
-            window.serverBalance = Number(data.balance);
-          }
-          if (typeof data.rate === 'number' && isFinite(data.rate)) {
-            window.currentRate = Number(data.rate);
-          }
-
-          if (data.adminResponse && window.pendingRequest) {
-            const resp = String(data.adminResponse).trim().toLowerCase();
-            const shortId = data.adminResponseShortId || (data.adminResponseId ? (String(data.adminResponseId).split('-')[1] || '') : '');
-            if (resp === 'approved') showPopup(shortId ? `[#${shortId}] Операция одобрена` : 'Операция одобрена');
-            if (resp === 'rejected') showPopup(shortId ? `[#${shortId}] Операция отклонена` : 'Операция отклонена');
-            window.pendingRequest = false; 
-            setButtonsWaiting(false);
-          }
-
-          updateDisplay();
+          updateDashboard(data);
           setStatus('Синхронизировано', 'synced');
-          await refreshTodayIncome();
         } else {
           setStatus('Ошибка синхронизации', 'error');
         }
@@ -1827,163 +416,38 @@ function setStatus(text,type='loading'){ showStatusOnce(text,type); }
       }
     }
 
-    async function sendDeposit(amount) {
-      window.pendingRequest = true; 
-      setButtonsWaiting(true);
-      try {
-        const data = await apiGet(`?action=requestDeposit&username=${window.username}&amount=${encodeURIComponent(amount)}`);
-        if (data.success) {
-          const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
-          addHistoryItem('deposit', amount, (data.requestShortId || (data.requestId ? String(data.requestId).split('-')[1] : '')));
-          showPopup(shortId ? `Запрос отправлен [#${shortId}]` : 'Запрос отправлен');
-        } else {
-          showPopup('Ошибка: ' + (data.error || 'неизвестно'));
-          window.pendingRequest = false; 
-          setButtonsWaiting(false);
+    async function refreshTodayIncome() {
+        if (!window.username) return;
+        try {
+            const res = await apiGet(`?action=previewAccrual&username=${window.username}`);
+            if (!res.success) return;
+
+            const todayKey = `accrual_start_${window.username}_${new Date().toLocaleDateString('en-CA')}`;
+            let startOfDayAccrued = localStorage.getItem(todayKey);
+
+            if (startOfDayAccrued === null) {
+                startOfDayAccrued = res.accruedToNow || 0;
+                localStorage.setItem(todayKey, startOfDayAccrued);
+            }
+
+            const todayIncome = Math.max(0, (res.accruedToNow || 0) - Number(startOfDayAccrued));
+            document.getElementById('todayIncome').textContent = `+${fmtMoney(todayIncome)}`;
+        } catch (e) {
+            console.warn('Could not refresh today income', e);
         }
-      } catch (error) {
-        console.error('Deposit error:', error);
-        showPopup('Ошибка отправки запроса');
-        window.pendingRequest = false; 
-        setButtonsWaiting(false);
-      }
     }
 
-    async function sendWithdraw(amount) {
-      window.pendingRequest = true; 
-      setButtonsWaiting(true);
-      try {
-        const data = await apiGet(`?action=requestWithdraw&username=${window.username}&amount=${encodeURIComponent(amount)}`);
-        if (data.success) {
-          const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
-          addHistoryItem('withdraw', amount, (data.requestShortId || (data.requestId ? String(data.requestId).split('-')[1] : '')));
-          showPopup(shortId ? `Запрос отправлен [#${shortId}]` : 'Запрос отправлен');
-        } else {
-          showPopup('Ошибка: ' + (data.error || 'неизвестно'));
-          window.pendingRequest = false; 
-          setButtonsWaiting(false);
-        }
-      } catch (error) {
-        console.error('Withdraw error:', error);
-        showPopup('Ошибка отправки запроса');
-        window.pendingRequest = false; 
-        setButtonsWaiting(false);
-      }
-    }
-
-    async function simulateMonthlyInterest() {
-      try {
-        setButtonsWaiting(true);
-        const data = await apiGet(`?action=applyMonthlyInterestNow&username=${window.username}&debug=1`);
-        if (data.success && data.ok) {
-          window.serverBalance = Number(data.newBalance) || window.serverBalance;
-          updateDisplay();
-          showPopup(`Проценты начислены\nбаза = ${(data.baseUsed??0).toLocaleString('ru-RU', {maximumFractionDigits:2})}\n% = ${(data.interestAmount??0).toLocaleString('ru-RU', {maximumFractionDigits:2})}`);
-        } else {
-          showPopup('Не удалось применить проценты');
-        }
-      } catch (e) {
-        console.error('Simulate error:', e);
-        showPopup('Ошибка применения процентов');
-      } finally {
-        setButtonsWaiting(false);
-      }
-    }
-
-    // Specific modal functions
-    function showP2PInfo() {
-      closeModal('deposit');
-      showPopup(`P2P депозит\n\nПереведите средства на номер:\n+7 916 643 54 94\n\nПосле перевода ваш баланс будет обновлен администратором`, 5000);
-    }
-
-    function showWithdrawForm() {
-      closeModal('withdraw');
-      sendWithdraw(100000); // Default amount
-    }
-
-    function startInvestment() {
-      closeModal('strategy1');
-      sendDeposit(100000); // Default investment amount
-    }
-
-    function startInvestment30() {
-      closeModal('strategy30');
-      sendDeposit(100000); // Default investment amount
-    }
-
-    function startInvestment90() {
-      closeModal('strategy90');
-      sendDeposit(100000); // Default investment amount
-    }
-
-    function openDocuments() {
-      closeModal('profile');
-      window.open('https://docs.google.com/document/d/1Rv3N2iTgwHXhTkSgv-BwKLrekVpZtoGfU_ct2lDw00g/edit?usp=sharing', '_blank');
-    }
-
-function mskNow() {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
-}
-function mskYmd(d=new Date()) {
-  const yy=d.getFullYear(), mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-  return `${yy}-${mm}-${dd}`;
-}
-
-async function refreshTodayIncome() {
-  try {
-    const res = await apiGet(`?action=previewAccrual&username=${window.username}`);
-    if (!res.success) throw new Error('previewAccrual failed');
-
-    const todayKey = `acc0_${window.username}_${mskYmd(mskNow())}`;
-    
-    if (localStorage.getItem(todayKey) === null) {
-      localStorage.clear?.(); 
-      localStorage.setItem(todayKey, String(res.accruedToNow || 0));
-    }
-    const startOfDayAccrued = Number(localStorage.getItem(todayKey) || 0);
-    const todayIncome = Math.max(0, Number(res.accruedToNow || 0) - startOfDayAccrued);
-
-    const el = document.getElementById('todayIncome');
-    if (el) el.textContent = `+${fmtMoney(todayIncome)}`;
-  } catch (e) {
-    // console.warn('today income err', e);
-  }
-}
-
-function mskNow(){ return new Date(new Date().toLocaleString('en-US',{timeZone:'Europe/Moscow'})); }
-function mskYmd(d=new Date()){ const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; }
-
-async function refreshTodayIncome(){
-  try{
-    const res = await apiGet(`?action=previewAccrual&username=${window.username}`);
-    if(!res.success) return;
-    const key = `acc0_${window.username}_${mskYmd(mskNow())}`;
-    if(localStorage.getItem(key)===null){
-      localStorage.setItem(key, String(res.accruedToNow||0));
-    }
-    const start = Number(localStorage.getItem(key)||0);
-    const today = Math.max(0, Number(res.accruedToNow||0) - start);
-    const el = document.getElementById('todayIncome');
-    if(el) el.textContent = `+${fmtMoney(today)}`;
-  }catch(_){}
-}
-
-    
-    
-    // Initialize on load
     (function init() {
       const tg = window.Telegram?.WebApp;
       try { 
         tg?.expand?.(); 
         tg?.ready?.();
-        
         if (tg?.themeParams) {
           const theme = tg.themeParams;
           document.documentElement.style.setProperty('--bg-primary', theme.bg_color || '#0a0b0f');
           document.documentElement.style.setProperty('--text-primary', theme.text_color || '#e8eaed');
         }
       } catch {}
-      
       initializeUser();
     })();
   </script>
