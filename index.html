@@ -365,19 +365,27 @@
       color: var(--text-secondary);
     }
 
-    /* Status */
-    .status {
-      position: fixed;
-      top: 80px;
-      right: 20px;
-      padding: 8px 12px;
-      background: var(--glass-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      font-size: 12px;
-      backdrop-filter: blur(10px);
-      z-index: 90;
-    }
+/* Status (slide-in/out) */
+.status {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  padding: 8px 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  backdrop-filter: blur(10px);
+  z-index: 90;
+  transform: translateX(130%); /* по умолчанию вне экрана */
+  opacity: 0;
+  transition: transform .35s ease, opacity .35s ease;
+  pointer-events: none;
+}
+.status.show {
+  transform: translateX(0);
+  opacity: 1;
+}
 
     .status.loading { color: var(--warning); }
     .status.synced { color: var(--success); }
@@ -1275,29 +1283,7 @@
           <li>• Моментальное начисление процентов</li>
         </ul>
       </div>
-
-      <div class="card" style="margin-bottom: 24px;">
-        <h3 style="margin-bottom: 12px;">Как считаются проценты?</h3>
-        <p style="color: var(--text-secondary); line-height: 1.6; font-size: 14px; margin-bottom: 16px;">
-          Мы используем формулу:
-        </p>
-        <div class="math-formula">
-          <div class="formula-row">
-            <span>A = P × </span>
-            <div class="formula-fraction">
-              <div class="formula-numerator">r × d</div>
-              <div class="formula-denominator">365</div>
-            </div>
-          </div>
-        </div>
-        <p style="color: var(--text-secondary); line-height: 1.6; font-size: 14px;">
-          где P — средняя сумма инвестиций, r — годовая ставка (0.16), d — количество дней владения.
-        </p>
-      </div>
-
-      <button class="btn btn-primary" onclick="startInvestment()" style="width: 100%;">
-        Использовать эту стратегию
-      </button>
+<button class="btn btn-primary" onclick="openNewInvestment('16')" style="width: 100%;">Использовать эту стратегию</button>
     </div>
   </div>
 
@@ -1331,29 +1317,7 @@
           </div>
         </div>
       </div>
-
-      <div class="card" style="margin-bottom: 24px;">
-        <h3 style="margin-bottom: 12px;">Как считаются проценты?</h3>
-        <p style="color: var(--text-secondary); line-height: 1.6; font-size: 14px; margin-bottom: 16px;">
-          Мы используем формулу:
-        </p>
-        <div class="math-formula">
-          <div class="formula-row">
-            <span>A = P × </span>
-            <div class="formula-fraction">
-              <div class="formula-numerator">r × d</div>
-              <div class="formula-denominator">365</div>
-            </div>
-          </div>
-        </div>
-        <p style="color: var(--text-secondary); line-height: 1.6; font-size: 14px;">
-          где P — средняя сумма инвестиций, r — годовая ставка (0.17), d — количество дней владения.
-        </p>
-      </div>
-
-      <button class="btn btn-primary" onclick="startInvestment30()" style="width: 100%;">
-        Использовать эту стратегию
-      </button>
+<button class="btn btn-primary" onclick="openNewInvestment('17')" style="width: 100%;">Использовать эту стратегию</button>
     </div>
   </div>
 
@@ -1387,32 +1351,35 @@
           </div>
         </div>
       </div>
-
-      <div class="card" style="margin-bottom: 24px;">
-        <h3 style="margin-bottom: 12px;">Как считаются проценты?</h3>
-        <p style="color: var(--text-secondary); line-height: 1.6; font-size: 14px; margin-bottom: 16px;">
-          Мы используем формулу:
-        </p>
-        <div class="math-formula">
-          <div class="formula-row">
-            <span>A = P × </span>
-            <div class="formula-fraction">
-              <div class="formula-numerator">r × d</div>
-              <div class="formula-denominator">365</div>
-            </div>
-          </div>
-        </div>
-        <p style="color: var(--text-secondary); line-height: 1.6; font-size: 14px;">
-          где P — средняя сумма инвестиций, r — годовая ставка (0.18), d — количество дней владения.
-        </p>
-      </div>
-
-      <button class="btn btn-primary" onclick="startInvestment90()" style="width: 100%;">
-        Использовать эту стратегию
-      </button>
+<button class="btn btn-primary" onclick="openNewInvestment('18')" style="width: 100%;">Использовать эту стратегию</button>
     </div>
   </div>
 
+<!-- New Investment Modal -->
+<div class="modal-overlay" id="modalNewInvestment">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">Открытие стратегии</h2>
+      <button class="close-btn" onclick="closeModal('newInvestment')">
+        <svg class="nav-icon" viewBox="0 0 24 24" style="width:20px;height:20px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="deposit-form-label">Стратегия</div>
+    <div class="input-field" id="niStrategyReadonly" style="text-align:center;font-weight:700">—</div>
+
+    <div class="deposit-form-label" style="margin-top:12px">Сумма</div>
+    <input type="text" class="amount-input" id="niAmount" placeholder="0" oninput="formatAmount(this)">
+
+    <label style="display:flex;gap:8px;align-items:center;margin:10px 0 16px;">
+      <input type="checkbox" id="niAgree"> <span>С правилами ознакомлен</span>
+    </label>
+
+    <button class="btn btn-primary" style="width:100%" id="niConfirmBtn" disabled>Подтвердить</button>
+  </div>
+</div>
+
+  
   <!-- Profile Modal -->
   <div class="modal-overlay" id="modalProfile">
     <div class="modal">
@@ -1507,6 +1474,7 @@
     window.pendingRequest = false;
     window.currentCurrency = 'RUB';
     window.exchangeRates = { RUB: 1, USD: 0.011, EUR: 0.010 };
+    window.__lastChosenStrategy = null; // '16' | '17' | '18'
 
     // --- UI helpers ---
     function fmtMoney(x) {
@@ -1514,6 +1482,48 @@
       return n.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
+function openNewInvestment(rateCode){ // '16' | '17' | '18'
+  window.__lastChosenStrategy = String(rateCode);
+  const name = rateCode==='16' ? 'Гибкая 16%' : (rateCode==='17' ? '30 дней 17%' : '90 дней 18%');
+  document.getElementById('niStrategyReadonly').textContent = name;
+  document.getElementById('niAmount').value = '';
+  document.getElementById('niAgree').checked = false;
+  document.getElementById('niConfirmBtn').disabled = true;
+  closeModal('strategy1'); closeModal('strategy30'); closeModal('strategy90');
+  openModal('newInvestment');
+  // Переходим на вкладку «Портфель»
+  openPage('portfolio');
+}
+
+document.getElementById('niAgree').addEventListener('change', function(){
+  document.getElementById('niConfirmBtn').disabled = !this.checked;
+});
+
+document.getElementById('niConfirmBtn').addEventListener('click', async function(){
+  const raw = document.getElementById('niAmount').value;
+  const amount = parseInt(String(raw).replace(/[^\d]/g,'')) || 0;
+  if (!window.__lastChosenStrategy) { showPopup('Не выбрана стратегия'); return; }
+  if (amount <= 0) { showPopup('Введите сумму'); return; }
+  if (!document.getElementById('niAgree').checked) { showPopup('Нужно согласиться с правилами'); return; }
+
+  try {
+    // серверный лог (пока «заглушка» — добавь обработчик на GAS позже: action=logStrategyInvestment)
+    const rate = window.__lastChosenStrategy; // '16' '17' '18'
+    const resp = await apiGet(`?action=logStrategyInvestment&username=${window.username}&rate=${rate}&amount=${amount}`);
+    // даже если сервера ещё нет — локально показываем запись
+    const requestId = (resp && (resp.requestId || resp.id)) || crypto.randomUUID();
+    const shortId   = String(requestId).split('-')[1] || String(requestId).slice(0,4);
+
+    addPortfolioItem(shortId, amount, rate);
+    addHistoryItem('strategy', amount, shortId, `Стратегия ${rate}%`);
+
+    showPopup(`[#${shortId}] Открыта стратегия на ${fmtMoney(amount)} ₽`);
+    closeModal('newInvestment');
+  } catch(e){
+    showPopup('Не удалось создать инвестицию');
+  }
+});
+    
     function showPopup(text, timeout = 3000) {
       const el = document.createElement('div');
       el.className = 'popup';
@@ -1564,6 +1574,31 @@
       }
     }
 
+function addPortfolioItem(shortId, amount, rateCode){
+  const host = document.querySelector('#pagePortfolio .card');
+  if (!host) return;
+  // если там заглушка — убираем её один раз
+  const stub = host.querySelector('p[style*="Ваших активных"]') || host.querySelector('p[style*="информацию"]');
+  if (stub) stub.remove();
+
+  const row = document.createElement('div');
+  row.className = 'glass-card';
+  row.style.marginBottom = '12px';
+  row.innerHTML = `<b>#${shortId}</b> · ${fmtMoney(amount)} ₽ · ${rateCode}%`;
+  host.appendChild(row);
+}
+
+function addHistoryItem(type, amount, shortId, titleOpt){
+  const host = document.querySelector('#pageHistory .card');
+  if (!host) return;
+  const row = document.createElement('div');
+  row.className = 'glass-card';
+  const title = titleOpt || (type==='deposit' ? 'Депозит' : type==='withdraw' ? 'Вывод' : 'Стратегия');
+  row.innerHTML = `<b>${title}</b> · ${fmtMoney(amount)} · #${shortId} · <span class="muted">${mskYmd(mskNow()).slice(5)}</span>`;
+  host.appendChild(row);
+}
+
+    
     // Close modals on overlay click
     document.addEventListener('click', function(e) {
       if (e.target.classList.contains('modal-overlay')) {
@@ -1680,7 +1715,9 @@
       
       document.getElementById('balanceValue').textContent = fmtMoney(balance);
       document.getElementById('freeBalance').textContent = fmtMoney(balance);
-      document.getElementById('investedBalance').textContent = fmtMoney(0);
+      const invested = (window.monthBase || 0) * rate; // в текущей валюте
+      document.getElementById('investedBalance').textContent = fmtMoney(invested);
+
       document.getElementById('availableBalance').textContent = fmtMoney(balance);
       
       // Update profile
@@ -1691,11 +1728,36 @@
       document.getElementById('nextAccrualAmount').textContent = fmtMoney(nextAccrual);
     }
 
-    function setStatus(text, type = 'loading') {
-      const status = document.getElementById('status');
-      status.textContent = text;
-      status.className = `status ${type}`;
-    }
+let __statusHideTimer = null;
+let __lastStatusText  = '';
+
+function showStatusOnce(text, type='loading', holdMs=1800) {
+  const el = document.getElementById('status');
+  if (!el) return;
+
+  const newText = String(text || '').trim();
+  const newClass = `status ${type}`;
+
+  // показываем только когда реально изменилось
+  if (newText === __lastStatusText && el.className === newClass) return;
+  __lastStatusText = newText;
+
+  el.textContent = newText;
+  el.className = newClass;
+  el.classList.add('show');
+
+  if (__statusHideTimer) clearTimeout(__statusHideTimer);
+  __statusHideTimer = setTimeout(() => {
+    el.classList.remove('show'); // уезжает за экран
+  }, holdMs);
+}
+
+// совместимость с остальным кодом
+function setStatus(text, type='loading') {
+  // показываем и прячем автоматически
+  showStatusOnce(text, type);
+}
+
 
     function setButtonsWaiting(isWaiting) {
       const simulateBtn = document.getElementById('simulateButton');
@@ -1740,8 +1802,14 @@
         window.currentRate = Number(data.rate) || 16;
         
         updateDisplay();
-        setStatus('Синхронизировано', 'synced');
+        try {
+          const gb = await apiGet(`?action=getBalance&username=${window.username}`);
+          if (gb.success) window.monthBase = Number(gb.monthBase || window.monthBase || 0);
+        } catch(_) {}
 
+        await refreshTodayIncome();
+        setStatus('Синхронизировано', 'synced');
+        window.monthBase = Number(data.monthBase || 0);
         // Immediate sync
         await syncBalance();
 
@@ -1777,6 +1845,7 @@
 
           updateDisplay();
           setStatus('Синхронизировано', 'synced');
+          await refreshTodayIncome();
         } else {
           setStatus('Ошибка синхронизации', 'error');
         }
@@ -1793,6 +1862,7 @@
         const data = await apiGet(`?action=requestDeposit&username=${window.username}&amount=${encodeURIComponent(amount)}`);
         if (data.success) {
           const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
+          addHistoryItem('deposit', amount, (data.requestShortId || (data.requestId ? String(data.requestId).split('-')[1] : '')));
           showPopup(shortId ? `Запрос отправлен [#${shortId}]` : 'Запрос отправлен');
         } else {
           showPopup('Ошибка: ' + (data.error || 'неизвестно'));
@@ -1814,6 +1884,7 @@
         const data = await apiGet(`?action=requestWithdraw&username=${window.username}&amount=${encodeURIComponent(amount)}`);
         if (data.success) {
           const shortId = data.requestShortId || (data.requestId ? (String(data.requestId).split('-')[1] || '') : '');
+          addHistoryItem('withdraw', amount, (data.requestShortId || (data.requestId ? String(data.requestId).split('-')[1] : '')));
           showPopup(shortId ? `Запрос отправлен [#${shortId}]` : 'Запрос отправлен');
         } else {
           showPopup('Ошибка: ' + (data.error || 'неизвестно'));
@@ -1878,6 +1949,37 @@
       window.open('https://docs.google.com/document/d/1Rv3N2iTgwHXhTkSgv-BwKLrekVpZtoGfU_ct2lDw00g/edit?usp=sharing', '_blank');
     }
 
+function mskNow() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
+}
+function mskYmd(d=new Date()) {
+  const yy=d.getFullYear(), mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+async function refreshTodayIncome() {
+  try {
+    const res = await apiGet(`?action=previewAccrual&username=${window.username}`);
+    if (!res.success) throw new Error('previewAccrual failed');
+
+    const todayKey = `acc0_${window.username}_${mskYmd(mskNow())}`;
+    // если нет слепка на полночь — создаём (берем текущее accruedToNow как старт дня)
+    if (localStorage.getItem(todayKey) === null) {
+      localStorage.clear?.(); // не обязательно, но уменьшает «висяки» старых ключей
+      localStorage.setItem(todayKey, String(res.accruedToNow || 0));
+    }
+    const startOfDayAccrued = Number(localStorage.getItem(todayKey) || 0);
+    const todayIncome = Math.max(0, Number(res.accruedToNow || 0) - startOfDayAccrued);
+
+    const el = document.getElementById('todayIncome');
+    if (el) el.textContent = `+${fmtMoney(todayIncome)}`;
+  } catch (e) {
+    // молча игнорим — не критично для UI
+    // console.warn('today income err', e);
+  }
+}
+
+    
     // Initialize on load
     (function init() {
       const tg = window.Telegram?.WebApp;
