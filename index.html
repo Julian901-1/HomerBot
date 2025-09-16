@@ -365,31 +365,20 @@
       color: var(--text-secondary);
     }
 
-/* Status (slide-in/out) */
-.status {
-  position: fixed;
-  top: 80px;
-  right: 20px;
-  padding: 8px 12px;
-  background: var(--glass-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  font-size: 12px;
-  backdrop-filter: blur(10px);
-  z-index: 90;
-  transform: translateX(130%); /* по умолчанию вне экрана */
-  opacity: 0;
-  transition: transform .35s ease, opacity .35s ease;
-  pointer-events: none;
+/* Status (slide-in/out, держим "loading" пока не сменится) */
+.status{
+  position:fixed; top:80px; right:20px;
+  padding:8px 12px; border-radius:12px;
+  background:var(--glass-bg); border:1px solid var(--border);
+  font-size:12px; backdrop-filter:blur(10px); z-index:90;
+  transform:translateX(130%); opacity:0;
+  transition:transform .35s ease, opacity .35s ease;
+  pointer-events:none;
 }
-.status.show {
-  transform: translateX(0);
-  opacity: 1;
-}
-
-    .status.loading { color: var(--warning); }
-    .status.synced { color: var(--success); }
-    .status.error { color: var(--error); }
+.status.show{ transform:translateX(0); opacity:1; }
+.status.loading{ color:var(--warning); }
+.status.synced{  color:var(--success); }
+.status.error{   color:var(--error); }
 
     /* Modal */
     .modal-overlay {
@@ -887,7 +876,6 @@
 </head>
 <body>
   <div class="app-container">
-    <!-- Header -->
     <div class="header">
       <div class="header-content">
         <div class="logo">HomerBot</div>
@@ -900,21 +888,15 @@
       </div>
     </div>
 
-    <!-- Status indicator -->
     <div id="status" class="status loading">Подключение...</div>
 
-    <!-- Support button -->
     <button class="support-btn" onclick="showDevPopup('Функция в разработке')">
       <svg class="nav-icon" viewBox="0 0 24 24" style="color: white;">
         <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
       </svg>
     </button>
 
-    <!-- Pages -->
-    
-    <!-- Home Page -->
     <div class="page active" id="pageHome">
-      <!-- Balance Card -->
       <div class="card">
         <div class="balance-section">
           <div class="balance-label">Общий баланс</div>
@@ -952,7 +934,6 @@
         </div>
       </div>
 
-      <!-- Action buttons -->
       <div class="btn-group">
         <button class="btn btn-primary" onclick="openModal('deposit')">
           <svg class="nav-icon" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
@@ -968,7 +949,6 @@
         </button>
       </div>
 
-      <!-- Strategies Section -->
       <div class="strategies-section">
         <h2>Инвестиционные стратегии</h2>
         
@@ -1014,7 +994,6 @@
         </div>
       </div>
 
-      <!-- Quick simulate button -->
       <div style="margin-top: 24px;">
         <button class="btn btn-secondary" id="simulateButton" onclick="simulateMonthlyInterest()" style="width: 100%;">
           <svg class="nav-icon" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
@@ -1026,17 +1005,15 @@
       </div>
     </div>
 
-    <!-- Portfolio Page -->
     <div class="page" id="pagePortfolio">
       <div class="card">
         <h2 style="margin-bottom: 16px;">Мой портфель</h2>
-        <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;">
+        <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;" id="portfolio-placeholder">
           Здесь будет отображаться информация о ваших активных инвестициях
         </p>
       </div>
     </div>
 
-    <!-- Calculator Page -->
     <div class="page" id="pageCalculator">
       <div class="card">
         <h2 style="margin-bottom: 16px;">Калькулятор доходности</h2>
@@ -1067,7 +1044,6 @@
       </div>
     </div>
 
-    <!-- History Page -->
     <div class="page" id="pageHistory">
       <div class="card">
         <h2 style="margin-bottom: 16px;">История операций</h2>
@@ -1077,16 +1053,15 @@
           <div class="filter-chip" onclick="toggleFilter(this, 'deposit')">Депозит</div>
           <div class="filter-chip" onclick="toggleFilter(this, 'withdraw')">Вывод</div>
           <div class="filter-chip" onclick="toggleFilter(this, 'accrual')">Начисления</div>
-          <div class="filter-chip" onclick="toggleFilter(this, 'strategy')">Стратегии</div>
+          <div class="filter-chip" onclick="toggleFilter(this, 'strategy')">Инвестиции</div>
         </div>
         
-        <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;">
+        <p style="color: var(--text-secondary); text-align: center; padding: 40px 20px;" id="history-placeholder">
           История ваших депозитов, выводов и начислений появится здесь
         </p>
       </div>
     </div>
 
-    <!-- Bottom Navigation -->
     <div class="bottom-nav">
       <div class="nav-items">
         <div class="nav-item active" onclick="openPage('home')">
@@ -1129,9 +1104,6 @@
     </div>
   </div>
 
-  <!-- Modals -->
-  
-  <!-- Deposit Modal -->
   <div class="modal-overlay" id="modalDeposit">
     <div class="modal">
       <div class="modal-header">
@@ -1225,7 +1197,6 @@
     </div>
   </div>
 
-  <!-- Withdraw Modal -->
   <div class="modal-overlay" id="modalWithdraw">
     <div class="modal">
       <div class="modal-header">
@@ -1261,7 +1232,6 @@
     </div>
   </div>
 
-  <!-- Strategy Modal 1 (Flexible) -->
   <div class="modal-overlay" id="modalStrategy1">
     <div class="modal">
       <div class="modal-header">
@@ -1287,7 +1257,6 @@
     </div>
   </div>
 
-  <!-- Strategy Modal 30 days -->
   <div class="modal-overlay" id="modalStrategy30">
     <div class="modal">
       <div class="modal-header">
@@ -1321,7 +1290,6 @@
     </div>
   </div>
 
-  <!-- Strategy Modal 90 days -->
   <div class="modal-overlay" id="modalStrategy90">
     <div class="modal">
       <div class="modal-header">
@@ -1355,7 +1323,6 @@
     </div>
   </div>
 
-<!-- New Investment Modal -->
 <div class="modal-overlay" id="modalNewInvestment">
   <div class="modal">
     <div class="modal-header">
@@ -1380,7 +1347,6 @@
 </div>
 
   
-  <!-- Profile Modal -->
   <div class="modal-overlay" id="modalProfile">
     <div class="modal">
       <div class="modal-header">
@@ -1507,17 +1473,18 @@ document.getElementById('niConfirmBtn').addEventListener('click', async function
   if (!document.getElementById('niAgree').checked) { showPopup('Нужно согласиться с правилами'); return; }
 
   try {
-    // серверный лог (пока «заглушка» — добавь обработчик на GAS позже: action=logStrategyInvestment)
     const rate = window.__lastChosenStrategy; // '16' '17' '18'
     const resp = await apiGet(`?action=logStrategyInvestment&username=${window.username}&rate=${rate}&amount=${amount}`);
-    // даже если сервера ещё нет — локально показываем запись
-    const requestId = (resp && (resp.requestId || resp.id)) || crypto.randomUUID();
-    const shortId   = String(requestId).split('-')[1] || String(requestId).slice(0,4);
+    if (!resp.success) {
+        showPopup('Не удалось создать инвестицию: ' + (resp.error || 'ошибка сервера'));
+        return;
+    }
+    const { requestId, requestShortId } = resp;
+    
+    addPortfolioItem(requestShortId, amount, rate);
+    addHistoryItem('INVEST', amount, requestShortId, `Стратегия ${rate}%`);
 
-    addPortfolioItem(shortId, amount, rate);
-    addHistoryItem('strategy', amount, shortId, `Стратегия ${rate}%`);
-
-    showPopup(`[#${shortId}] Открыта стратегия на ${fmtMoney(amount)} ₽`);
+    showPopup(`[#${requestShortId}] Открыта стратегия на ${fmtMoney(amount)} ₽`);
     closeModal('newInvestment');
   } catch(e){
     showPopup('Не удалось создать инвестицию');
@@ -1575,9 +1542,9 @@ function openPage(pageId){
 function addPortfolioItem(shortId, amount, rateCode){
   const host = document.querySelector('#pagePortfolio .card');
   if (!host) return;
-  // если там заглушка — убираем её один раз
-  const stub = host.querySelector('p[style*="Ваших активных"]') || host.querySelector('p[style*="информацию"]');
-  if (stub) stub.remove();
+
+  const placeholder = document.getElementById('portfolio-placeholder');
+  if(placeholder) placeholder.style.display = 'none';
 
   const row = document.createElement('div');
   row.className = 'glass-card';
@@ -1587,14 +1554,31 @@ function addPortfolioItem(shortId, amount, rateCode){
 }
 
 function addHistoryItem(type, amount, shortId, titleOpt){
-  const host = document.querySelector('#pageHistory .card');
-  if (!host) return;
-  const row = document.createElement('div');
-  row.className = 'glass-card';
-  const title = titleOpt || (type==='deposit' ? 'Депозит' : type==='withdraw' ? 'Вывод' : 'Стратегия');
-  row.innerHTML = `<b>${title}</b> · ${fmtMoney(amount)} · #${shortId} · <span class="muted">${mskYmd(mskNow()).slice(5)}</span>`;
-  host.appendChild(row);
+    const host = document.querySelector('#pageHistory .card');
+    if (!host) return;
+
+    const placeholder = document.getElementById('history-placeholder');
+    if (placeholder) placeholder.style.display = 'none';
+
+    const row = document.createElement('div');
+    row.className = 'glass-card';
+    row.dataset.type = type.toLowerCase();
+    
+    let title, subTitle = '';
+    if (type === 'INVEST') {
+        title = 'Инвестиция';
+        subTitle = `<div style="font-size: 12px; color: var(--text-secondary);">${titleOpt.replace('Стратегия', 'Стратегия:')}</div>`;
+    } else {
+        title = titleOpt || (type === 'deposit' ? 'Депозит' : type === 'withdraw' ? 'Вывод' : 'Инвестиция');
+    }
+
+    const now = new Date();
+    const timeStr = `${now.getDate().toString().padStart(2, '0')}.${(now.getMonth() + 1).toString().padStart(2, '0')}.${now.getFullYear().toString().slice(-2)} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    row.innerHTML = `<b>${title}</b> ${subTitle} · ${fmtMoney(amount)} · #${shortId} · <span class="muted">${timeStr}</span>`;
+    host.appendChild(row);
 }
+
 
     
     // Close modals on overlay click
@@ -1650,17 +1634,17 @@ function addHistoryItem(type, amount, shortId, titleOpt){
     }
 
     function toggleFilter(element, type) {
-      if (type === 'all') {
         document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
         element.classList.add('active');
-      } else {
-        if (element.classList.contains('active')) {
-          element.classList.remove('active');
-        } else {
-          document.querySelector('.filter-chip').classList.remove('active'); // Remove "All"
-          element.classList.add('active');
-        }
-      }
+
+        const historyItems = document.querySelectorAll('#pageHistory .glass-card');
+        historyItems.forEach(item => {
+            if (type === 'all' || item.dataset.type === type) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
     }
 
     // Amount formatting
@@ -1726,35 +1710,25 @@ function addHistoryItem(type, amount, shortId, titleOpt){
       document.getElementById('nextAccrualAmount').textContent = fmtMoney(nextAccrual);
     }
 
-let __statusHideTimer = null;
-let __lastStatusText  = '';
+let __statusHideTimer=null, __lastStatusText='';
 
-function showStatusOnce(text, type='loading', holdMs=1800) {
-  const el = document.getElementById('status');
-  if (!el) return;
+function showStatusOnce(text, type='loading', holdMs){
+  const el=document.getElementById('status'); if(!el) return;
+  const t=String(text||'').trim(); const cls=`status ${type}`;
+  if(t===__lastStatusText && el.className===cls) return;
+  __lastStatusText=t; el.textContent=t; el.className=cls; el.classList.add('show');
 
-  const newText = String(text || '').trim();
-  const newClass = `status ${type}`;
-
-  // показываем только когда реально изменилось
-  if (newText === __lastStatusText && el.className === newClass) return;
-  __lastStatusText = newText;
-
-  el.textContent = newText;
-  el.className = newClass;
-  el.classList.add('show');
-
-  if (__statusHideTimer) clearTimeout(__statusHideTimer);
-  __statusHideTimer = setTimeout(() => {
-    el.classList.remove('show'); // уезжает за экран
-  }, holdMs);
+  if(__statusHideTimer){ clearTimeout(__statusHideTimer); __statusHideTimer=null; }
+  
+  if(type!=='loading'){
+    const ms = typeof holdMs==='number' ? holdMs : 1800;
+    __statusHideTimer=setTimeout(()=>{ el.classList.remove('show'); }, ms);
+  } else {
+      // Keep "loading" status visible until the next status update
+  }
 }
+function setStatus(text,type='loading'){ showStatusOnce(text,type); }
 
-// совместимость с остальным кодом
-function setStatus(text, type='loading') {
-  // показываем и прячем автоматически
-  showStatusOnce(text, type);
-}
 
 
     function setButtonsWaiting(isWaiting) {
@@ -1790,7 +1764,7 @@ function setStatus(text, type='loading') {
         window.username = getTelegramUser();
         window.isInitialized = true;
 
-        setStatus('Загрузка...', 'loading');
+        setStatus('Подключение', 'loading');
 
         // Initial load
         const data = await apiGet(`?action=getBalance&username=${window.username}&debug=1`);
@@ -1961,9 +1935,9 @@ async function refreshTodayIncome() {
     if (!res.success) throw new Error('previewAccrual failed');
 
     const todayKey = `acc0_${window.username}_${mskYmd(mskNow())}`;
-    // если нет слепка на полночь — создаём (берем текущее accruedToNow как старт дня)
+    
     if (localStorage.getItem(todayKey) === null) {
-      localStorage.clear?.(); // не обязательно, но уменьшает «висяки» старых ключей
+      localStorage.clear?.(); 
       localStorage.setItem(todayKey, String(res.accruedToNow || 0));
     }
     const startOfDayAccrued = Number(localStorage.getItem(todayKey) || 0);
@@ -1972,11 +1946,29 @@ async function refreshTodayIncome() {
     const el = document.getElementById('todayIncome');
     if (el) el.textContent = `+${fmtMoney(todayIncome)}`;
   } catch (e) {
-    // молча игнорим — не критично для UI
     // console.warn('today income err', e);
   }
 }
 
+function mskNow(){ return new Date(new Date().toLocaleString('en-US',{timeZone:'Europe/Moscow'})); }
+function mskYmd(d=new Date()){ const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),da=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; }
+
+async function refreshTodayIncome(){
+  try{
+    const res = await apiGet(`?action=previewAccrual&username=${window.username}`);
+    if(!res.success) return;
+    const key = `acc0_${window.username}_${mskYmd(mskNow())}`;
+    if(localStorage.getItem(key)===null){
+      localStorage.setItem(key, String(res.accruedToNow||0));
+    }
+    const start = Number(localStorage.getItem(key)||0);
+    const today = Math.max(0, Number(res.accruedToNow||0) - start);
+    const el = document.getElementById('todayIncome');
+    if(el) el.textContent = `+${fmtMoney(today)}`;
+  }catch(_){}
+}
+
+    
     
     // Initialize on load
     (function init() {
@@ -1985,7 +1977,6 @@ async function refreshTodayIncome() {
         tg?.expand?.(); 
         tg?.ready?.();
         
-        // Adapt to Telegram theme
         if (tg?.themeParams) {
           const theme = tg.themeParams;
           document.documentElement.style.setProperty('--bg-primary', theme.bg_color || '#0a0b0f');
