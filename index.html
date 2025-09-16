@@ -1542,20 +1542,18 @@ document.getElementById('niConfirmBtn').addEventListener('click', async function
     }
 
     // Page navigation
-    function openPage(pageId) {
-      // Hide all pages
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      
-      // Show selected page
-      const page = document.getElementById(`page${pageId.charAt(0).toUpperCase() + pageId.slice(1)}`);
-      if (page) {
-        page.classList.add('active');
-      }
-      
-      // Update nav
-      event.target.closest('.nav-item').classList.add('active');
-    }
+function openPage(pageId){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(`page${pageId.charAt(0).toUpperCase()+pageId.slice(1)}`)?.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=> n.classList.remove('active'));
+  // активируем нужную кнопку
+  document.querySelectorAll('.nav-item').forEach(n=>{
+    const label = n.querySelector('.nav-label')?.textContent?.toLowerCase() || '';
+    const map = { 'главная':'home','портфель':'portfolio','калькулятор':'calculator','история':'history' };
+    if (map[label] === pageId) n.classList.add('active');
+  });
+}
+
 
     // Modal functions
     function openModal(modalId) {
