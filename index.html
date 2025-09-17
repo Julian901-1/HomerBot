@@ -484,6 +484,21 @@ function parseAmount(str) {
   return isNaN(n) ? 0 : n;
 }
 
+      // Спрятать только этот специфический шум, не трогая другие ошибки
+window.addEventListener('unhandledrejection', (e) => {
+  const msg = String((e.reason && e.reason.message) || e.reason || '');
+  if (msg.includes('A listener indicated an asynchronous response')) {
+    e.preventDefault(); // не логировать в консоль
+  }
+});
+
+window.addEventListener('error', (e) => {
+  const msg = String(e.message || '');
+  if (msg.includes('A listener indicated an asynchronous response')) {
+    e.stopImmediatePropagation();
+  }
+});
+
 // форматирование с сохранением десятичной части
 function formatAmountInput(input) {
   let v = (input.value || '').replace(/[^\d.,]/g, '');
