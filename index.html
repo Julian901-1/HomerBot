@@ -106,7 +106,7 @@
     .amount-input, .input-field { background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 12px; color: var(--text-primary); padding: 12px; width: 100%; }
     .amount-input { font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 16px; }
     .quick-amounts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0; }
-    .quick-amount-btn { padding: 12px; border-radius: 12px; font-size: 14px; }
+    .quick-amount-btn { padding: 12px; border-radius: 12px; font-size: 14px; color: #fff; }
 
     .method-card { border-radius: 16px; padding: 20px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
     .method-card.disabled { opacity: 0.5; cursor: not-allowed; }
@@ -135,6 +135,9 @@
     .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
     input:checked + .slider { background-color: var(--accent); }
     input:checked + .slider:before { transform: translateX(24px); }
+
+    /* Disable scroll when modal is open */
+    body.modal-open { overflow: hidden; }
   </style>
 </head>
 <body>
@@ -293,8 +296,9 @@
             <button class="quick-amount-btn" onclick="setDepositAmount(100000)">100 000</button>
           </div>
           <div style="display:flex; margin-top: 12px;">
-            <input type="text" class="input-field" value="+79166435494" readonly>
-            <button class="copy-btn" onclick="copyToClipboard('+79166435494')">
+            <input type="text" class="input-field" value="+7 (916) 643-54-94" readonly
+                   style="text-align:center; font-size:18px; font-weight:700;">
+            <button class="copy-btn" onclick="copyToClipboard('+79166435494', this)">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             </button>
           </div>
@@ -325,26 +329,58 @@
         <div id="withdraw-add-sbp-form" style="display:none;">
           <input type="text" class="input-field" id="withdraw-sbp-phone" style="text-align:center; margin-bottom: 16px;" placeholder="Номер телефона для СБП">
           <p style="text-align:center; color: var(--text-secondary); font-size: 14px;">Выберите банк получателя</p>
-          <div class="bank-icons">
-            <div class="bank-icon" data-bank="Sberbank"><img src="https://www.sberbank.ru/common/img/ico/logo-sberbank.svg" alt="Sberbank"></div>
-            <div class="bank-icon" data-bank="Tinkoff"><img src="https://acdn.tinkoff.ru/static/documents/ae805728-6d57-4b73-9426-34c44f3f4c23.svg" alt="Tinkoff"></div>
-            <div class="bank-icon" data-bank="Alpha"><img src="https://alfabank.servicecdn.ru/media/footer-logo-alfa_1025.svg" alt="Alpha"></div>
-            <div class="bank-icon" data-bank="Gazprom"><img src="https://www.gazprombank.ru/images/logo-short.svg" alt="Gazprom"></div>
-          </div>
+            <div class="bank-icons">
+              <div class="bank-icon" data-bank="Alfa">
+                <img src="https://downloader.disk.yandex.ru/disk/b34143b32a920f40131c60c3f6161810023e1dcc047be08cc99b4276bbe9ba3c/68caf7d7/m1Lm_ikQY-ZIcWcthtapqfJYMNsSTz_of0NmlpzWad27dKHFITTIr4_bGAbSeg0mnFjAS_20lL6h99OjnV073A%3D%3D?uid=0&filename=alphabanklogo.jpg&disposition=attachment&hash=czH1I9lZfh0xMarQNNklT33cK65PruSMoLCKQYafTptL8OYyvy2KGxc7d0KsrY/0q/J6bpmRyOJonT3VoXnDag%3D%3D%3A&limit=0&content_type=image%2Fjpeg&owner_uid=805280616&fsize=27328&hid=49b61d5744d585864136b87cd3cc5346&media_type=image&tknv=v3" alt="Альфа">
+              </div>
+              <div class="bank-icon" data-bank="Sberbank">
+                <img src="https://downloader.disk.yandex.ru/disk/2450ae5bcc70aed748d948635f0b711a7c4d4423cc24b2e95461591415cce730/68caf82b/m1Lm_ikQY-ZIcWcthtapqS9Z3ukXh4Rliwd3bagtdQJ7oALIF8T_t1P1Tgr5kGOOe45nKbOsXkerQdkQT8JUuw%3D%3D?uid=0&filename=sberbanklogo.jpg&disposition=attachment&hash=0/hk15zDXmbzUoBv6Gp5kEhgzQAXTV8P4HYZBXNxwKMwPFXGTvh84ySjZb0ExYrBq/J6bpmRyOJonT3VoXnDag%3D%3D%3A&limit=0&content_type=image%2Fjpeg&owner_uid=805280616&fsize=41167&hid=2e594d8f20f93ed8b8e0a2059d4dc950&media_type=image&tknv=v3" alt="Сбербанк">
+              </div>
+              <div class="bank-icon" data-bank="TBank">
+                <img src="https://downloader.disk.yandex.ru/disk/da3b338f12029d649404140a6ffa0cd0dcb77a62c354c5467e28711176fea501/68caf846/m1Lm_ikQY-ZIcWcthtapqa8p32RaGHRBcfPANsk7vd5dNGWa2PyvQSsOIFb-NIrh3SajL9LVkr8hTU8ya7wg-Q%3D%3D?uid=0&filename=tbanklogo.jpg&disposition=attachment&hash=XtEqmEjjg9gQXv38C3I4WFUBRYh63CEd57JU5EyfPbhtHBChNuzUvPyEAqC7mBhTq/J6bpmRyOJonT3VoXnDag%3D%3D%3A&limit=0&content_type=image%2Fjpeg&owner_uid=805280616&fsize=25002&hid=1ab7dc748caae49151784d1a67b34c96&media_type=image&tknv=v3" alt="Т-Банк">
+              </div>
+            </div>
           <button class="btn btn-primary" id="save-sbp-btn" style="width:100%; margin-top: 16px;">Сохранить и продолжить</button>
         </div>
       </div>
     </div>
     
     <!-- Strategies -->
-    <div id="modalStrategy16" class="modal-overlay"><div class="modal"><div class="modal-header"><h2 class="modal-title">Гибкая 16%</h2><button class="close-btn" onclick="closeModal('strategy16')">✕</button></div><button class="btn btn-primary" onclick="openNewInvestment('16')" style="width: 100%;">Инвестировать</button></div></div>
-    <div id="modalStrategy17" class="modal-overlay"><div class="modal"><div class="modal-header"><h2 class="modal-title">30 дней 17%</h2><button class="close-btn" onclick="closeModal('strategy17')">✕</button></div><button class="btn btn-primary" onclick="openNewInvestment('17')" style="width: 100%;">Инвестировать</button></div></div>
-    <div id="modalStrategy18" class="modal-overlay"><div class="modal"><div class="modal-header"><h2 class="modal-title">90 дней 18%</h2><button class="close-btn" onclick="closeModal('strategy18')">✕</button></div><button class="btn btn-primary" onclick="openNewInvestment('18')" style="width: 100%;">Инвестировать</button></div></div>
+    <div id="modalStrategy16" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title">Гибкая 16%</h2>
+          <button class="close-btn" onclick="closeModal('strategy16')">✕</button>
+        </div>
+        <button class="btn btn-primary" onclick="openNewInvestment('16')" style="width: 100%;">Инвестировать</button>
+      </div>
+    </div>
+    <div id="modalStrategy17" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title">30 дней 17%</h2>
+          <button class="close-btn" onclick="closeModal('strategy17')">✕</button>
+        </div>
+        <button class="btn btn-primary" onclick="openNewInvestment('17')" style="width: 100%;">Инвестировать</button>
+      </div>
+    </div>
+    <div id="modalStrategy18" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 class="modal-title">90 дней 18%</h2>
+          <button class="close-btn" onclick="closeModal('strategy18')">✕</button>
+        </div>
+        <button class="btn btn-primary" onclick="openNewInvestment('18')" style="width: 100%;">Инвестировать</button>
+      </div>
+    </div>
 
     <!-- New Investment -->
     <div id="modalNewInvestment" class="modal-overlay">
       <div class="modal">
-        <div class="modal-header"><h2 class="modal-title">Новая инвестиция</h2><button class="close-btn" onclick="closeModal('newInvestment')">✕</button></div>
+        <div class="modal-header">
+          <h2 class="modal-title">Новая инвестиция</h2>
+          <button class="close-btn" onclick="closeModal('newInvestment')">✕</button>
+        </div>
         <div class="input-field" id="niStrategyReadonly" style="text-align:center;font-weight:700;margin-bottom:12px;">—</div>
         <input type="text" class="amount-input" id="niAmount" placeholder="0" oninput="formatAmountInput(this)">
         <button class="btn btn-primary" style="width:100%" id="niConfirmBtn">Подтвердить</button>
@@ -352,521 +388,557 @@
     </div>
 
     <script>
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
-        
-        // --- STATE MANAGEMENT ---
-        let username = null;
-        let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, history: [], portfolio: [] };
-        let userPrefs = { currency: 'RUB', sbpMethods: [] };
-        let devMode = false;
-        let isFirstSync = true;
-        const exchangeRates = { RUB: 1, USD: 0.011, EUR: 0.010 };
-        let lastChosenRate = null;
+      const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
 
-        // История: пагинация
-        let historyOffset = 0;
-        const HISTORY_PAGE_SIZE = 10;
-        let currentHistoryFilterType = 'all';
-        let filteredHistory = [];
+      // -------- STATE --------
+      let username = null;
+      let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, history: [], portfolio: [] };
+      let userPrefs = { currency: 'RUB', sbpMethods: [] };
+      let devMode = false;
+      let lastChosenRate = null;
 
-        // --- UI HELPERS ---
-        const fmtMoney = (val, currency) => {
-            const rate = exchangeRates[currency];
-            const num = (Number(val) || 0) * rate;
-            return num.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        };
+      // Status: показываем loading/synced только один раз
+      let hasShownInitialStatus = false;
 
-        const formatAmountInput = (input) => {
-            let value = input.value.replace(/\s/g, '').replace(/[^\d]/g, '');
-            input.value = value ? parseInt(value, 10).toLocaleString('ru-RU') : '';
-        };
+      // Курсы и доход сегодня (в RUB) для мгновенного пересчёта
+      const exchangeRates = { RUB: 1, USD: 0.011, EUR: 0.010 };
+      let latestTodayIncomeRub = 0;
 
-        function showPopup(text, timeout = 3000) {
-            const el = document.createElement('div');
-            el.className = 'popup';
-            el.textContent = text;
-            document.body.appendChild(el);
-            setTimeout(() => {
-                el.style.transition = 'opacity .25s ease, transform .25s ease';
-                el.style.opacity = '0';
-                el.style.transform = 'translateX(-50%) translateY(10px)';
-                setTimeout(() => el.remove(), 250);
-            }, timeout);
+      // История — пагинация и фильтр
+      let historyOffset = 0;
+      const HISTORY_PAGE_SIZE = 10;
+      let currentHistoryFilterType = 'all';
+      let filteredHistory = [];
+
+      // -------- HELPERS --------
+      const fmtMoney = (val, currency) => {
+        const rate = exchangeRates[currency];
+        const num = (Number(val) || 0) * rate;
+        return num.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      };
+
+      function formatAmountInput(input) {
+        let value = input.value.replace(/\s/g, '').replace(/[^\d]/g, '');
+        input.value = value ? parseInt(value, 10).toLocaleString('ru-RU') : '';
+      }
+
+      function showPopup(text, timeout = 3000) {
+        const el = document.createElement('div');
+        el.className = 'popup';
+        el.textContent = text;
+        document.body.appendChild(el);
+        setTimeout(() => {
+          el.style.transition = 'opacity .25s ease, transform .25s ease';
+          el.style.opacity = '0';
+          el.style.transform = 'translateX(-50%) translateY(10px)';
+          setTimeout(() => el.remove(), 250);
+        }, timeout);
+      }
+
+      function setStatus(text, type = 'loading') {
+        const el = document.getElementById('status');
+        if (!el) return;
+
+        // Показываем "loading/synced" только при первом подключении
+        if ((type === 'loading' || type === 'synced') && hasShownInitialStatus) return;
+
+        el.textContent = text;
+        el.className = `status ${type} show`;
+
+        if (type === 'error') {
+          setTimeout(() => el.classList.remove('show'), 3000);
+        } else if (type === 'synced') {
+          setTimeout(() => el.classList.remove('show'), 1500);
+          hasShownInitialStatus = true;
+        }
+      }
+
+      // -------- NAV & MODALS --------
+      function openPage(pageId) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById(`page${pageId}`).classList.add('active');
+        document.querySelectorAll('.nav-item').forEach(n => {
+          n.classList.remove('active');
+          if (n.onclick.toString().includes(`'${pageId}'`)) n.classList.add('active');
+        });
+      }
+
+      function openModal(modalId) {
+        const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
+        if (!modal) return;
+        modal.classList.add('active');
+        document.body.classList.add('modal-open');
+
+        // Спец-логика для "Вывод"
+        if (modalId === 'withdraw') {
+          const hasMethods = (userPrefs.sbpMethods || []).length > 0;
+          document.getElementById('withdraw-method-choice').style.display = hasMethods ? 'none' : 'block';
+          document.getElementById('withdraw-add-sbp-form').style.display = 'none';
+          document.getElementById('withdraw-view').style.display = hasMethods ? 'block' : 'none';
+        }
+      }
+
+      function closeModal(modalId) {
+        const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
+        if (modal) modal.classList.remove('active');
+        const anyOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.classList.contains('active'));
+        if (!anyOpen) document.body.classList.remove('modal-open');
+      }
+
+      // -------- BALANCE AUTOSIZE --------
+      function fitBalanceText() {
+        const el = document.getElementById('balanceValue');
+        if (!el) return;
+        const max = 42, min = 18;
+        el.style.fontSize = max + 'px';
+        const limit = el.parentElement ? el.parentElement.clientWidth - 24 : el.clientWidth;
+        let size = max, safety = 50;
+        while (el.scrollWidth > limit && size > min && safety-- > 0) {
+          size -= 1;
+          el.style.fontSize = size + 'px';
+        }
+      }
+      window.addEventListener('resize', fitBalanceText);
+
+      // -------- RENDER --------
+      function updateDashboard(data) {
+        serverState = { ...serverState, ...data };
+        const { balance, monthBase, lockedAmount } = serverState;
+        const currency = userPrefs.currency;
+        const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+
+        document.getElementById('balanceValue').textContent = `${fmtMoney(balance, currency)} ${currencySymbol}`;
+        document.getElementById('freeBalance').textContent = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
+        document.getElementById('investedBalance').textContent = `${fmtMoney(monthBase, currency)} ${currencySymbol}`;
+        document.getElementById('profileUsername').textContent = username || 'Пользователь';
+        document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
+
+        // Доход сегодня — мгновенно под выбранную валюту
+        document.getElementById('todayIncome').textContent = `+${fmtMoney(latestTodayIncomeRub, currency)}`;
+
+        fitBalanceText();
+      }
+
+      function getHistoryFilterPredicate(type) {
+        if (!type || type === 'all') return () => true;
+        const map = { deposit: 'DEPOSIT', withdraw: 'WITHDRAW', invest: 'INVEST' };
+        const wanted = map[type] || null;
+        return (item) => !wanted || (item.type === wanted);
+      }
+
+      function recomputeFilteredHistory() {
+        const pred = getHistoryFilterPredicate(currentHistoryFilterType);
+        filteredHistory = (serverState.history || []).filter(pred);
+      }
+
+      function renderHistoryPage(append = false) {
+        const list = document.getElementById('history-list');
+        const placeholder = document.getElementById('history-placeholder');
+        const loadMoreBtn = document.getElementById('load-more-history');
+
+        if (!append) {
+          historyOffset = 0;
+          list.innerHTML = '';
         }
 
-        let statusHideTimer = null;
-        function setStatus(text, type = 'loading', hold = false) {
-            const el = document.getElementById('status');
-            if (!el) return;
-            if (type === 'synced' && !isFirstSync) return; 
-            if (type === 'synced' && isFirstSync) isFirstSync = false;
+        const slice = filteredHistory.slice(historyOffset, historyOffset + HISTORY_PAGE_SIZE);
 
-            el.textContent = text;
-            el.className = `status ${type} show`;
-            if (statusHideTimer) clearTimeout(statusHideTimer);
-            if (!hold) statusHideTimer = setTimeout(() => el.classList.remove('show'), 2000);
+        if (!append && filteredHistory.length === 0) {
+          placeholder.style.display = 'block';
+          loadMoreBtn.style.display = 'none';
+          return;
         }
+        placeholder.style.display = 'none';
 
-        // --- NAVIGATION & MODALS ---
-        function openPage(pageId) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            document.getElementById(`page${pageId}`).classList.add('active');
-            document.querySelectorAll('.nav-item').forEach(n => {
-                n.classList.remove('active');
-                if (n.onclick.toString().includes(`'${pageId}'`)) n.classList.add('active');
-            });
-        }
-        function openModal(modalId) { 
-            const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
-            if(modal) modal.classList.add('active'); 
-        }
-        function closeModal(modalId) { 
-            const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
-            if(modal) modal.classList.remove('active');
-        }
+        const currency = userPrefs.currency;
+        const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
 
-        // --- BALANCE AUTOSIZE ---
-        function fitBalanceText() {
-          const el = document.getElementById('balanceValue');
-          if (!el) return;
-          const max = 42, min = 18; // px
-          el.style.fontSize = max + 'px';
-          // небольшой отступ, чтобы не упиралось в края
-          const limit = el.parentElement ? el.parentElement.clientWidth - 24 : el.clientWidth;
-          let size = max, safety = 50;
-          while (el.scrollWidth > limit && size > min && safety-- > 0) {
-            size -= 1;
-            el.style.fontSize = size + 'px';
+        slice.forEach(item => {
+          const el = document.createElement('div');
+          el.className = `glass-card history-item status-${item.status.toLowerCase()}`;
+
+          const date = new Date(item.date);
+          const timeStr = `${String(date.getDate()).padStart(2,'0')}.${String(date.getMonth()+1).padStart(2,'0')}.${String(date.getFullYear()).slice(-2)} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+
+          const absAmount = Math.abs(item.amount);
+          let title = '', amountStr = '', subTitle = '';
+
+          switch(item.type) {
+            case 'DEPOSIT':  title = 'Депозит';    amountStr = `+${fmtMoney(absAmount, currency)}`; break;
+            case 'WITHDRAW': title = 'Вывод';      amountStr = `-${fmtMoney(absAmount, currency)}`; break;
+            case 'INVEST':
+              title = 'Инвестиция';
+              amountStr = `${fmtMoney(absAmount, currency)}`;
+              subTitle = `<div style="font-size:12px;color:var(--text-secondary);">Стратегия: ${item.rate}%</div>`;
+              break;
           }
+
+          const uid = devMode ? ` · #${item.shortId}` : '';
+          el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div><b>${title}</b>${subTitle}<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${timeStr}${uid}</div></div>
+              <div style="font-weight:700;font-size:16px;text-align:right;">${amountStr} ${currencySymbol}</div>
+            </div>`;
+          list.appendChild(el);
+        });
+
+        historyOffset += slice.length;
+        loadMoreBtn.style.display = historyOffset < filteredHistory.length ? 'block' : 'none';
+      }
+
+      function applyHistoryFilter(element, type) {
+        if (type) currentHistoryFilterType = type;
+        if (element) {
+          document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
+          element.classList.add('active');
         }
-        window.addEventListener('resize', fitBalanceText);
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+      }
 
-        // --- DATA RENDERING ---
-        function updateDashboard(data) {
-            serverState = { ...serverState, ...data };
-            const { balance, monthBase, lockedAmount } = serverState;
-            const currency = userPrefs.currency;
-            const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
-            
-            document.getElementById('balanceValue').textContent = `${fmtMoney(balance, currency)} ${currencySymbol}`;
-            document.getElementById('freeBalance').textContent = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
-            document.getElementById('investedBalance').textContent = `${fmtMoney(monthBase, currency)} ${currencySymbol}`;
-            document.getElementById('profileUsername').textContent = username || 'Пользователь';
-            document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
+      function renderPortfolio(portfolio) {
+        const list = document.getElementById('portfolio-list');
+        const placeholder = document.getElementById('portfolio-placeholder');
+        list.innerHTML = '';
+        if (!portfolio || portfolio.length === 0) { placeholder.style.display = 'block'; return; }
+        placeholder.style.display = 'none';
 
-            fitBalanceText();
+        const currency = userPrefs.currency;
+        const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+
+        portfolio.forEach(item => {
+          const el = document.createElement('div');
+          el.className = 'glass-card';
+          const uid = devMode ? `<b>#${item.shortId}</b> · ` : '';
+          el.innerHTML = `${uid}${fmtMoney(item.amount, currency)} ${currencySymbol} · <b>${item.rate}%</b>`;
+          list.appendChild(el);
+        });
+      }
+
+      // -------- API --------
+      async function apiGet(path) {
+        try {
+          const r = await fetch(`${SCRIPT_URL}${path}`);
+          if (!r.ok) throw new Error(`Network error: ${r.statusText}`);
+          const data = await r.json();
+          if (!data) throw new Error("Empty response from server");
+          return data;
+        } catch (e) {
+          console.error("API Fetch Error:", e);
+          return { success: false, error: e.message };
         }
+      }
 
+      async function initializeApp() {
+        try {
+          const tg = window.Telegram?.WebApp;
+          tg?.expand?.();
+          username = (tg?.initDataUnsafe?.user?.username) || 'marulin';
 
-        
-        function renderPortfolio(portfolio) {
-            const list = document.getElementById('portfolio-list');
-            const placeholder = document.getElementById('portfolio-placeholder');
-            list.innerHTML = '';
-            if (!portfolio || portfolio.length === 0) { placeholder.style.display = 'block'; return; }
-            placeholder.style.display = 'none';
+          setStatus('Загрузка данных...', 'loading');
 
-            const currency = userPrefs.currency;
-            const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+          const data = await apiGet(`?action=getInitialData&username=${username}`);
+          if (!data.success) throw new Error(data.error || 'Failed to get initial data');
 
-            portfolio.forEach(item => {
-                const el = document.createElement('div');
-                el.className = 'glass-card';
-                const uid = devMode ? `<b>#${item.shortId}</b> · ` : '';
-                el.innerHTML = `${uid}${fmtMoney(item.amount, currency)} ${currencySymbol} · <b>${item.rate}%</b>`;
-                list.appendChild(el);
-            });
+          userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
+          devMode = localStorage.getItem('devMode') === 'true';
+          document.getElementById('devModeToggle').checked = devMode;
+
+          serverState = { ...serverState, ...data };
+          updateDashboard(serverState);
+          recomputeFilteredHistory();
+          renderHistoryPage(false);
+          renderPortfolio(serverState.portfolio);
+          await refreshTodayIncome();
+          updateWithdrawUI();
+
+          setStatus('Синхронизировано', 'synced');
+
+          setInterval(syncBalance, 20000);
+          setInterval(refreshTodayIncome, 60000);
+
+        } catch (e) {
+          console.error('Initialization error:', e);
+          setStatus(`Ошибка: ${e.message}`, 'error');
         }
+      }
 
-        // --- CORE LOGIC & API ---
-        async function apiGet(path) {
-            try {
-                const r = await fetch(`${SCRIPT_URL}${path}`);
-                if (!r.ok) throw new Error(`Network error: ${r.statusText}`);
-                const data = await r.json();
-                if (!data) throw new Error("Empty response from server");
-                return data;
-            } catch (e) {
-                console.error("API Fetch Error:", e);
-                return { success: false, error: e.message };
-            }
-        }
+      async function syncBalance() {
+        try {
+          const data = await apiGet(`?action=syncBalance&username=${username}`);
+          if (data && data.success) {
+            updateDashboard(data);
+            // не показываем статус — он игнорируется после первого
+            // setStatus('Синхронизировано', 'synced');
+          }
+        } catch (error) { /* silent */ }
+      }
 
-        async function initializeApp() {
-            try {
-                const tg = window.Telegram?.WebApp;
-                tg?.expand?.();
-                username = (tg?.initDataUnsafe?.user?.username) || 'marulin'; // Fallback
-                
-                setStatus('Загрузка данных...', 'loading', true);
-                
-                const data = await apiGet(`?action=getInitialData&username=${username}`);
-                if (!data.success) throw new Error(data.error || 'Failed to get initial data');
-                
-                userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
-                devMode = localStorage.getItem('devMode') === 'true';
-                document.getElementById('devModeToggle').checked = devMode;
-                
-                serverState = { ...serverState, ...data };
-                updateDashboard(serverState);
-                renderHistoryPage(false);
-                renderPortfolio(serverState.portfolio);
-                await refreshTodayIncome();
-                updateWithdrawUI();
-                
-                setStatus('Синхронизировано', 'synced');
-                
-                setInterval(syncBalance, 20000);
-                setInterval(refreshTodayIncome, 60000);
-                
-            } catch (e) {
-                console.error('Initialization error:', e);
-                setStatus(`Ошибка: ${e.message}`, 'error', true);
-            }
-        }
+      async function refreshTodayIncome() {
+        try {
+          const res = await apiGet(`?action=previewAccrual&username=${username}`);
+          if (res && res.success) {
+            latestTodayIncomeRub = Number(res.accruedToday || 0);
+            document.getElementById('todayIncome').textContent =
+              `+${fmtMoney(latestTodayIncomeRub, userPrefs.currency)}`;
+          }
+        } catch (e) { /* silent */ }
+      }
 
-        async function syncBalance() {
+      // -------- EVENTS --------
+      function setupEventListeners() {
+        const $id = (x) => document.getElementById(x);
+        const onIf = (el, ev, fn, opts) => { if (el) el.addEventListener(ev, fn, opts); };
+
+        // Делегирование: клик по оверлею закрывает модалку; клик вне дропдауна валюты — закрыть
+        document.addEventListener('click', (e) => {
+          if (e.target?.classList?.contains('modal-overlay')) e.target.classList.remove('active');
+          const anyOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.classList.contains('active'));
+          if (!anyOpen) document.body.classList.remove('modal-open');
+
+          const currencyDropdown = $id('currencyDropdown');
+          const currencyToggler  = document.querySelector('.balance-currency');
+          if (currencyDropdown && currencyToggler && !currencyDropdown.contains(e.target) && !currencyToggler.contains(e.target)) {
+            currencyDropdown.classList.remove('open');
+          }
+        });
+
+        // Dev mode
+        onIf($id('devModeToggle'), 'change', function () {
+          devMode = this.checked;
+          localStorage.setItem('devMode', devMode);
+          renderHistoryPage(false);
+          renderPortfolio(serverState.portfolio);
+        });
+
+        // Deposit
+        onIf($id('depositAgree'), 'change', function () {
+          const btn = $id('depositConfirmBtn');
+          if (btn) btn.disabled = !this.checked;
+        });
+
+        onIf($id('depositConfirmBtn'), 'click', async function () {
+          const amountEl = $id('depositAmount');
+          const amount = amountEl ? parseInt(amountEl.value.replace(/\s/g, '')) || 0 : 0;
+          if (amount <= 0) { showPopup('Введите сумму.'); return; }
+          this.disabled = true;
           try {
-            const data = await apiGet(`?action=syncBalance&username=${username}`);
-            if (data && data.success) {
-                updateDashboard(data);
-                setStatus('Синхронизировано', 'synced');
+            const resp = await apiGet(`?action=requestDeposit&username=${username}&amount=${amount}`);
+            if (resp.success) {
+              showPopup('Запрос на депозит отправлен!');
+              closeModal('deposit');
+              initializeApp();
+            } else {
+              showPopup('Ошибка: ' + (resp.error || 'неизвестно'));
             }
-          } catch (error) { /* silent fail on periodic sync */ }
-        }
+          } catch (e) {
+            showPopup('Сетевая ошибка.');
+          } finally { this.disabled = false; }
+        });
 
-        async function refreshTodayIncome() {
-            try {
-                const res = await apiGet(`?action=previewAccrual&username=${username}`);
-                if (res && res.success) {
-                    const todayIncome = res.accruedToday || 0;
-                    document.getElementById('todayIncome').textContent = `+${fmtMoney(todayIncome, userPrefs.currency)}`;
-                }
-            } catch (e) { /* silent fail */ }
-        }
+        // Withdraw — выбор банка
+        document.querySelectorAll('.bank-icon').forEach(icon => {
+          icon.addEventListener('click', () => {
+            document.querySelectorAll('.bank-icon').forEach(i => i.classList.remove('selected'));
+            icon.classList.add('selected');
+          });
+        });
 
-        // --- EVENT HANDLERS ---
-        function setupEventListeners() {
-          const $id = (x) => document.getElementById(x);
-          const onIf = (el, ev, fn, opts) => { if (el) el.addEventListener(ev, fn, opts); };
+        onIf($id('save-sbp-btn'), 'click', async function () {
+          const phoneEl = $id('withdraw-sbp-phone');
+          const phone = phoneEl ? phoneEl.value : '';
+          const selectedBankEl = document.querySelector('.bank-icon.selected');
+          if (!phone || !selectedBankEl) { showPopup('Пожалуйста, введите номер и выберите банк.'); return; }
+          const bank = selectedBankEl.dataset.bank;
+          userPrefs.sbpMethods = userPrefs.sbpMethods || [];
+          userPrefs.sbpMethods.unshift({ phone, bank });
 
-          // Глобальное делегирование кликов (модалки, дропдаун валюты)
-          document.addEventListener('click', (e) => {
-            if (e.target?.classList?.contains('modal-overlay')) e.target.classList.remove('active');
-            const currencyDropdown = $id('currencyDropdown');
-            const currencyToggler  = document.querySelector('.balance-currency');
-            if (currencyDropdown && currencyToggler && !currencyDropdown.contains(e.target) && !currencyToggler.contains(e.target)) {
-              currencyDropdown.classList.remove('open');
+          this.disabled = true;
+          try {
+            const resp = await apiGet(`?action=saveUserPrefs&username=${username}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
+            if (resp.success) {
+              userPrefs = resp.savedPrefs;
+              updateWithdrawUI();
+            } else {
+              showPopup('Не удалось сохранить реквизиты.');
             }
-          });
+          } catch (e) {
+            showPopup('Ошибка сети.');
+          } finally { this.disabled = false; }
+        });
 
-          // devMode
-          onIf($id('devModeToggle'), 'change', function () {
-            devMode = this.checked;
-            localStorage.setItem('devMode', devMode);
-            renderHistoryPage(false);
-            renderPortfolio(serverState.portfolio);
-          });
+        onIf($id('withdraw-recipient-select'), 'change', function () {
+          if (this.value === 'add_new') {
+            $id('withdraw-view').style.display = 'none';
+            $id('withdraw-method-choice').style.display = 'block';
+          }
+        });
 
-          // Deposit
-          onIf($id('depositAgree'), 'change', function () {
-            const btn = $id('depositConfirmBtn');
-            if (btn) btn.disabled = !this.checked;
-          });
+        onIf($id('withdrawConfirmBtn'), 'click', async function () {
+          const amountEl = $id('withdrawAmount');
+          const selEl = $id('withdraw-recipient-select');
+          const amount = amountEl ? parseInt(amountEl.value.replace(/\s/g, '')) || 0 : 0;
+          const idx = selEl ? selEl.value : -1;
+          const recipient = (userPrefs.sbpMethods || [])[idx];
+          const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
 
-          onIf($id('depositConfirmBtn'), 'click', async function () {
-            const amountEl = $id('depositAmount');
-            const amount = amountEl ? parseInt(amountEl.value.replace(/\s/g, '')) || 0 : 0;
-            if (amount <= 0) { showPopup('Введите сумму.'); return; }
-            this.disabled = true;
-            try {
-              const resp = await apiGet(`?action=requestDeposit&username=${username}&amount=${amount}`);
-              if (resp.success) {
-                showPopup('Запрос на депозит отправлен!');
-                closeModal('deposit');
-                initializeApp();
-              } else {
-                showPopup('Ошибка: ' + (resp.error || 'неизвестно'));
-              }
-            } catch (e) {
-              showPopup('Сетевая ошибка.');
-            } finally { this.disabled = false; }
-          });
+          if (amount <= 0) { showPopup('Введите сумму.'); return; }
+          if (amount > available) { showPopup('Недостаточно свободных средств.'); return; }
+          if (!recipient) { showPopup('Выберите реквизиты для вывода.'); return; }
 
-          // Withdraw
-          document.querySelectorAll('.bank-icon').forEach(icon => {
-            icon.addEventListener('click', () => {
-              document.querySelectorAll('.bank-icon').forEach(i => i.classList.remove('selected'));
-              icon.classList.add('selected');
-            });
-          });
-
-          onIf($id('save-sbp-btn'), 'click', async function () {
-            const phoneEl = $id('withdraw-sbp-phone');
-            const phone = phoneEl ? phoneEl.value : '';
-            const selectedBankEl = document.querySelector('.bank-icon.selected');
-            if (!phone || !selectedBankEl) { showPopup('Пожалуйста, введите номер и выберите банк.'); return; }
-            const bank = selectedBankEl.dataset.bank;
-            userPrefs.sbpMethods = userPrefs.sbpMethods || [];
-            userPrefs.sbpMethods.unshift({ phone, bank });
-
-            this.disabled = true;
-            try {
-              const resp = await apiGet(`?action=saveUserPrefs&username=${username}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
-              if (resp.success) {
-                userPrefs = resp.savedPrefs;
-                updateWithdrawUI();
-              } else {
-                showPopup('Не удалось сохранить реквизиты.');
-              }
-            } catch (e) {
-              showPopup('Ошибка сети.');
-            } finally { this.disabled = false; }
-          });
-
-          onIf($id('withdraw-recipient-select'), 'change', function () {
-            if (this.value === 'add_new') {
-              $id('withdraw-view').style.display = 'none';
-              $id('withdraw-method-choice').style.display = 'block';
+          this.disabled = true;
+          try {
+            const details = JSON.stringify({ method: 'sbp', phone: recipient.phone, bank: recipient.bank });
+            const resp = await apiGet(`?action=requestWithdraw&username=${username}&amount=${amount}&details=${encodeURIComponent(details)}`);
+            if (resp.success) {
+              showPopup('Запрос на вывод отправлен!');
+              closeModal('withdraw');
+              initializeApp();
+            } else {
+              showPopup('Ошибка: ' + (resp.error || 'неизвестно'));
             }
+          } catch (e) {
+            showPopup('Сетевая ошибка.');
+          } finally { this.disabled = false; }
+        });
+
+        // New Investment
+        onIf($id('niConfirmBtn'), 'click', async function () {
+          const amountEl = $id('niAmount');
+          const amount = amountEl ? parseInt(amountEl.value.replace(/\s/g, '')) || 0 : 0;
+          const rate = lastChosenRate;
+          if (!rate || amount <= 0) { showPopup('Введите корректную сумму.'); return; }
+          this.disabled = true;
+          try {
+            const resp = await apiGet(`?action=logStrategyInvestment&username=${username}&rate=${rate}&amount=${amount}`);
+            if (resp.success) {
+              showPopup('Инвестиция создана!');
+              closeModal('newInvestment');
+              initializeApp();
+            } else {
+              showPopup('Ошибка: ' + (resp.error || 'неизвестно'));
+            }
+          } catch (e) {
+            showPopup('Ошибка сети');
+          } finally { this.disabled = false; }
+        });
+
+        // История — «Загрузить ещё»
+        onIf($id('load-more-history'), 'click', () => {
+          renderHistoryPage(true);
+        });
+      }
+
+      // -------- UI UTILS --------
+      function setDepositAmount(amount) {
+        const input = document.getElementById('depositAmount');
+        input.value = amount;
+        formatAmountInput(input);
+      }
+
+      function toggleCurrencyDropdown(event) {
+        event.stopPropagation();
+        document.getElementById('currencyDropdown').classList.toggle('open');
+      }
+
+      async function selectCurrency(currency, event) {
+        event.stopPropagation();
+        userPrefs.currency = currency;
+        document.getElementById('currentCurrency').textContent = currency;
+        document.querySelectorAll('.currency-option').forEach(opt => opt.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById('currencyDropdown').classList.remove('open');
+
+        updateDashboard(serverState);
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+        renderPortfolio(serverState.portfolio);
+
+        await apiGet(`?action=saveUserPrefs&username=${username}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
+      }
+
+      function openNewInvestment(rate) {
+        lastChosenRate = rate;
+        const name = `Стратегия ${rate}%`;
+        document.getElementById('niStrategyReadonly').textContent = name;
+        document.getElementById('niAmount').value = '';
+        ['strategy16', 'strategy17', 'strategy18'].forEach(m => closeModal(m));
+        openModal('newInvestment');
+      }
+
+      function showAddRecipientForm(method) {
+        if (method !== 'sbp') return;
+        document.getElementById('withdraw-method-choice').style.display = 'none';
+        document.getElementById('withdraw-add-sbp-form').style.display = 'block';
+        const phoneInput = document.getElementById('withdraw-sbp-phone');
+        if (phoneInput) phoneInput.focus();
+        document.querySelectorAll('.bank-icon').forEach(i => i.classList.remove('selected'));
+      }
+
+      function updateWithdrawUI() {
+        const select = document.getElementById('withdraw-recipient-select');
+        select.innerHTML = '';
+
+        if (userPrefs.sbpMethods && userPrefs.sbpMethods.length > 0) {
+          userPrefs.sbpMethods.forEach((method, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = `СБП: ${method.phone} (${method.bank})`;
+            select.appendChild(option);
           });
+          const addNewOption = document.createElement('option');
+          addNewOption.value = 'add_new';
+          addNewOption.textContent = '+ Добавить новые реквизиты';
+          select.appendChild(addNewOption);
 
-          onIf($id('withdrawConfirmBtn'), 'click', async function () {
-            const amountEl = $id('withdrawAmount');
-            const selEl = $id('withdraw-recipient-select');
-            const amount = amountEl ? parseInt(amountEl.value.replace(/\s/g, '')) || 0 : 0;
-            const idx = selEl ? selEl.value : -1;
-            const recipient = (userPrefs.sbpMethods || [])[idx];
-            const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
+          document.getElementById('withdraw-view').style.display = 'block';
+          document.getElementById('withdraw-method-choice').style.display = 'none';
+          document.getElementById('withdraw-add-sbp-form').style.display = 'none';
 
-            if (amount <= 0) { showPopup('Введите сумму.'); return; }
-            if (amount > available) { showPopup('Недостаточно свободных средств.'); return; }
-            if (!recipient) { showPopup('Выберите реквизиты для вывода.'); return; }
-
-            this.disabled = true;
-            try {
-              const details = JSON.stringify({ method: 'sbp', phone: recipient.phone, bank: recipient.bank });
-              const resp = await apiGet(`?action=requestWithdraw&username=${username}&amount=${amount}&details=${encodeURIComponent(details)}`);
-              if (resp.success) {
-                showPopup('Запрос на вывод отправлен!');
-                closeModal('withdraw');
-                initializeApp();
-              } else {
-                showPopup('Ошибка: ' + (resp.error || 'неизвестно'));
-              }
-            } catch (e) {
-              showPopup('Сетевая ошибка.');
-            } finally { this.disabled = false; }
-          });
-
-          // New Investment
-          onIf($id('niConfirmBtn'), 'click', async function () {
-            const amountEl = $id('niAmount');
-            const amount = amountEl ? parseInt(amountEl.value.replace(/\s/g, '')) || 0 : 0;
-            const rate = lastChosenRate;
-            if (!rate || amount <= 0) { showPopup('Введите корректную сумму.'); return; }
-            this.disabled = true;
-            try {
-              const resp = await apiGet(`?action=logStrategyInvestment&username=${username}&rate=${rate}&amount=${amount}`);
-              if (resp.success) {
-                showPopup('Инвестиция создана!');
-                closeModal('newInvestment');
-                initializeApp();
-              } else {
-                showPopup('Ошибка: ' + (resp.error || 'неизвестно'));
-              }
-            } catch (e) {
-              showPopup('Ошибка сети');
-            } finally { this.disabled = false; }
-          });
-
-          // История — подгрузка
-onIf($id('load-more-history'), 'click', () => {
-  renderHistoryPage(true);
-});
+        } else {
+          document.getElementById('withdraw-view').style.display = 'none';
+          document.getElementById('withdraw-method-choice').style.display = 'block';
+          document.getElementById('withdraw-add-sbp-form').style.display = 'none';
         }
+      }
 
-        // --- UI UTILS ---
-// Возвращает предикат по типу фильтра
-function getHistoryFilterPredicate(type) {
-  if (!type || type === 'all') return () => true;
-  const map = { deposit: 'DEPOSIT', withdraw: 'WITHDRAW', invest: 'INVEST' };
-  const wanted = map[type] || null;
-  return (item) => !wanted || (item.type === wanted);
-}
-
-// Пересчитывает filteredHistory из serverState.history с учётом текущего фильтра
-function recomputeFilteredHistory() {
-  const pred = getHistoryFilterPredicate(currentHistoryFilterType);
-  filteredHistory = (serverState.history || []).filter(pred);
-}
-
-// Рендер одной «страницы» истории из filteredHistory
-function renderHistoryPage(append = false) {
-  const list = document.getElementById('history-list');
-  const placeholder = document.getElementById('history-placeholder');
-  const loadMoreBtn = document.getElementById('load-more-history');
-
-  if (!append) {
-    historyOffset = 0;
-    list.innerHTML = '';
-  }
-
-  const slice = filteredHistory.slice(historyOffset, historyOffset + HISTORY_PAGE_SIZE);
-
-  if (!append && filteredHistory.length === 0) {
-    placeholder.style.display = 'block';
-    loadMoreBtn.style.display = 'none';
-    return;
-  }
-  placeholder.style.display = 'none';
-
-  const currency = userPrefs.currency;
-  const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
-
-  slice.forEach(item => {
-    const el = document.createElement('div');
-    el.className = `glass-card history-item status-${item.status.toLowerCase()}`;
-
-    const date = new Date(item.date);
-    const timeStr = `${String(date.getDate()).padStart(2,'0')}.${String(date.getMonth()+1).padStart(2,'0')}.${String(date.getFullYear()).slice(-2)} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
-
-    const absAmount = Math.abs(item.amount);
-    let title = '', amountStr = '', subTitle = '';
-
-    switch(item.type) {
-      case 'DEPOSIT':  title = 'Депозит';    amountStr = `+${fmtMoney(absAmount, currency)}`; break;
-      case 'WITHDRAW': title = 'Вывод';      amountStr = `-${fmtMoney(absAmount, currency)}`; break;
-      case 'INVEST':   title = 'Инвестиция'; amountStr =  `${fmtMoney(absAmount, currency)}`; subTitle = `<div style="font-size:12px;color:var(--text-secondary);">Стратегия: ${item.rate}%</div>`; break;
-    }
-
-    const uid = devMode ? ` · #${item.shortId}` : '';
-    el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div><b>${title}</b>${subTitle}<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${timeStr}${uid}</div></div>
-        <div style="font-weight:700;font-size:16px;text-align:right;">${amountStr} ${currencySymbol}</div>
-      </div>`;
-    list.appendChild(el);
-  });
-
-  historyOffset += slice.length;
-  document.getElementById('load-more-history').style.display =
-    historyOffset < filteredHistory.length ? 'block' : 'none';
-}
-
-// Обработчик переключения фильтра: пересчёт + новый рендер с 0
-function applyHistoryFilter(element, type) {
-  if (type) currentHistoryFilterType = type;
-
-  if (element) {
-    document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
-    element.classList.add('active');
-  }
-
-  recomputeFilteredHistory();
-  renderHistoryPage(false);
-}
-
-        // Надёжное копирование с fallback для WebView/iframe
-        async function copyToClipboard(text) {
+      // Надёжное копирование + смена иконки на галочку на 2 сек
+      async function copyToClipboard(text, btnEl) {
+        const ok = await (async () => {
           try {
             if (navigator.clipboard && window.isSecureContext) {
               await navigator.clipboard.writeText(text);
-              showPopup('Скопировано!');
-              return;
+              return true;
             }
-            throw new Error('Clipboard API not available');
-          } catch (err) {
+            throw new Error();
+          } catch {
             try {
               const ta = document.createElement('textarea');
-              ta.value = text;
-              ta.setAttribute('readonly', '');
-              ta.style.position = 'fixed';
-              ta.style.left = '-9999px';
-              document.body.appendChild(ta);
-              ta.select();
-              ta.setSelectionRange(0, ta.value.length);
-              const ok = document.execCommand('copy');
-              document.body.removeChild(ta);
-              if (ok) { showPopup('Скопировано!'); return; }
-              throw err;
-            } catch (e2) {
-              showPopup('Не удалось скопировать. Скопируйте вручную.');
-            }
+              ta.value = text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.left='-9999px';
+              document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, ta.value.length);
+              const res = document.execCommand('copy'); document.body.removeChild(ta);
+              return res;
+            } catch { return false; }
           }
-        }
+        })();
 
-        function setDepositAmount(amount) { 
-            const input = document.getElementById('depositAmount');
-            input.value = amount;
-            formatAmountInput(input);
+        if (ok) {
+          if (btnEl) {
+            if (!btnEl.dataset.orig) btnEl.dataset.orig = btnEl.innerHTML;
+            btnEl.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
+            setTimeout(() => { btnEl.innerHTML = btnEl.dataset.orig; }, 2000);
+          }
+          showPopup('Номер скопирован');
+        } else {
+          showPopup('Не удалось скопировать. Скопируйте вручную.');
         }
-        function toggleCurrencyDropdown(event) { event.stopPropagation(); document.getElementById('currencyDropdown').classList.toggle('open'); }
-        async function selectCurrency(currency, event) {
-            event.stopPropagation();
-            userPrefs.currency = currency;
-            document.getElementById('currentCurrency').textContent = currency;
-            document.querySelectorAll('.currency-option').forEach(opt => opt.classList.remove('active'));
-            event.target.classList.add('active');
-            document.getElementById('currencyDropdown').classList.remove('open');
-            
-updateDashboard(serverState);
-recomputeFilteredHistory();
-renderHistoryPage(false);
-renderPortfolio(serverState.portfolio);
-            await apiGet(`?action=saveUserPrefs&username=${username}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
-        }
-        function openNewInvestment(rate) {
-            lastChosenRate = rate;
-            const name = `Стратегия ${rate}%`;
-            document.getElementById('niStrategyReadonly').textContent = name;
-            document.getElementById('niAmount').value = '';
-            ['strategy16', 'strategy17', 'strategy18'].forEach(m => closeModal(m));
-            openModal('newInvestment');
-        }
+      }
 
-        // Показ формы добавления получателя СБП
-        function showAddRecipientForm(method) {
-          if (method !== 'sbp') return;
-          document.getElementById('withdraw-method-choice').style.display = 'none';
-          document.getElementById('withdraw-add-sbp-form').style.display = 'block';
-          const phoneInput = document.getElementById('withdraw-sbp-phone');
-          if (phoneInput) phoneInput.focus();
-          // снять предыдущее выделение банка
-          document.querySelectorAll('.bank-icon').forEach(i => i.classList.remove('selected'));
-        }
-
-        function updateWithdrawUI() {
-            const select = document.getElementById('withdraw-recipient-select');
-            select.innerHTML = '';
-
-            if (userPrefs.sbpMethods && userPrefs.sbpMethods.length > 0) {
-                userPrefs.sbpMethods.forEach((method, index) => {
-                    const option = document.createElement('option');
-                    option.value = index;
-                    option.textContent = `СБП: ${method.phone} (${method.bank})`;
-                    select.appendChild(option);
-                });
-                const addNewOption = document.createElement('option');
-                addNewOption.value = 'add_new';
-                addNewOption.textContent = '+ Добавить новые реквизиты';
-                select.appendChild(addNewOption);
-                
-                document.getElementById('withdraw-view').style.display = 'block';
-                document.getElementById('withdraw-method-choice').style.display = 'none';
-                document.getElementById('withdraw-add-sbp-form').style.display = 'none';
-
-            } else {
-                document.getElementById('withdraw-view').style.display = 'none';
-                document.getElementById('withdraw-method-choice').style.display = 'block';
-                document.getElementById('withdraw-add-sbp-form').style.display = 'none';
-            }
-        }
-
-        // --- INITIALIZE ---
-        document.addEventListener('DOMContentLoaded', () => {
-            setupEventListeners();      // единственный вызов
-            initializeApp();
-        });
+      // -------- INIT --------
+      document.addEventListener('DOMContentLoaded', () => {
+        setupEventListeners();
+        initializeApp();
+      });
     </script>
-</body>
+  </body>
 </html>
+
