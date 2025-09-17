@@ -805,29 +805,44 @@ if (modalId === 'withdraw') {
       }
 
 // Обновляет баланс и "Доход сегодня" одновременно
-async function syncBalance() {
+// Обновляет баланс и "Доход сегодня" вместе + авто-рескейджулинг и backoff
+async function syncBalance(fromScheduler = false) {
+  // не делаем параллельные запросы и не крутимся в фоне, когда вкладка скрыта
+  if (syncInFlight || document.hidden) {
+    if (fromScheduler) scheduleSync(); // запланируем следующий цикл
+    return;
+  }
+
+  syncInFlight = true;
   try {
     const [balRes, accrRes] = await Promise.allSettled([
       apiGet(`?action=syncBalance&username=${encodeURIComponent(username)}`),
       apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`)
     ]);
 
-    // Баланс и прочее состояние
+    // Баланс / состояние
     if (balRes.status === 'fulfilled' && balRes.value && balRes.value.success) {
-      updateDashboard(balRes.value); // перерисует общий/свободный/инвестировано
+      updateDashboard(balRes.value);
+      // успешный цикл — сбрасываем backoff
+      syncBackoffMs = 20000;
+    } else {
+      // ошибка ответа — увеличим интервал
+      syncBackoffMs = Math.min(syncBackoffMs * 2, SYNC_BACKOFF_MAX);
     }
 
-    // Доход сегодня (кешируем в RUB и рисуем в выбранной валюте)
+    // Доход сегодня
     if (accrRes.status === 'fulfilled' && accrRes.value && accrRes.value.success) {
       latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
     }
-
-    // гарантированно обновим текст сегодня после обоих запросов
     const el = document.getElementById('todayIncome');
     if (el) el.textContent = `+${fmtMoney(latestTodayIncomeRub, userPrefs.currency)}`;
 
-  } catch (error) {
-    // молча пропускаем — периодический поллер сам повторит
+  } catch (e) {
+    // сеть/внезапная ошибка — увеличим интервал
+    syncBackoffMs = Math.min(syncBackoffMs * 2, SYNC_BACKOFF_MAX);
+  } finally {
+    syncInFlight = false;
+    if (fromScheduler) scheduleSync(); // цепочка: планируем следующий проход
   }
 }
 
