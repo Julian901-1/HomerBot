@@ -597,8 +597,10 @@
         }
 
         // --- INITIALIZE ---
-        setupEventListeners();
-        initializeApp();
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            initializeApp();
+        });
     </script>
 </body>
 </html>
