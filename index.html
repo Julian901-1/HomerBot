@@ -367,6 +367,7 @@
         let historyOffset = 0;
         const HISTORY_PAGE_SIZE = 10;
         let currentHistoryFilterType = 'all';
+        let filteredHistory = [];
 
         // --- UI HELPERS ---
         const fmtMoney = (val, currency) => {
@@ -456,62 +457,7 @@
             fitBalanceText();
         }
 
-        function renderHistory(history, append = false) {
-            const list = document.getElementById('history-list');
-            const placeholder = document.getElementById('history-placeholder');
-            const loadMoreBtn = document.getElementById('load-more-history');
 
-            if (!append) {
-                historyOffset = 0;
-                list.innerHTML = '';
-            }
-            
-            const itemsToRender = history.slice(historyOffset, historyOffset + HISTORY_PAGE_SIZE);
-
-            if (history.length === 0 && !append) {
-                placeholder.style.display = 'block';
-                loadMoreBtn.style.display = 'none';
-                return;
-            }
-            if (history.length > 0) placeholder.style.display = 'none';
-
-            itemsToRender.forEach(item => {
-                const el = document.createElement('div');
-                el.className = `glass-card history-item status-${item.status.toLowerCase()}`;
-                el.dataset.type = item.type.toLowerCase();
-                
-                const date = new Date(item.date);
-                const timeStr = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear().toString().slice(-2)} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-                
-                let title = '', amountStr = '', subTitle = '';
-                const absAmount = Math.abs(item.amount);
-                const currency = userPrefs.currency;
-                const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
-
-                switch(item.type) {
-                    case 'DEPOSIT': title = 'Депозит'; amountStr = `+${fmtMoney(absAmount, currency)}`; break;
-                    case 'WITHDRAW': title = 'Вывод'; amountStr = `-${fmtMoney(absAmount, currency)}`; break;
-                    case 'INVEST': 
-                        title = 'Инвестиция';
-                        amountStr = fmtMoney(absAmount, currency);
-                        subTitle = `<div style="font-size: 12px; color: var(--text-secondary);">Стратегия: ${item.rate}%</div>`;
-                        break;
-                }
-
-                const uid = devMode ? ` · #${item.shortId}` : '';
-                el.innerHTML = `<div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                    <div><b>${title}</b>${subTitle}<div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">${timeStr}${uid}</div></div>
-                    <div style="font-weight: 700; font-size: 16px; text-align:right;">${amountStr} ${currencySymbol}</div>
-                </div>`;
-                list.appendChild(el);
-            });
-
-            historyOffset += itemsToRender.length;
-            loadMoreBtn.style.display = historyOffset < history.length ? 'block' : 'none';
-            
-            // повторно применяем текущий фильтр
-            applyHistoryFilter(null, currentHistoryFilterType);
-        }
         
         function renderPortfolio(portfolio) {
             const list = document.getElementById('portfolio-list');
@@ -563,7 +509,7 @@
                 
                 serverState = { ...serverState, ...data };
                 updateDashboard(serverState);
-                renderHistory(serverState.history);
+                renderHistoryPage(false);
                 renderPortfolio(serverState.portfolio);
                 await refreshTodayIncome();
                 updateWithdrawUI();
@@ -618,7 +564,7 @@
           onIf($id('devModeToggle'), 'change', function () {
             devMode = this.checked;
             localStorage.setItem('devMode', devMode);
-            renderHistory(serverState.history);
+            renderHistoryPage(false);
             renderPortfolio(serverState.portfolio);
           });
 
@@ -735,32 +681,90 @@
           });
 
           // История — подгрузка
-          onIf($id('load-more-history'), 'click', () => {
-            renderHistory(serverState.history, true);
-          });
+onIf($id('load-more-history'), 'click', () => {
+  renderHistoryPage(true);
+});
         }
 
         // --- UI UTILS ---
-        function applyHistoryFilter(element, type) {
-            if (type) currentHistoryFilterType = type;
+// Возвращает предикат по типу фильтра
+function getHistoryFilterPredicate(type) {
+  if (!type || type === 'all') return () => true;
+  const map = { deposit: 'DEPOSIT', withdraw: 'WITHDRAW', invest: 'INVEST' };
+  const wanted = map[type] || null;
+  return (item) => !wanted || (item.type === wanted);
+}
 
-            // визуальное состояние чипов, если элемент передан
-            if (element) {
-              document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
-              element.classList.add('active');
-            }
+// Пересчитывает filteredHistory из serverState.history с учётом текущего фильтра
+function recomputeFilteredHistory() {
+  const pred = getHistoryFilterPredicate(currentHistoryFilterType);
+  filteredHistory = (serverState.history || []).filter(pred);
+}
 
-            // применяем фильтр к уже отрендеренным элементам
-            const listItems = document.querySelectorAll('#history-list .history-item');
-            let hasVisibleItems = false;
-            listItems.forEach(item => {
-                const isVisible = (currentHistoryFilterType === 'all' || item.dataset.type === currentHistoryFilterType);
-                item.style.display = isVisible ? 'block' : 'none';
-                if (isVisible) hasVisibleItems = true;
-            });
+// Рендер одной «страницы» истории из filteredHistory
+function renderHistoryPage(append = false) {
+  const list = document.getElementById('history-list');
+  const placeholder = document.getElementById('history-placeholder');
+  const loadMoreBtn = document.getElementById('load-more-history');
 
-            document.getElementById('history-placeholder').style.display = hasVisibleItems ? 'none' : 'block';
-        }
+  if (!append) {
+    historyOffset = 0;
+    list.innerHTML = '';
+  }
+
+  const slice = filteredHistory.slice(historyOffset, historyOffset + HISTORY_PAGE_SIZE);
+
+  if (!append && filteredHistory.length === 0) {
+    placeholder.style.display = 'block';
+    loadMoreBtn.style.display = 'none';
+    return;
+  }
+  placeholder.style.display = 'none';
+
+  const currency = userPrefs.currency;
+  const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+
+  slice.forEach(item => {
+    const el = document.createElement('div');
+    el.className = `glass-card history-item status-${item.status.toLowerCase()}`;
+
+    const date = new Date(item.date);
+    const timeStr = `${String(date.getDate()).padStart(2,'0')}.${String(date.getMonth()+1).padStart(2,'0')}.${String(date.getFullYear()).slice(-2)} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+
+    const absAmount = Math.abs(item.amount);
+    let title = '', amountStr = '', subTitle = '';
+
+    switch(item.type) {
+      case 'DEPOSIT':  title = 'Депозит';    amountStr = `+${fmtMoney(absAmount, currency)}`; break;
+      case 'WITHDRAW': title = 'Вывод';      amountStr = `-${fmtMoney(absAmount, currency)}`; break;
+      case 'INVEST':   title = 'Инвестиция'; amountStr =  `${fmtMoney(absAmount, currency)}`; subTitle = `<div style="font-size:12px;color:var(--text-secondary);">Стратегия: ${item.rate}%</div>`; break;
+    }
+
+    const uid = devMode ? ` · #${item.shortId}` : '';
+    el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div><b>${title}</b>${subTitle}<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${timeStr}${uid}</div></div>
+        <div style="font-weight:700;font-size:16px;text-align:right;">${amountStr} ${currencySymbol}</div>
+      </div>`;
+    list.appendChild(el);
+  });
+
+  historyOffset += slice.length;
+  document.getElementById('load-more-history').style.display =
+    historyOffset < filteredHistory.length ? 'block' : 'none';
+}
+
+// Обработчик переключения фильтра: пересчёт + новый рендер с 0
+function applyHistoryFilter(element, type) {
+  if (type) currentHistoryFilterType = type;
+
+  if (element) {
+    document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
+    element.classList.add('active');
+  }
+
+  recomputeFilteredHistory();
+  renderHistoryPage(false);
+}
 
         // Надёжное копирование с fallback для WebView/iframe
         async function copyToClipboard(text) {
@@ -805,9 +809,10 @@
             event.target.classList.add('active');
             document.getElementById('currencyDropdown').classList.remove('open');
             
-            updateDashboard(serverState);
-            renderHistory(serverState.history);
-            renderPortfolio(serverState.portfolio);
+updateDashboard(serverState);
+recomputeFilteredHistory();
+renderHistoryPage(false);
+renderPortfolio(serverState.portfolio);
             await apiGet(`?action=saveUserPrefs&username=${username}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
         }
         function openNewInvestment(rate) {
