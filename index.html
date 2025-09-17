@@ -880,7 +880,7 @@ async function cancelDeposit() {
           this.disabled = true;
           try {
             const resp = await apiGet(`?action=requestDeposit&username=${username}&amount=${amount}`);
-            + if (resp.success) {
+            if (resp.success) {
 showPopup('Запрос на депозит отправлен!');
 hasPendingDeposit = true;
 showDepositStep(2);
