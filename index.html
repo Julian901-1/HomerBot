@@ -797,7 +797,6 @@ if (modalId === 'withdraw') {
           setStatus('Синхронизировано', 'synced');
 
           scheduleSync(2000);
-          setInterval(refreshTodayIncome, 60000);
 
         } catch (e) {
           console.error('Initialization error:', e);
@@ -805,27 +804,30 @@ if (modalId === 'withdraw') {
         }
       }
 
-async function syncBalance(fromScheduler = false) {
-  if (syncInFlight || document.hidden) { 
-    if (fromScheduler) scheduleSync(); 
-    return; 
-  }
-  syncInFlight = true;
+// Обновляет баланс и "Доход сегодня" одновременно
+async function syncBalance() {
   try {
-    const data = await apiGet(`?action=syncBalance&username=${username}`);
-    if (data && data.success) {
-      updateDashboard(data);
-      syncBackoffMs = 20000; // успех — сбрасываем бэк-офф
-    } else {
-      // логическая ошибка/ответ без success
-      syncBackoffMs = Math.min(syncBackoffMs * 2, SYNC_BACKOFF_MAX);
+    const [balRes, accrRes] = await Promise.allSettled([
+      apiGet(`?action=syncBalance&username=${encodeURIComponent(username)}`),
+      apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`)
+    ]);
+
+    // Баланс и прочее состояние
+    if (balRes.status === 'fulfilled' && balRes.value && balRes.value.success) {
+      updateDashboard(balRes.value); // перерисует общий/свободный/инвестировано
     }
+
+    // Доход сегодня (кешируем в RUB и рисуем в выбранной валюте)
+    if (accrRes.status === 'fulfilled' && accrRes.value && accrRes.value.success) {
+      latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
+    }
+
+    // гарантированно обновим текст сегодня после обоих запросов
+    const el = document.getElementById('todayIncome');
+    if (el) el.textContent = `+${fmtMoney(latestTodayIncomeRub, userPrefs.currency)}`;
+
   } catch (error) {
-    // сеть/429/500 — увеличиваем бэк-офф
-    syncBackoffMs = Math.min(syncBackoffMs * 2, SYNC_BACKOFF_MAX);
-  } finally {
-    syncInFlight = false;
-    if (fromScheduler) scheduleSync(); // цепочка
+    // молча пропускаем — периодический поллер сам повторит
   }
 }
 
