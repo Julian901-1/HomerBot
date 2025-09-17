@@ -407,125 +407,179 @@
         }
 
         // --- EVENT HANDLERS ---
-        function setupEventListeners() {
-            document.addEventListener('click', (e) => { 
-                if (e.target.classList.contains('modal-overlay')) {
-                    e.target.classList.remove('active');
-                }
-                const currencyDropdown = document.getElementById('currencyDropdown');
-                const currencyToggler = document.querySelector('.balance-currency');
-                if (currencyDropdown && currencyToggler && !currencyDropdown.contains(e.target) && !currencyToggler.contains(e.target)) {
-                    currencyDropdown.classList.remove('open');
-                }
-            });
+function setupEventListeners() {
+  // 1) Общие утилиты
+  const $id = (x) => document.getElementById(x);
+  const onIf = (el, ev, fn, opts) => { if (el) el.addEventListener(ev, fn, opts); };
 
-            document.getElementById('devModeToggle').addEventListener('change', function() {
-                devMode = this.checked;
-                localStorage.setItem('devMode', devMode);
-                renderHistory(serverState.history);
-                renderPortfolio(serverState.portfolio);
-            });
+  // 2) Глобальное делегирование кликов (модалки, выпадающий список валюты)
+  document.addEventListener('click', (e) => {
+    // Закрытие модалки по клику на оверлей
+    if (e.target && e.target.classList && e.target.classList.contains('modal-overlay')) {
+      e.target.classList.remove('active');
+    }
 
-            document.getElementById('depositAgree').addEventListener('change', function() {
-                document.getElementById('depositConfirmBtn').disabled = !this.checked;
-            });
-            
-            document.getElementById('depositConfirmBtn').addEventListener('click', async function() {
-                const amount = parseInt(document.getElementById('depositAmount').value.replace(/\s/g, '')) || 0;
-                if (amount <= 0) { showPopup('Введите сумму.'); return; }
-                this.disabled = true;
-                try {
-                    const resp = await apiGet(`?action=requestDeposit&username=${username}&amount=${amount}`);
-                    if(resp.success) { 
-                        showPopup('Запрос на депозит отправлен!'); 
-                        closeModal('deposit'); 
-                        initializeApp(); 
-                    } else { showPopup('Ошибка: ' + (resp.error || 'неизвестно')); }
-                } catch(e) { showPopup('Сетевая ошибка.'); } finally { this.disabled = false; }
-            });
+    // Клик вне дропдауна валюты
+    const currencyDropdown = $id('currencyDropdown');
+    const currencyToggler  = document.querySelector('.balance-currency');
+    if (
+      currencyDropdown &&
+      currencyToggler &&
+      !currencyDropdown.contains(e.target) &&
+      !currencyToggler.contains(e.target)
+    ) {
+      currencyDropdown.classList.remove('open');
+    }
+  });
 
-            document.getElementById('add-recipient-btn').addEventListener('click', () => {
-                document.getElementById('withdraw-view').style.display = 'none';
-                document.getElementById('withdraw-method-choice').style.display = 'block';
-            });
-            
-            document.querySelectorAll('.bank-icon').forEach(icon => {
-                icon.addEventListener('click', () => {
-                    document.querySelectorAll('.bank-icon').forEach(i => i.classList.remove('selected'));
-                    icon.classList.add('selected');
-                });
-            });
+  // 3) Переключатель devMode
+  onIf($id('devModeToggle'), 'change', function () {
+    devMode = this.checked;
+    localStorage.setItem('devMode', devMode);
+    renderHistory(serverState.history);
+    renderPortfolio(serverState.portfolio);
+  });
 
-            document.getElementById('save-sbp-btn').addEventListener('click', async function() {
-                const phone = document.getElementById('withdraw-sbp-phone').value;
-                const selectedBankEl = document.querySelector('.bank-icon.selected');
-                if (!phone || !selectedBankEl) {
-                    showPopup('Пожалуйста, введите номер и выберите банк.');
-                    return;
-                }
-                const bank = selectedBankEl.dataset.bank;
-                userPrefs.sbpMethods.unshift({ phone, bank });
-                
-                this.disabled = true;
-                try {
-                    const resp = await apiGet(`?action=saveUserPrefs&username=${username}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
-                    if(resp.success) {
-                        userPrefs = resp.savedPrefs;
-                        updateWithdrawUI();
-                    } else {
-                        showPopup('Не удалось сохранить реквизиты.');
-                    }
-                } catch (e) { showPopup('Ошибка сети.'); } finally { this.disabled = false; }
-            });
-            
-            document.getElementById('withdraw-recipient-select').addEventListener('change', function() {
-                if (this.value === 'add_new') {
-                    document.getElementById('withdraw-view').style.display = 'none';
-                    document.getElementById('withdraw-method-choice').style.display = 'block';
-                }
-            });
+  // 4) Deposit
+  onIf($id('depositAgree'), 'change', function () {
+    const btn = $id('depositConfirmBtn');
+    if (btn) btn.disabled = !this.checked;
+  });
 
-            document.getElementById('withdrawConfirmBtn').addEventListener('click', async function() {
-                const amount = parseInt(document.getElementById('withdrawAmount').value.replace(/\s/g, '')) || 0;
-                const selectedRecipientIndex = document.getElementById('withdraw-recipient-select').value;
-                const recipient = userPrefs.sbpMethods[selectedRecipientIndex];
-                const available = serverState.balance - serverState.lockedAmount;
+  onIf($id('depositConfirmBtn'), 'click', async function () {
+    const amountEl = $id('depositAmount');
+    const amount = amountEl ? parseInt(amountEl.value.replace(/\s/g, '')) || 0 : 0;
+    if (amount <= 0) { showPopup('Введите сумму.'); return; }
+    this.disabled = true;
+    try {
+      const resp = await apiGet(`?action=requestDeposit&username=${username}&amount=${amount}`);
+      if (resp.success) {
+        showPopup('Запрос на депозит отправлен!');
+        closeModal('deposit');
+        initializeApp();
+      } else {
+        showPopup('Ошибка: ' + (resp.error || 'неизвестно'));
+      }
+    } catch (e) {
+      showPopup('Сетевая ошибка.');
+    } finally { this.disabled = false; }
+  });
 
-                if (amount <= 0) { showPopup('Введите сумму.'); return; }
-                if (amount > available) { showPopup('Недостаточно свободных средств.'); return; }
-                if (!recipient) { showPopup('Выберите реквизиты для вывода.'); return; }
-                
-                this.disabled = true;
-                try {
-                    const details = JSON.stringify({ method: 'sbp', phone: recipient.phone, bank: recipient.bank });
-                    const resp = await apiGet(`?action=requestWithdraw&username=${username}&amount=${amount}&details=${encodeURIComponent(details)}`);
-                    if(resp.success) { 
-                        showPopup('Запрос на вывод отправлен!'); 
-                        closeModal('withdraw'); 
-                        initializeApp(); 
-                    } else { showPopup('Ошибка: ' + (resp.error || 'неизвестно')); }
-                } catch(e) { showPopup('Сетевая ошибка.'); } finally { this.disabled = false; }
-            });
+  // 5) Withdraw
+  onIf($id('add-recipient-btn'), 'click', () => {
+    const view = $id('withdraw-view');
+    const choice = $id('withdraw-method-choice');
+    if (view) view.style.display = 'none';
+    if (choice) choice.style.display = 'block';
+  });
 
-            document.getElementById('niConfirmBtn').addEventListener('click', async function() {
-                const amount = parseInt(document.getElementById('niAmount').value.replace(/\s/g, '')) || 0;
-                const rate = lastChosenRate;
-                if (!rate || amount <= 0) { showPopup('Введите корректную сумму.'); return; }
-                this.disabled = true;
-                try {
-                    const resp = await apiGet(`?action=logStrategyInvestment&username=${username}&rate=${rate}&amount=${amount}`);
-                    if (resp.success) {
-                        showPopup('Инвестиция создана!');
-                        closeModal('newInvestment');
-                        initializeApp();
-                    } else { showPopup('Ошибка: ' + (resp.error || 'неизвестно')); }
-                } catch (e) { showPopup('Ошибка сети'); } finally { this.disabled = false; }
-            });
-            
-            document.getElementById('load-more-history').addEventListener('click', () => {
-                renderHistory(serverState.history, true);
-            });
-        }
+  onIf($id('withdraw-edit-btn'), 'click', () => {
+    const view = $id('withdraw-view');
+    const choice = $id('withdraw-method-choice');
+    if (view) view.style.display = 'none';
+    if (choice) choice.style.display = 'block';
+  });
+
+  // Выбор банка (если иконки уже в DOM)
+  document.querySelectorAll('.bank-icon').forEach(icon => {
+    icon.addEventListener('click', () => {
+      document.querySelectorAll('.bank-icon').forEach(i => i.classList.remove('selected'));
+      icon.classList.add('selected');
+    });
+  });
+
+  onIf($id('save-sbp-btn'), 'click', async function () {
+    const phoneEl = $id('withdraw-sbp-phone');
+    const phone = phoneEl ? phoneEl.value : '';
+    const selectedBankEl = document.querySelector('.bank-icon.selected');
+    if (!phone || !selectedBankEl) {
+      showPopup('Пожалуйста, введите номер и выберите банк.');
+      return;
+    }
+    const bank = selectedBankEl.dataset.bank;
+    userPrefs.sbpMethods = userPrefs.sbpMethods || [];
+    userPrefs.sbpMethods.unshift({ phone, bank });
+
+    this.disabled = true;
+    try {
+      const resp = await apiGet(`?action=saveUserPrefs&username=${username}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
+      if (resp.success) {
+        userPrefs = resp.savedPrefs;
+        updateWithdrawUI();
+      } else {
+        showPopup('Не удалось сохранить реквизиты.');
+      }
+    } catch (e) {
+      showPopup('Ошибка сети.');
+    } finally { this.disabled = false; }
+  });
+
+  onIf($id('withdraw-recipient-select'), 'change', function () {
+    if (this.value === 'add_new') {
+      const view = $id('withdraw-view');
+      const choice = $id('withdraw-method-choice');
+      if (view) view.style.display = 'none';
+      if (choice) choice.style.display = 'block';
+    }
+  });
+
+  onIf($id('withdrawConfirmBtn'), 'click', async function () {
+    const amountEl = $id('withdrawAmount');
+    const selEl = $id('withdraw-recipient-select');
+    const amount = amountEl ? parseInt(amountEl.value.replace(/\s/g, '')) || 0 : 0;
+    const idx = selEl ? selEl.value : -1;
+    const recipient = (userPrefs.sbpMethods || [])[idx];
+    const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
+
+    if (amount <= 0) { showPopup('Введите сумму.'); return; }
+    if (amount > available) { showPopup('Недостаточно свободных средств.'); return; }
+    if (!recipient) { showPopup('Выберите реквизиты для вывода.'); return; }
+
+    this.disabled = true;
+    try {
+      const details = JSON.stringify({ method: 'sbp', phone: recipient.phone, bank: recipient.bank });
+      const resp = await apiGet(`?action=requestWithdraw&username=${username}&amount=${amount}&details=${encodeURIComponent(details)}`);
+      if (resp.success) {
+        showPopup('Запрос на вывод отправлен!');
+        closeModal('withdraw');
+        initializeApp();
+      } else {
+        showPopup('Ошибка: ' + (resp.error || 'неизвестно'));
+      }
+    } catch (e) {
+      showPopup('Сетевая ошибка.');
+    } finally { this.disabled = false; }
+  });
+
+  // 6) New Investment
+  onIf($id('niConfirmBtn'), 'click', async function () {
+    const amountEl = $id('niAmount');
+    const amount = amountEl ? parseInt(amountEl.value.replace(/\s/g, '')) || 0 : 0;
+    const rate = lastChosenRate;
+    if (!rate || amount <= 0) { showPopup('Введите корректную сумму.'); return; }
+    this.disabled = true;
+    try {
+      const resp = await apiGet(`?action=logStrategyInvestment&username=${username}&rate=${rate}&amount=${amount}`);
+      if (resp.success) {
+        showPopup('Инвестиция создана!');
+        closeModal('newInvestment');
+        initializeApp();
+      } else {
+        showPopup('Ошибка: ' + (resp.error || 'неизвестно'));
+      }
+    } catch (e) {
+      showPopup('Ошибка сети');
+    } finally { this.disabled = false; }
+  });
+
+  // 7) История
+  onIf($id('load-more-history'), 'click', () => {
+    renderHistory(serverState.history, true);
+  });
+}
+
+// Вызвать ПОСЛЕ того, как весь HTML отрендерен (или подключить файл с атрибутом `defer`)
+document.addEventListener('DOMContentLoaded', setupEventListeners);
 
         // --- UI UTILS ---
         function applyHistoryFilter(element) {
