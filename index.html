@@ -873,26 +873,37 @@ async function cancelDeposit() {
           if (btn) btn.disabled = !this.checked;
         });
 
-        onIf($id('depositConfirmBtn'), 'click', async function () {
-          const amountEl = $id('depositAmount');
-          const amount = amountEl ? parseAmount(amountEl.value) : 0;
-          if (amount <= 0) { showPopup('Введите сумму.'); return; }
-          this.disabled = true;
-          try {
-            const resp = await apiGet(`?action=requestDeposit&username=${username}&amount=${amount}`);
-            if (resp.success) {
-showPopup('Запрос на депозит отправлен!');
-hasPendingDeposit = true;
-showDepositStep(2);
-// Не закрываем модалку — закрепляем экран инструкций.
-initializeApp(); // чтобы подтянуть историю/баланс
-} else {
-              showPopup('Ошибка: ' + (resp.error || 'неизвестно'));
-            }
-          } catch (e) {
-            showPopup('Сетевая ошибка.');
-          } finally { this.disabled = false; }
-        });
+onIf($id('depositConfirmBtn'), 'click', async function () {
+  const amountEl = $id('depositAmount');
+  const amount = amountEl ? parseAmount(amountEl.value) : 0;
+
+  if (amount <= 0) {
+    showPopup('Введите сумму.');
+    return;
+  }
+
+  this.disabled = true;
+
+  try {
+    const resp = await apiGet(
+      `?action=requestDeposit&username=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}`
+    );
+
+    if (resp && resp.success) {
+      showPopup('Запрос на депозит отправлен!');
+      hasPendingDeposit = true;
+      showDepositStep(2);
+      // Не закрываем модалку — закрепляем экран инструкций.
+      initializeApp(); // подтянуть историю/баланс
+    } else {
+      showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестно'));
+    }
+  } catch (e) {
+    showPopup('Сетевая ошибка.');
+  } finally {
+    this.disabled = false;
+  }
+});
 
         // Withdraw — выбор банка
         document.querySelectorAll('.bank-icon').forEach(icon => {
