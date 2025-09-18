@@ -37,9 +37,30 @@
     .profile-btn:hover, .btn:hover, .copy-btn:hover, .quick-amount-btn:hover, .method-card:not(.disabled):hover, .filter-chip:hover:not(.active) { background: rgba(255,255,255,0.1); transform: translateY(-1px); }
     .profile-btn { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
     .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; background: var(--glass-bg); backdrop-filter: blur(20px); border-top: 1px solid var(--glass-border); padding: 12px 20px 20px; z-index: 100; border-radius: 24px 24px 0 0; }
-.nav-item { display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 12px; border-radius:12px; opacity:.6; cursor:pointer; transition: transform .15s ease, opacity .2s ease, background .2s ease; }
+/* Bottom nav — всегда горизонтально */
+.nav-items {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-around;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  opacity: .6;
+  cursor: pointer;
+  transition: transform .15s ease, opacity .2s ease, background .2s ease;
+  flex: 0 0 auto;       /* не растягивать, не ломать ряд */
+}
+
 .nav-item:hover { transform: translateY(-2px); opacity: .9; }
-.nav-item:active { transform: translateY(0); }
+.nav-item.active { opacity: 1; background: rgba(255,255,255,0.1); }
     .nav-icon { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; }
     .nav-label { font-size: 11px; font-weight: 500; }
     
@@ -77,7 +98,23 @@
     .btn-group { display: flex; gap: 12px; margin-bottom: 24px; }
     .btn { flex: 1; padding: 16px 24px; border-radius: 16px; font-size: 16px; font-weight: 700; color: var(--text-primary); }
     .btn-primary { background: var(--accent); border-color: var(--accent) !important; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+/* Синий фон для активной primary-кнопки всегда поверх базового .btn */
+.btn.btn-primary:not(:disabled) {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+
+.btn.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover) !important;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+  /* оставляем исходный фон, просто делаем полупрозрачным */
+}
 
     .strategies-section h2 { font-size: 20px; font-weight: 700; margin-bottom: 16px; }
     .strategy-cards { display: flex; flex-direction: column; gap: 12px; }
@@ -649,8 +686,11 @@ if (modalId === 'withdraw') {
   //  - если есть сохранённые реквизиты → сразу показываем withdraw-view;
   //  - если нет реквизитов → показываем форму добавления (withdraw-add-sbp-form).
 }
-        if (modalId === 'deposit') {
+if (modalId === 'deposit') {
   showDepositStep(hasPendingDeposit ? 2 : 1);
+  // синхронизировать кнопку один раз на входе
+  setTimeout(updateDepositBtnState, 0);
+}
 }
       }
 
@@ -961,18 +1001,24 @@ function setupEventListeners() {
     }
   });
 
+  // === Deposit: тумблер согласия управляет доступностью кнопки ===
+  function updateDepositBtnState() {
+    const agree = $id('depositAgree');
+    const btn = $id('depositConfirmBtn');
+    if (btn) btn.disabled = !(agree && agree.checked);
+  }
+  // Реагируем на смену только конкретного тумблера
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'depositAgree') updateDepositBtnState();
+  });
+  // (ВАЖНО) при открытии модалки вызывается setTimeout(updateDepositBtnState, 0) в openModal('deposit')
+
   // Dev mode
   onIf($id('devModeToggle'), 'change', function () {
     devMode = this.checked;
     localStorage.setItem('devMode', devMode);
     renderHistoryPage(false);
     renderPortfolio(serverState.portfolio);
-  });
-
-  // Deposit — согласие
-  onIf($id('depositAgree'), 'change', function () {
-    const btn = $id('depositConfirmBtn');
-    if (btn) btn.disabled = !this.checked;
   });
 
   // Deposit — создать запрос
@@ -1074,7 +1120,9 @@ function setupEventListeners() {
       }
     } catch (e) {
       showPopup('Сетевая ошибка.');
-    } finally { this.disabled = false; }
+    } finally {
+      this.disabled = false;
+    }
   });
 
   // New Investment — подтвердить
@@ -1095,7 +1143,9 @@ function setupEventListeners() {
       }
     } catch (e) {
       showPopup('Ошибка сети');
-    } finally { this.disabled = false; }
+    } finally {
+      this.disabled = false;
+    }
   });
 
   // История — «Загрузить ещё»
