@@ -568,6 +568,8 @@ const SYNC_BACKOFF_MAX = 60000;  // максимум 60с
 
       // История — пагинация и фильтр
       let historyOffset = 0;
+      // Вывод: пользователь явно выбрал "Добавить новые реквизиты"
+let withdrawAddingNew = false;
       const HISTORY_PAGE_SIZE = 10;
       let currentHistoryFilterType = 'all';
       let filteredHistory = [];
@@ -700,30 +702,38 @@ function updateDepositBtnState() {
 
         // Спец-логика для "Вывод"
 if (modalId === 'withdraw') {
-  // ВСЕГДА начинаем с экрана выбора способа вывода
+  // Новый заход в модалку — забываем прошлое «Добавить новые реквизиты»
+  withdrawAddingNew = false;
+
   const methodChoice = document.getElementById('withdraw-method-choice');
   const addForm      = document.getElementById('withdraw-add-sbp-form');
   const view         = document.getElementById('withdraw-view');
   const sel          = document.getElementById('withdraw-recipient-select');
 
-  if (methodChoice) methodChoice.style.display = 'block';
-  if (addForm)      addForm.style.display      = 'none';
-  if (view)         view.style.display         = 'none';
+  // Стандартное поведение:
+  // - если есть сохранённые реквизиты → сразу экран вывода;
+  // - если нет → экран выбора способа.
+  const hasMethods = (userPrefs.sbpMethods || []).length > 0;
 
-  // Сбрасываем возможные «остатки» выбора при повторном входе
-  if (sel) {
-    sel.selectedIndex = -1; // ничего не выбрано (чтобы не залипало на "add_new")
+  if (hasMethods) {
+    if (methodChoice) methodChoice.style.display = 'none';
+    if (addForm)      addForm.style.display      = 'none';
+    if (view)         view.style.display         = 'block';
+    if (sel) {
+      // на всякий случай выберем первый реальный реквизит (не "add_new")
+      if (sel.value === 'add_new' || sel.selectedIndex < 0) sel.selectedIndex = 0;
+    }
+  } else {
+    if (methodChoice) methodChoice.style.display = 'block';
+    if (addForm)      addForm.style.display      = 'none';
+    if (view)         view.style.display         = 'none';
+    if (sel) sel.selectedIndex = -1; // ничего не выбрано
   }
 
-  // Скроллим модалку к началу на случай, если была прокрутка
+  // прокрутка к началу на случай прошлой прокрутки
   const modalEl = document.getElementById('modalWithdraw');
   const inner   = modalEl && modalEl.querySelector('.modal');
   if (inner) inner.scrollTop = 0;
-
-  // ДАЛЬШЕ пользователю нужно нажать на карточку способа (например, СБП),
-  // а переходами управляет selectWithdrawMethod('sbp'):
-  //  - если есть сохранённые реквизиты → сразу показываем withdraw-view;
-  //  - если нет реквизитов → показываем форму добавления (withdraw-add-sbp-form).
 }
 if (modalId === 'deposit') {
   showDepositStep(hasPendingDeposit ? 2 : 1);
@@ -735,6 +745,9 @@ if (modalId === 'deposit') {
       function closeModal(modalId) {
         const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
         if (modal) modal.classList.remove('active');
+        if (modalId === 'withdraw') {
+  withdrawAddingNew = false;
+}
         const anyOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.classList.contains('active'));
         if (!anyOpen) document.body.classList.remove('modal-open');
       }
@@ -1107,6 +1120,7 @@ function setupEventListeners() {
       const resp = await apiGet(`?action=saveUserPrefs&username=${encodeURIComponent(username)}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
       if (resp && resp.success) {
         userPrefs = resp.savedPrefs;
+        withdrawAddingNew = false; // <-- сбрасываем, реквизит добавлен
         updateWithdrawUI();
       } else {
         showPopup('Не удалось сохранить реквизиты.');
@@ -1117,13 +1131,14 @@ function setupEventListeners() {
   });
 
   // Withdraw — выбор «Добавить новые реквизиты»
-  onIf($id('withdraw-recipient-select'), 'change', function () {
-    if (this.value === 'add_new') {
-      $id('withdraw-view').style.display = 'none';
-      $id('withdraw-method-choice').style.display = 'block';
-      $id('withdraw-add-sbp-form').style.display = 'none';
-    }
-  });
+onIf($id('withdraw-recipient-select'), 'change', function () {
+  if (this.value === 'add_new') {
+    withdrawAddingNew = true; // <-- ключевая строка
+    $id('withdraw-view').style.display = 'none';
+    $id('withdraw-method-choice').style.display = 'block';
+    $id('withdraw-add-sbp-form').style.display = 'none';
+  }
+});
 
   // Withdraw — создать запрос
   onIf($id('withdrawConfirmBtn'), 'click', async function () {
@@ -1199,6 +1214,12 @@ function closeDepositFlowWithPopup(msg) {
 }
 
 function selectWithdrawMethod(method) {
+  // если пришли сюда после "Добавить новые реквизиты" — ведём на форму добавления
+  if (withdrawAddingNew && method === 'sbp') {
+    showAddRecipientForm('sbp');
+    return;
+  }
+
   if (method === 'sbp') {
     const has = (userPrefs.sbpMethods || []).length > 0;
     if (has) {
@@ -1206,15 +1227,14 @@ function selectWithdrawMethod(method) {
       document.getElementById('withdraw-method-choice').style.display = 'none';
       document.getElementById('withdraw-add-sbp-form').style.display = 'none';
       document.getElementById('withdraw-view').style.display = 'block';
-      // по умолчанию выбираем первый сохранённый реквизит
       const sel = document.getElementById('withdraw-recipient-select');
-      if (sel) { sel.selectedIndex = 0; }
+      if (sel) sel.selectedIndex = Math.max(0, sel.selectedIndex); // на всякий
     } else {
-      // нет реквизитов — предлагаем добавить
       showAddRecipientForm('sbp');
     }
   }
-  // для crypto/bank реквизитов пока заглушки — логика аналогична
+
+  // TODO: если добавишь crypto/bank — логика по аналогии
 }
       
       function toggleCurrencyDropdown(event) {
