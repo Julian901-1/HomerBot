@@ -37,9 +37,9 @@
     .profile-btn:hover, .btn:hover, .copy-btn:hover, .quick-amount-btn:hover, .method-card:not(.disabled):hover, .filter-chip:hover:not(.active) { background: rgba(255,255,255,0.1); transform: translateY(-1px); }
     .profile-btn { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
     .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; background: var(--glass-bg); backdrop-filter: blur(20px); border-top: 1px solid var(--glass-border); padding: 12px 20px 20px; z-index: 100; border-radius: 24px 24px 0 0; }
-    .nav-items { display: flex; justify-content: space-around; }
-    .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 12px; border-radius: 12px; opacity: 0.6; cursor: pointer; }
-    .nav-item.active { opacity: 1; background: rgba(255,255,255,0.1); }
+.nav-item { display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 12px; border-radius:12px; opacity:.6; cursor:pointer; transition: transform .15s ease, opacity .2s ease, background .2s ease; }
+.nav-item:hover { transform: translateY(-2px); opacity: .9; }
+.nav-item:active { transform: translateY(0); }
     .nav-icon { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; }
     .nav-label { font-size: 11px; font-weight: 500; }
     
@@ -136,6 +136,15 @@
     input:checked + .slider { background-color: var(--accent); }
     input:checked + .slider:before { transform: translateX(24px); }
 
+/* Спрятать полосу прокрутки у ВСЕХ .page, но оставить скролл */
+.page {
+  -ms-overflow-style: none;   /* IE/старый Edge */
+  scrollbar-width: none;      /* Firefox */
+}
+.page::-webkit-scrollbar {
+  display: none;              /* Chrome/Safari/новый Edge */
+}
+    
 /* Белые иконки копирования/галочки */
 .copy-btn, .copy-btn svg { color:#fff; stroke:#fff; }
 
@@ -329,8 +338,9 @@
           <span class="slider"></span>
         </label>
       </div>
-
-      <button class="btn btn-primary" id="depositConfirmBtn" style="width:100%" disabled>Создать запрос</button>
+<button class="btn btn-primary" id="depositConfirmBtn" style="width:100%" disabled>
+  Пополнить счёт по СБП
+</button>
     </div>
 
     <!-- Шаг 2: инструкции + номер и копирование + отмена -->
@@ -354,10 +364,6 @@
           После зачисления средств баланс обновится в течение суток.
         </div>
       </div>
-
-      <div style="display:flex;justify-content:flex-end;margin-top:8px;">
-        <button class="close-btn" title="Отменить депозит" onclick="cancelDeposit()" aria-label="Отменить">✕</button>
-      </div>
     </div>
   </div>
 </div>
@@ -368,7 +374,9 @@
         <div class="modal-header"><h2 class="modal-title">Вывод средств</h2><button class="close-btn" onclick="closeModal('withdraw')">✕</button></div>
 
         <div id="withdraw-method-choice" style="display:none;">
-          <div class="method-card" onclick="showAddRecipientForm('sbp')"><div class="method-info"><h3>Перевод по СБП</h3></div></div>
+<div class="method-card" onclick="selectWithdrawMethod('sbp')">
+  <div class="method-info"><h3>Перевод по СБП</h3></div>
+</div>
           <div class="method-card disabled"><div class="method-info"><h3>Криптовалюта <span class="dev-notice">В разработке</span></h3></div></div>
           <div class="method-card disabled"><div class="method-info"><h3>Банковские реквизиты <span class="dev-notice">В разработке</span></h3></div></div>
         </div>
@@ -400,34 +408,54 @@
     </div>
     
     <!-- Strategies -->
-    <div id="modalStrategy16" class="modal-overlay">
-      <div class="modal">
-        <div class="modal-header">
-          <h2 class="modal-title">Гибкая 16%</h2>
-          <button class="close-btn" onclick="closeModal('strategy16')">✕</button>
-        </div>
-        <button class="btn btn-primary" onclick="openNewInvestment('16')" style="width: 100%;">Инвестировать</button>
-      </div>
+<div id="modalStrategy16" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">Гибкая 16%</h2>
+      <button class="close-btn" onclick="closeModal('strategy16')">✕</button>
     </div>
+    <div class="glass-card" style="margin-bottom:12px;">
+      <p style="color:var(--text-secondary);font-size:14px;">
+        • Начисление процентов ежедневно, вывод без штрафов.<br>
+        • Доходность фиксируется на момент пополнения и может корректироваться в будущем для новых пополнений.<br>
+        • Подходит для «подушки» — можно пополнить/вывести в любой день.
+      </p>
+    </div>
+    <button class="btn btn-primary" onclick="openNewInvestment('16')" style="width:100%;">Инвестировать</button>
+  </div>
+</div>
     <div id="modalStrategy17" class="modal-overlay">
-      <div class="modal">
-        <div class="modal-header">
-          <h2 class="modal-title">30 дней 17%</h2>
-          <button class="close-btn" onclick="closeModal('strategy17')">✕</button>
-        </div>
-        <button class="btn btn-primary" onclick="openNewInvestment('17')" style="width: 100%;">Инвестировать</button>
-      </div>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">30 дней 17%</h2>
+      <button class="close-btn" onclick="closeModal('strategy17')">✕</button>
     </div>
-    <div id="modalStrategy18" class="modal-overlay">
-      <div class="modal">
-        <div class="modal-header">
-          <h2 class="modal-title">90 дней 18%</h2>
-          <button class="close-btn" onclick="closeModal('strategy18')">✕</button>
-        </div>
-        <button class="btn btn-primary" onclick="openNewInvestment('18')" style="width: 100%;">Инвестировать</button>
-      </div>
+    <div class="glass-card" style="margin-bottom:12px;">
+      <p style="color:var(--text-secondary);font-size:14px;">
+        • Заморозка на 30 дней, частичный досрочный вывод с потерей накопленного дохода.<br>
+        • Состав: вклады + ЦФА умеренного риска.<br>
+        • Баланс между доходностью и доступностью средств.
+      </p>
     </div>
-
+    <button class="btn btn-primary" onclick="openNewInvestment('17')" style="width:100%;">Инвестировать</button>
+  </div>
+</div>
+   <div id="modalStrategy18" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">90 дней 18%</h2>
+      <button class="close-btn" onclick="closeModal('strategy18')">✕</button>
+    </div>
+    <div class="glass-card" style="margin-bottom:12px;">
+      <p style="color:var(--text-secondary);font-size:14px;">
+        • Заморозка на 90 дней, досрочный вывод — с потерей процентов.<br>
+        • Состав: вклады, ЦФА, частично краткосрочные займы — выше доходность, выше риск ликвидности.<br>
+        • Для тех, кто хочет максимальную ставку и готов к ожиданию.
+      </p>
+    </div>
+    <button class="btn btn-primary" onclick="openNewInvestment('18')" style="width:100%;">Инвестировать</button>
+  </div>
+</div>
     <!-- New Investment -->
     <div id="modalNewInvestment" class="modal-overlay">
       <div class="modal">
@@ -450,10 +478,10 @@
       let userPrefs = { currency: 'RUB', sbpMethods: [] };
       let devMode = false;
       let lastChosenRate = null;
-      let syncTimer = null;
+let syncTimer = null;
 let syncInFlight = false;
-let syncBackoffMs = 20000;          // старт — 20s
-const SYNC_BACKOFF_MAX = 300000;    // потолок — 5 минут
+let syncBackoffMs = 20000;       // старт 20с
+const SYNC_BACKOFF_MAX = 60000;  // максимум 60с
       let hasPendingDeposit = false;
 
 
@@ -519,11 +547,16 @@ function formatIntWithSpaces(s) {
   return num.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
-      function scheduleSync(delay = syncBackoffMs) {
+function scheduleSync(delay = syncBackoffMs) {
   clearTimeout(syncTimer);
-  const jitter = Math.floor(Math.random() * 3000); // +0..3s
-  syncTimer = setTimeout(() => syncBalance(true), delay + jitter);
+  const jitter = Math.floor(Math.random() * 3000);
+  const next = Math.min(Math.max(delay, 5000), SYNC_BACKOFF_MAX); // 5с..60с
+  syncTimer = setTimeout(() => syncBalance(true), next + jitter);
 }
+document.addEventListener('visibilitychange', () => {
+  // возвращаемся на вкладку — быстрый пинг
+  if (!document.hidden) scheduleSync(2000);
+});
 
 document.addEventListener('visibilitychange', () => {
   // вернулись — сделаем быструю синхронизацию
@@ -591,29 +624,30 @@ function showDepositStep(step) {
 
         // Спец-логика для "Вывод"
 if (modalId === 'withdraw') {
-  const hasMethods = (userPrefs.sbpMethods || []).length > 0;
-  const sel = document.getElementById('withdraw-recipient-select');
+  // ВСЕГДА начинаем с экрана выбора способа вывода
+  const methodChoice = document.getElementById('withdraw-method-choice');
+  const addForm      = document.getElementById('withdraw-add-sbp-form');
+  const view         = document.getElementById('withdraw-view');
+  const sel          = document.getElementById('withdraw-recipient-select');
 
-  if (!hasMethods) {
-    document.getElementById('withdraw-method-choice').style.display = 'block';
-    document.getElementById('withdraw-add-sbp-form').style.display = 'none';
-    document.getElementById('withdraw-view').style.display = 'none';
-  } else {
-    // если в прошлом оставили "add_new", снова открываем выбор метода, иначе — обычный вид
-    if (sel && sel.value === 'add_new') {
-      document.getElementById('withdraw-method-choice').style.display = 'block';
-      document.getElementById('withdraw-add-sbp-form').style.display = 'none';
-      document.getElementById('withdraw-view').style.display = 'none';
-    } else {
-      document.getElementById('withdraw-method-choice').style.display = 'none';
-      document.getElementById('withdraw-add-sbp-form').style.display = 'none';
-      document.getElementById('withdraw-view').style.display = 'block';
-      // гарантируем, что выбран не "add_new"
-      if (sel && (sel.value === 'add_new' || sel.selectedIndex < 0)) {
-        sel.selectedIndex = 0;
-      }
-    }
+  if (methodChoice) methodChoice.style.display = 'block';
+  if (addForm)      addForm.style.display      = 'none';
+  if (view)         view.style.display         = 'none';
+
+  // Сбрасываем возможные «остатки» выбора при повторном входе
+  if (sel) {
+    sel.selectedIndex = -1; // ничего не выбрано (чтобы не залипало на "add_new")
   }
+
+  // Скроллим модалку к началу на случай, если была прокрутка
+  const modalEl = document.getElementById('modalWithdraw');
+  const inner   = modalEl && modalEl.querySelector('.modal');
+  if (inner) inner.scrollTop = 0;
+
+  // ДАЛЬШЕ пользователю нужно нажать на карточку способа (например, СБП),
+  // а переходами управляет selectWithdrawMethod('sbp'):
+  //  - если есть сохранённые реквизиты → сразу показываем withdraw-view;
+  //  - если нет реквизитов → показываем форму добавления (withdraw-add-sbp-form).
 }
         if (modalId === 'deposit') {
   showDepositStep(hasPendingDeposit ? 2 : 1);
@@ -804,45 +838,74 @@ if (modalId === 'withdraw') {
         }
       }
 
-// Обновляет баланс и "Доход сегодня" одновременно
-// Обновляет баланс и "Доход сегодня" вместе + авто-рескейджулинг и backoff
+// Обновляет баланс + "Доход сегодня"; дополнительно отслеживает завершение PENDING депозита
 async function syncBalance(fromScheduler = false) {
-  // не делаем параллельные запросы и не крутимся в фоне, когда вкладка скрыта
-  if (syncInFlight || document.hidden) {
-    if (fromScheduler) scheduleSync(); // запланируем следующий цикл
-    return;
-  }
-
+  // не запускаем параллельные циклы
+  if (syncInFlight) { if (fromScheduler) scheduleSync(); return; }
   syncInFlight = true;
+
   try {
-    const [balRes, accrRes] = await Promise.allSettled([
-      apiGet(`?action=syncBalance&username=${encodeURIComponent(username)}`),
-      apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`)
-    ]);
-
-    // Баланс / состояние
-    if (balRes.status === 'fulfilled' && balRes.value && balRes.value.success) {
-      updateDashboard(balRes.value);
-      // успешный цикл — сбрасываем backoff
-      syncBackoffMs = 20000;
+    // если есть PENDING депозит — подтягиваем полный срез (включая историю), иначе — лёгкие запросы
+    let data = null;
+    if (hasPendingDeposit) {
+      // один запрос вернёт и баланс, и историю, и prefs
+      const full = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+      if (full && full.success) {
+        data = full;
+        serverState = { ...serverState, ...full };
+        updateDashboard(serverState);
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+        renderPortfolio(serverState.portfolio);
+      }
     } else {
-      // ошибка ответа — увеличим интервал
-      syncBackoffMs = Math.min(syncBackoffMs * 2, SYNC_BACKOFF_MAX);
+      // быстрый путь: баланс + доход
+      const [balRes, accrRes] = await Promise.allSettled([
+        apiGet(`?action=syncBalance&username=${encodeURIComponent(username)}`),
+        apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`)
+      ]);
+      if (balRes.status === 'fulfilled' && balRes.value && balRes.value.success) {
+        data = balRes.value;
+        updateDashboard(balRes.value);
+      }
+      if (accrRes.status === 'fulfilled' && accrRes.value && accrRes.value.success) {
+        latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
+      }
+      const el = document.getElementById('todayIncome');
+      if (el) el.textContent = `+${fmtMoney(latestTodayIncomeRub, userPrefs.currency)}`;
     }
 
-    // Доход сегодня
-    if (accrRes.status === 'fulfilled' && accrRes.value && accrRes.value.success) {
-      latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
+    // === ПОСЛЕ обновления данных: проверяем переход статуса депозита ===
+    const before = hasPendingDeposit;
+    const now = computeHasPendingDeposit();
+    hasPendingDeposit = now; // синхронизируем флаг
+
+    // если раньше был PENDING, а теперь нет — находим исход и показываем Pop-up + закрываем модалку
+    if (before && !now) {
+      // ищем последний DEPOSIT из истории
+      const hist = (serverState.history || []).filter(x => x.type === 'DEPOSIT').sort((a,b) => new Date(b.date)-new Date(a.date));
+      const last = hist[0];
+      if (last) {
+        if (last.status === 'APPROVED') {
+          closeDepositFlowWithPopup('Деньги зачислены на счёт');
+        } else if (last.status === 'REJECTED' || last.status === 'CANCELED') {
+          closeDepositFlowWithPopup('Депозит не прошёл успешно');
+        }
+      } else {
+        // на всякий случай
+        closeDepositFlowWithPopup('Операция по депозиту завершена');
+      }
     }
-    const el = document.getElementById('todayIncome');
-    if (el) el.textContent = `+${fmtMoney(latestTodayIncomeRub, userPrefs.currency)}`;
+
+    // успешный цикл — мягкий интервал
+    syncBackoffMs = 20000;
 
   } catch (e) {
-    // сеть/внезапная ошибка — увеличим интервал
-    syncBackoffMs = Math.min(syncBackoffMs * 2, SYNC_BACKOFF_MAX);
+    // сеть/ошибка — увеличим интервал, но не больше 60с
+    syncBackoffMs = Math.min((syncBackoffMs || 20000) * 2, 60000);
   } finally {
     syncInFlight = false;
-    if (fromScheduler) scheduleSync(); // цепочка: планируем следующий проход
+    if (fromScheduler) scheduleSync(); // планируем следующий заход
   }
 }
 
@@ -1044,6 +1107,31 @@ function setupEventListeners() {
         formatAmountInput(input);
       }
 
+function closeDepositFlowWithPopup(msg) {
+  closeModal('deposit');    // закрыть модалку
+  openPage('Home');         // перейти на Главную
+  showPopup(msg, 3500);     // показать уведомление
+}
+
+function selectWithdrawMethod(method) {
+  if (method === 'sbp') {
+    const has = (userPrefs.sbpMethods || []).length > 0;
+    if (has) {
+      // сразу к форме вывода с выпадающим списком
+      document.getElementById('withdraw-method-choice').style.display = 'none';
+      document.getElementById('withdraw-add-sbp-form').style.display = 'none';
+      document.getElementById('withdraw-view').style.display = 'block';
+      // по умолчанию выбираем первый сохранённый реквизит
+      const sel = document.getElementById('withdraw-recipient-select');
+      if (sel) { sel.selectedIndex = 0; }
+    } else {
+      // нет реквизитов — предлагаем добавить
+      showAddRecipientForm('sbp');
+    }
+  }
+  // для crypto/bank реквизитов пока заглушки — логика аналогична
+}
+      
       function toggleCurrencyDropdown(event) {
         event.stopPropagation();
         document.getElementById('currencyDropdown').classList.toggle('open');
