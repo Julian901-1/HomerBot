@@ -434,6 +434,19 @@ button, .btn { -webkit-tap-highlight-color: transparent; }
       <div class="spinner-big" aria-label="Загрузка"></div>
 
       <div class="glass-card" style="margin-top:16px;">
+        <!-- Сумма к переводу -->
+<div id="deposit-chosen-amount" style="font-size:18px;font-weight:700;text-align:center;margin-bottom:8px;">—</div>
+
+<!-- Короткий код операции -->
+<div class="glass-chip" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:10px;margin:0 auto 8px; background:rgba(255,255,255,0.08);">
+  <span style="opacity:.8">Код для комментария:</span>
+  <b id="deposit-short-code">—</b>
+</div>
+
+<!-- Доп. инструкция -->
+<div style="font-size:13px;color:var(--text-secondary);text-align:center;margin-bottom:8px;">
+  <b>ОБЯЗАТЕЛЬНО</b> укажите в комментарии к переводу данный код, чтобы начисление средств произошло автоматически.
+</div>
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="text" class="input-field" value="+7 (916) 643-54-94" readonly
                  style="text-align:center;font-size:18px;font-weight:700;">
@@ -568,6 +581,8 @@ let syncTimer = null;
 let syncInFlight = false;
 let syncBackoffMs = 20000;       // старт 20с
 const SYNC_BACKOFF_MAX = 60000;  // максимум 60с
+      let lastDepositAmount = 0;
+let lastDepositShortId = null;
       let hasPendingDeposit = false;
 
 
@@ -748,6 +763,15 @@ if (modalId === 'withdraw') {
   if (inner) inner.scrollTop = 0;
 }
 if (modalId === 'deposit') {
+  if (hasPendingDeposit) {
+  // попробуем взять из истории последний PENDING депозит
+  const pending = (serverState.history || [])
+    .filter(x => x.type === 'DEPOSIT' && x.status === 'PENDING')
+    .sort((a,b) => b.date - a.date)[0];
+  const amt = pending ? Math.abs(Number(pending.amount||0)) : lastDepositAmount;
+  const sid = pending ? pending.shortId : lastDepositShortId;
+  hydrateDepositStep2(amt || 0, sid || null);
+}
   showDepositStep(hasPendingDeposit ? 2 : 1);
   // синхронизировать кнопку один раз на входе
   setTimeout(updateDepositBtnState, 0);
@@ -1097,6 +1121,9 @@ function setupEventListeners() {
       if (resp && resp.success) {
         showPopup('Запрос на депозит отправлен!');
         hasPendingDeposit = true;
+        lastDepositAmount = amount;
+lastDepositShortId = resp && (resp.shortId || resp.requestShortId) || null;
+hydrateDepositStep2(lastDepositAmount, lastDepositShortId);
         showDepositStep(2); // закрепляем экран инструкций
         initializeApp();    // подтягиваем историю/баланс
       } else {
@@ -1218,6 +1245,15 @@ onIf($id('withdraw-recipient-select'), 'change', function () {
         input.value = amount;
         formatAmountInput(input);
       }
+function hydrateDepositStep2(amountRub, shortId) {
+  const currency = userPrefs.currency;
+  const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+
+  const amountEl = document.getElementById('deposit-chosen-amount');
+  const codeEl = document.getElementById('deposit-short-code');
+  if (amountEl) amountEl.textContent = `${fmtMoney(amountRub, currency)} ${currencySymbol}`;
+  if (codeEl) codeEl.textContent = shortId ? `#${shortId}` : '—';
+}
 
 function closeDepositFlowWithPopup(msg) {
   closeModal('deposit');    // закрыть модалку
