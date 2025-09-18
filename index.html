@@ -109,7 +109,7 @@
   background: var(--accent-hover) !important;
 }
 
-
+.cur-sym { opacity: .7; margin-left: 4px; }
     .strategies-section h2 { font-size: 20px; font-weight: 700; margin-bottom: 16px; }
     .strategy-cards { display: flex; flex-direction: column; gap: 12px; }
     .strategy-card { cursor: pointer; }
@@ -257,9 +257,74 @@
 
 /* для iOS/Android убираем серую вспышку при тапе */
 button, .btn { -webkit-tap-highlight-color: transparent; }
+
+    /* Boot overlay */
+#boot-screen {
+  position: fixed; inset: 0; background: #17212b; z-index: 9999;
+  display: grid; place-items: center; opacity: 1; pointer-events: auto;
+  transition: opacity .5s ease;
+}
+#boot-center { width: 90%; max-width: 420px; text-align: center; }
+#boot-title {
+  font-size: 28px; font-weight: 800; letter-spacing: .5px;
+  color: #fff; margin-bottom: 18px;
+}
+#boot-progress {
+  width: 100%; height: 10px; border-radius: 999px;
+  background: rgba(255,255,255,0.08); overflow: hidden; position: relative;
+}
+#boot-progress-fill {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 0%;
+  background: linear-gradient(90deg, #2ea9ff, #58caff);
+  border-radius: inherit; transition: width .4s ease; /* имитация "постепенно" */
+}
+#boot-hint { margin-top: 12px; color: rgba(255,255,255,0.8); font-size: 13px; }
+
+/* вылет заголовка к углу */
+#boot-screen.fly-out #boot-title {
+  position: fixed; left: 16px; top: 12px; transform-origin: top left;
+  animation: flyToCorner .6s cubic-bezier(.22,.61,.36,1) forwards;
+}
+@keyframes flyToCorner {
+  0% { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(-42vw,-38vh) scale(.72); opacity: .0; }
+}
+
+/* скрыть оверлей */
+#boot-screen.hidden { opacity: 0; pointer-events: none; }
+
+/* Попап статуса используем только для ошибок */
+.status { display: none !important; } /* прячем старый статус-бар */
+
+/* Глобально прячем полосы прокрутки (скролл остаётся колесом/тачем) */
+html, body, .page, .modal, .modal .modal-content, #app, #root {
+  -ms-overflow-style: none;     /* IE/старый Edge */
+  scrollbar-width: none;        /* Firefox */
+}
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+.page::-webkit-scrollbar,
+.modal::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+    
   </style>
 </head>
 <body>
+  <!-- Boot screen -->
+<div id="boot-screen">
+  <div id="boot-center">
+    <div id="boot-title">HomerBot</div>
+    <div id="boot-progress">
+      <div id="boot-progress-fill"></div>
+    </div>
+    <div id="boot-hint">Готовим платформу…</div>
+  </div>
+</div>
+
     <div class="app-container">
         <div class="header">
           <div class="header-content">
@@ -430,43 +495,56 @@ button, .btn { -webkit-tap-highlight-color: transparent; }
     </div>
 
     <!-- Шаг 2: инструкции + номер и копирование + отмена -->
-    <div id="deposit-step2" style="display:none;">
-      <div class="spinner-big" aria-label="Загрузка"></div>
+<div id="deposit-step2" style="display:none;">
+  <div class="spinner-big" aria-label="Загрузка"></div>
 
-      <div class="glass-card" style="margin-top:16px;">
-        <!-- Сумма к переводу -->
-<div id="deposit-chosen-amount" style="font-size:18px;font-weight:700;text-align:center;margin-bottom:8px;">—</div>
+  <div class="glass-card" style="margin-top:16px;">
+    <!-- Сумма -->
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+      <input type="text" id="deposit-amount-display" class="input-field" value="—" readonly
+             style="text-align:center;font-size:18px;font-weight:700;">
+      <button class="copy-btn" onclick="copyToClipboard(document.getElementById('deposit-amount-display').value, this)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      </button>
+    </div>
 
-<!-- Короткий код операции -->
-<div class="glass-chip" style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:10px;margin:0 auto 8px; background:rgba(255,255,255,0.08);">
-  <span style="opacity:.8">Код для комментария:</span>
-  <b id="deposit-short-code">—</b>
-</div>
+    <!-- Код операции -->
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+      <input type="text" id="deposit-short-display" class="input-field" value="—" readonly
+             style="text-align:center;font-size:18px;font-weight:700;">
+      <button class="copy-btn" onclick="copyToClipboard((document.getElementById('deposit-short-display').value||'').replace('#',''), this)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      </button>
+    </div>
 
-<!-- Доп. инструкция -->
-<div style="font-size:13px;color:var(--text-secondary);text-align:center;margin-bottom:8px;">
-  <b>ОБЯЗАТЕЛЬНО</b> укажите в комментарии к переводу данный код, чтобы начисление средств произошло автоматически.
-</div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <input type="text" class="input-field" value="+7 (916) 643-54-94" readonly
-                 style="text-align:center;font-size:18px;font-weight:700;">
-          <button class="copy-btn" onclick="copyToClipboard('+79166435494', this)">
-            <!-- иконка копирования (белая) -->
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-          </button>
-        </div>
-        <div style="font-size:13px;color:var(--text-secondary);margin-top:12px;">
-          Переведите средства по СБП (Т-Банк) по данному номеру для зачисления средств на счёт.
-          После зачисления средств баланс обновится в течение суток.
-        </div>
-      </div>
+    <div style="font-size:13px;color:var(--text-secondary);text-align:center;margin-bottom:10px;">
+      <b>ОБЯЗАТЕЛЬНО</b> укажите в комментарии к переводу данный код, чтобы начисление средств произошло автоматически.
+    </div>
+
+    <!-- Телефон -->
+    <div style="display:flex; gap:8px; align-items:center; margin-top:4px;">
+      <input type="text" class="input-field" value="+7 (916) 643-54-94" readonly
+             style="text-align:center;font-size:18px;font-weight:700;">
+      <button class="copy-btn" onclick="copyToClipboard('+79166435494', this)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+      </button>
+    </div>
+
+    <div style="font-size:13px;color:var(--text-secondary);margin-top:12px;">
+      Переведите средства по СБП (Т-Банк) по данному номеру для зачисления средств на счёт.
+      После зачисления средств баланс обновится в течение суток.
     </div>
   </div>
 </div>
-
     <!-- Withdraw -->
     <div id="modalWithdraw" class="modal-overlay">
       <div class="modal">
@@ -817,7 +895,8 @@ if (modalId === 'deposit') {
         document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
 
         // Доход сегодня — мгновенно под выбранную валюту
-        document.getElementById('todayIncome').textContent = `+${fmtMoney(latestTodayIncomeRub, currency)}`;
+document.getElementById('todayIncome').innerHTML =
+  `+${fmtMoney(latestTodayIncomeRub, currency)} <span class="cur-sym">${currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€')}</span>`;
 
         fitBalanceText();
       }
@@ -931,39 +1010,54 @@ if (modalId === 'deposit') {
         }
       }
 
-      async function initializeApp() {
-        try {
-          const tg = window.Telegram?.WebApp;
-          tg?.expand?.();
-          username = (tg?.initDataUnsafe?.user?.username) || 'marulin';
+async function initializeApp() {
+  try {
+    // Полноэкранный загрузчик и старт прогресса
+    startBootScreen();
+    setBootProgress(10);
 
-          setStatus('Загрузка данных...', 'loading');
+    // Telegram init + имя пользователя
+    const tg = window.Telegram?.WebApp;
+    tg?.expand?.();
+    username = (tg?.initDataUnsafe?.user?.username) || 'marulin';
 
-          const data = await apiGet(`?action=getInitialData&username=${username}`);
-          if (!data.success) throw new Error(data.error || 'Failed to get initial data');
+    setBootProgress(25);
 
-          userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
-          devMode = localStorage.getItem('devMode') === 'true';
-          document.getElementById('devModeToggle').checked = devMode;
+    // Первичные данные с бэкенда
+    const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+    if (!data || !data.success) throw new Error(data?.error || 'Failed to get initial data');
 
-          serverState = { ...serverState, ...data };
-          hasPendingDeposit = computeHasPendingDeposit();
-          updateDashboard(serverState);
-          recomputeFilteredHistory();
-          renderHistoryPage(false);
-          renderPortfolio(serverState.portfolio);
-          await refreshTodayIncome();
-          updateWithdrawUI();
+    // Применяем настройки/состояние
+    userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
+    devMode = localStorage.getItem('devMode') === 'true';
+    const devToggle = document.getElementById('devModeToggle');
+    if (devToggle) devToggle.checked = devMode;
 
-          setStatus('Синхронизировано', 'synced');
+    serverState = { ...serverState, ...data };
+    hasPendingDeposit = computeHasPendingDeposit();
 
-          scheduleSync(2000);
+    // Перерисовка основных экранов
+    setBootProgress(60);
+    updateDashboard(serverState);
+    recomputeFilteredHistory();
+    renderHistoryPage(false);
+    renderPortfolio(serverState.portfolio);
 
-        } catch (e) {
-          console.error('Initialization error:', e);
-          setStatus(`Ошибка: ${e.message}`, 'error');
-        }
-      }
+    // Доход сегодня + вывод UI
+    setBootProgress(80);
+    await refreshTodayIncome();
+    updateWithdrawUI();
+
+    // Финализация
+    setBootProgress(95);
+    scheduleSync(2000); // запускаем поллер
+    finishBootScreen(); // заголовок «улетит», оверлей исчезнет
+  } catch (e) {
+    console.error('Initialization error:', e);
+    finishBootScreen();                 // даже в случае ошибки убираем оверлей
+    setStatus(`Ошибка: ${e.message}`, 'error'); // поп-ап только для ошибок
+  }
+}
 
 // Обновляет баланс + "Доход сегодня"; дополнительно отслеживает завершение PENDING депозита
 async function syncBalance(fromScheduler = false) {
@@ -1061,8 +1155,9 @@ async function cancelDeposit() {
           const res = await apiGet(`?action=previewAccrual&username=${username}`);
           if (res && res.success) {
             latestTodayIncomeRub = Number(res.accruedToday || 0);
-            document.getElementById('todayIncome').textContent =
-              `+${fmtMoney(latestTodayIncomeRub, userPrefs.currency)}`;
+document.getElementById('todayIncome').innerHTML =
+  `+${fmtMoney(latestTodayIncomeRub, currency)} <span class="cur-sym">${currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€')}</span>`;
+
           }
         } catch (e) { /* silent */ }
       }
@@ -1240,6 +1335,77 @@ onIf($id('withdraw-recipient-select'), 'change', function () {
 }
 
       // -------- UI UTILS --------
+// Boot screen helpers
+const BOOT_HINTS = [
+  'Ищем лучшие инструменты для инвестиций',
+  'Танцуем с бубном',
+  'Оптимизируем процентные ставки',
+  'Увеличиваем прибыльность до бесконечности',
+  'Ищем ключ, чтобы Вас впустить',
+  'Бережно переносим ваши средства на депозит',
+];
+
+let bootHintsPicked = [];
+let bootProgressTarget = 0, bootProgressTimer = null;
+
+function startBootScreen() {
+  const el = document.getElementById('boot-screen');
+  if (!el) return;
+  el.classList.remove('hidden');
+  bootHintsPicked = pickTwoHints_();
+  setBootHint(bootHintsPicked[0]);
+  setBootProgress(5);
+}
+function pickTwoHints_() {
+  const arr = [...BOOT_HINTS];
+  const a = arr.splice(Math.floor(Math.random()*arr.length),1)[0];
+  const b = arr[Math.floor(Math.random()*arr.length)];
+  return [a,b];
+}
+function setBootHint(text) {
+  const h = document.getElementById('boot-hint');
+  if (h) h.textContent = text;
+}
+function setBootProgress(p) {
+  // имитируем постепенную загрузку — плавно догоняем цель
+  bootProgressTarget = Math.max(0, Math.min(100, p));
+  const fill = document.getElementById('boot-progress-fill');
+  if (!fill) return;
+  clearInterval(bootProgressTimer);
+  bootProgressTimer = setInterval(() => {
+    const cur = parseFloat(fill.style.width||'0');
+    const step = Math.max(0.8, (bootProgressTarget - cur) * 0.25); // easing
+    const next = Math.min(bootProgressTarget, cur + step);
+    fill.style.width = next + '%';
+    // сменим фразу примерно на середине
+    if (next > 55 && bootHintsPicked[1]) {
+      setBootHint(bootHintsPicked[1]);
+      bootHintsPicked[1] = null;
+    }
+    if (Math.abs(next - bootProgressTarget) < 0.5) {
+      fill.style.width = bootProgressTarget + '%';
+      clearInterval(bootProgressTimer);
+    }
+  }, 80);
+}
+function finishBootScreen() {
+  const el = document.getElementById('boot-screen');
+  if (!el) return;
+  setBootProgress(100);
+  // анимируем заголовок к углу и плавно убираем оверлей
+  el.classList.add('fly-out');
+  setTimeout(() => { el.classList.add('hidden'); }, 550);
+}
+
+// Переопределяем setStatus: используем только для ошибок
+function setStatus(text, type = 'error') {
+  if (type === 'error') {
+    // показываем ваш существующий popup-уведомитель
+    showPopup(text || 'Ошибка', 3000);
+  }
+  // loading/synced здесь игнорируем — этим занимается boot screen
+}
+      
       function setDepositAmount(amount) {
         const input = document.getElementById('depositAmount');
         input.value = amount;
@@ -1249,10 +1415,10 @@ function hydrateDepositStep2(amountRub, shortId) {
   const currency = userPrefs.currency;
   const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
 
-  const amountEl = document.getElementById('deposit-chosen-amount');
-  const codeEl = document.getElementById('deposit-short-code');
-  if (amountEl) amountEl.textContent = `${fmtMoney(amountRub, currency)} ${currencySymbol}`;
-  if (codeEl) codeEl.textContent = shortId ? `#${shortId}` : '—';
+  const amountEl = document.getElementById('deposit-amount-display');
+  const codeEl = document.getElementById('deposit-short-display');
+  if (amountEl) amountEl.value = `${fmtMoney(amountRub, currency)} ${currencySymbol}`;
+  if (codeEl) codeEl.value = shortId ? `#${shortId}` : '—';
 }
 
 function closeDepositFlowWithPopup(msg) {
