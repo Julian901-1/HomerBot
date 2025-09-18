@@ -330,7 +330,7 @@ body::-webkit-scrollbar,
     <div class="app-container">
         <div class="header">
           <div class="header-content">
-            <div class="logo">HomerBot</div>
+            <div id="appBrand" style="opacity:0">HomerBot</div>
             <button class="profile-btn" onclick="openModal('profile')">
               <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </button>
@@ -456,6 +456,9 @@ body::-webkit-scrollbar,
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-top:16px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:12px;">
           <label for="devModeToggle">Режим разработчика</label>
           <label class="toggle-switch"><input type="checkbox" id="devModeToggle"><span class="slider"></span></label>
+          <div id="devVersion" class="dev-version" style="display:none; text-align:center; font-size:12px; opacity:.7; margin-top:6px;">
+  v1
+</div>
         </div>
       </div>
     </div>
@@ -800,14 +803,15 @@ function updateDepositBtnState() {
           if (n.onclick.toString().includes(`'${pageId}'`)) n.classList.add('active');
         });
       }
-// Закрыть все модалки перед открытием новой
+// NEW: закрыть все модалки перед открытием новой
 function closeAllModals() {
   document.querySelectorAll('.modal-overlay.active').forEach(m => {
     m.classList.remove('active');
-    m.style.display = ''; // сброс
+    m.style.display = '';
   });
   document.body.classList.remove('modal-open');
 }
+
 function openModal(modalId) {
   // NEW: гасим все старые модалки
   closeAllModals();
@@ -1051,6 +1055,8 @@ async function initializeApp() {
     devMode = localStorage.getItem('devMode') === 'true';
     const devToggle = document.getElementById('devModeToggle');
     if (devToggle) devToggle.checked = devMode;
+    const dv = document.getElementById('devVersion');
+if (dv) dv.style.display = devMode ? 'block' : 'none';
 
     serverState = { ...serverState, ...data };
     hasPendingDeposit = computeHasPendingDeposit();
@@ -1211,12 +1217,15 @@ function setupEventListeners() {
   // (ВАЖНО) при открытии модалки вызывается setTimeout(updateDepositBtnState, 0) в openModal('deposit')
 
   // Dev mode
-  onIf($id('devModeToggle'), 'change', function () {
-    devMode = this.checked;
-    localStorage.setItem('devMode', devMode);
-    renderHistoryPage(false);
-    renderPortfolio(serverState.portfolio);
-  });
+  onIf(document.getElementById('devModeToggle'), 'change', function () {
+  devMode = this.checked;
+  localStorage.setItem('devMode', devMode);
+  const dv = document.getElementById('devVersion');
+  if (dv) dv.style.display = devMode ? 'block' : 'none';
+  renderHistoryPage(false);
+  renderPortfolio(serverState.portfolio);
+});
+
 
   // Deposit — создать запрос
   onIf($id('depositConfirmBtn'), 'click', async function () {
@@ -1411,14 +1420,42 @@ function setBootProgress(p) {
   }, 80);
 }
 function finishBootScreen() {
-  const el = document.getElementById('boot-screen');
-  if (!el) return;
-  setBootProgress(100);
-  // анимируем заголовок к углу и плавно убираем оверлей
-  el.classList.add('fly-out');
-  setTimeout(() => { el.classList.add('hidden'); }, 550);
-}
+  const overlay = document.getElementById('boot-screen');
+  const title = document.getElementById('boot-title');
+  const target = document.getElementById('appBrand');
 
+  setBootProgress(100);
+
+  if (overlay && title && target) {
+    // вычисляем в экранных координатах
+    const tr = target.getBoundingClientRect();
+    const sr = title.getBoundingClientRect();
+
+    // коэффициент масштаба — по высоте шрифта
+    const titleFs = parseFloat(getComputedStyle(title).fontSize) || 28;
+    const targetFs = parseFloat(getComputedStyle(target).fontSize) || 18;
+    const scale = Math.max(0.6, Math.min(1.2, targetFs / titleFs));
+
+    const dx = (tr.left + tr.width/2) - (sr.left + sr.width/2);
+    const dy = (tr.top + tr.height/2) - (sr.top + sr.height/2);
+
+    // анимация 3 секунды
+    title.animate(
+      [
+        { transform: 'translate(0,0) scale(1)', opacity: 1 },
+        { transform: `translate(${dx}px, ${dy}px) scale(${scale})`, opacity: 0 }
+      ],
+      { duration: 3000, easing: 'cubic-bezier(.22,.61,.36,1)', fill: 'forwards' }
+    );
+
+    // через 2.5с — показываем целевой заголовок и затем прячем оверлей
+    setTimeout(() => { target.style.opacity = '1'; }, 2500);
+    setTimeout(() => { overlay.classList.add('hidden'); }, 3000);
+  } else if (overlay) {
+    // запасной путь
+    overlay.classList.add('hidden');
+  }
+}
 // Переопределяем setStatus: используем только для ошибок
 function setStatus(text, type = 'error') {
   if (type === 'error') {
