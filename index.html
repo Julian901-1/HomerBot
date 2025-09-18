@@ -1168,12 +1168,21 @@ async function cancelDeposit() {
   }
 }
       
-      async function refreshTodayIncome() {
-if (res && res.success) {
-  latestTodayIncomeRub = Number(res.accruedToday || 0);
-  renderTodayIncome();
+// Обновление "Доход сегодня" (надёжная версия)
+async function refreshTodayIncome() {
+  try {
+    const res = await apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`);
+    if (res && res.success) {
+      latestTodayIncomeRub = Number(res.accruedToday || 0);
+    }
+  } catch (e) {
+    // тихо игнорируем сетевые ошибки — просто оставим прошлое значение
+    console.debug('refreshTodayIncome error:', e);
+  } finally {
+    // В любом случае перерисовать значение с правильным символом валюты
+    renderTodayIncome();
+  }
 }
-      }
 
       // -------- EVENTS --------
 function setupEventListeners() {
