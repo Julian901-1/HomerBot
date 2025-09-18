@@ -880,22 +880,26 @@ async function syncBalance(fromScheduler = false) {
     const now = computeHasPendingDeposit();
     hasPendingDeposit = now; // синхронизируем флаг
 
-    // если раньше был PENDING, а теперь нет — находим исход и показываем Pop-up + закрываем модалку
-    if (before && !now) {
-      // ищем последний DEPOSIT из истории
-      const hist = (serverState.history || []).filter(x => x.type === 'DEPOSIT').sort((a,b) => new Date(b.date)-new Date(a.date));
-      const last = hist[0];
-      if (last) {
-        if (last.status === 'APPROVED') {
-          closeDepositFlowWithPopup('Деньги зачислены на счёт');
-        } else if (last.status === 'REJECTED' || last.status === 'CANCELED') {
-          closeDepositFlowWithPopup('Депозит не прошёл успешно');
-        }
-      } else {
-        // на всякий случай
-        closeDepositFlowWithPopup('Операция по депозиту завершена');
-      }
-    }
+    // если раньше был PENDING, а теперь нет — показываем результат и ACK'аем доставку
+if (before && !now) {
+  const last = (serverState.history || [])
+    .filter(x => x.type === 'DEPOSIT')
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+  if (last && (last.status === 'APPROVED' || last.status === 'REJECTED' || last.status === 'CANCELED')) {
+    const msg = last.status === 'APPROVED'
+      ? 'Деньги зачислены на счёт'
+      : 'Депозит не прошёл успешно';
+    closeDepositFlowWithPopup(msg);
+
+    // подтверждаем доставку результата пользователю (ставим G=TRUE на бэкенде)
+    void apiGet(`?action=ackDepositDelivery&username=${encodeURIComponent(username)}`)
+      .catch(() => {}); // не мешаем поллеру из-за сетевых сбоев
+  } else {
+    // без явного статуса просто закроем flow, ACK не отправляем
+    closeDepositFlowWithPopup('Операция по депозиту завершена');
+  }
+}
 
     // успешный цикл — мягкий интервал
     syncBackoffMs = 20000;
