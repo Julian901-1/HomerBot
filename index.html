@@ -152,21 +152,23 @@
     .history-item.status-pending { background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.2); }
     .history-item.status-rejected, .history-item.status-canceled { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.2); }
 
-    .bank-icons { display: flex; gap: 10px; justify-content: center; margin: 16px 0; }
+    .bank-icons { gap: 12px; justify-content: center; }
     .bank-icon.selected { border-color: var(--accent); }
     .bank-icon {
-  overflow: hidden;          /* обрезаем углы у содержимого */
-  padding: 0 !important;     /* убираем внутренние отступы, если были */
-  background: transparent;   /* не даём белому фону просвечивать */
-  border: none;
+  width: 64px;            /* можно 72px, если так было раньше */
+  height: 64px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: transparent;
+  border: 1px solid var(--glass-border); /* не белый, а "стеклянный" контур */
+  flex: 0 0 auto;
 }
 
 .bank-icon img {
-  display: block;            /* убираем лишние «щели» вокруг inline-изображений */
-  width: 100%;
-  height: 100%;
-  object-fit: cover;         /* картинка плотно заполняет контейнер */
-  border-radius: inherit;    /* скругление как у .bank-icon */
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
 }
 
     #withdraw-recipient-select { width: 100%; padding: 12px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); border-radius: 12px; margin: 16px 0; }
@@ -363,7 +365,7 @@ body::-webkit-scrollbar,
                             </div>
                             <div class="balance-stat">
                               <div class="stat-label">Доход сегодня</div>
-                              <div class="stat-value stat-positive" id="todayIncome">+0.00</div>
+                              <div class="stat-value stat-positive" id="todayIncome">—</div>
                             </div>
                         </div>
                     </div>
@@ -798,12 +800,23 @@ function updateDepositBtnState() {
           if (n.onclick.toString().includes(`'${pageId}'`)) n.classList.add('active');
         });
       }
+// Закрыть все модалки перед открытием новой
+function closeAllModals() {
+  document.querySelectorAll('.modal-overlay.active').forEach(m => {
+    m.classList.remove('active');
+    m.style.display = ''; // сброс
+  });
+  document.body.classList.remove('modal-open');
+}
+function openModal(modalId) {
+  // NEW: гасим все старые модалки
+  closeAllModals();
 
-      function openModal(modalId) {
-        const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
-        if (!modal) return;
-        modal.classList.add('active');
-        document.body.classList.add('modal-open');
+  const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
+  if (!modal) return;
+  modal.classList.add('active');
+  modal.style.display = 'flex';          // NEW: гарантированно показать
+  document.body.classList.add('modal-open');
 
         // Спец-логика для "Вывод"
 if (modalId === 'withdraw') {
@@ -856,15 +869,16 @@ if (modalId === 'deposit') {
 }
 }
 
-      function closeModal(modalId) {
-        const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
-        if (modal) modal.classList.remove('active');
-        if (modalId === 'withdraw') {
-  withdrawAddingNew = false;
+function closeModal(modalId) {
+  const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = ''; // NEW
+  }
+  if (modalId === 'withdraw') withdrawAddingNew = false;
+  const anyOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.classList.contains('active'));
+  if (!anyOpen) document.body.classList.remove('modal-open');
 }
-        const anyOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.classList.contains('active'));
-        if (!anyOpen) document.body.classList.remove('modal-open');
-      }
 
       // -------- BALANCE AUTOSIZE --------
       function fitBalanceText() {
@@ -895,12 +909,17 @@ if (modalId === 'deposit') {
         document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
 
         // Доход сегодня — мгновенно под выбранную валюту
-document.getElementById('todayIncome').innerHTML =
-  `+${fmtMoney(latestTodayIncomeRub, currency)} <span class="cur-sym">${currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€')}</span>`;
+renderTodayIncome();
+
 
         fitBalanceText();
       }
-
+function renderTodayIncome() {
+  const currency = userPrefs.currency;
+  const symbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+  const el = document.getElementById('todayIncome');
+  if (el) el.innerHTML = `+${fmtMoney(latestTodayIncomeRub, currency)} <span class="cur-sym">${symbol}</span>`;
+}
       function getHistoryFilterPredicate(type) {
         if (!type || type === 'all') return () => true;
         const map = { deposit: 'DEPOSIT', withdraw: 'WITHDRAW', invest: 'INVEST' };
@@ -1092,8 +1111,7 @@ async function syncBalance(fromScheduler = false) {
       if (accrRes.status === 'fulfilled' && accrRes.value && accrRes.value.success) {
         latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
       }
-      const el = document.getElementById('todayIncome');
-      if (el) el.textContent = `+${fmtMoney(latestTodayIncomeRub, userPrefs.currency)}`;
+renderTodayIncome();
     }
 
     // === ПОСЛЕ обновления данных: проверяем переход статуса депозита ===
@@ -1151,15 +1169,10 @@ async function cancelDeposit() {
 }
       
       async function refreshTodayIncome() {
-        try {
-          const res = await apiGet(`?action=previewAccrual&username=${username}`);
-          if (res && res.success) {
-            latestTodayIncomeRub = Number(res.accruedToday || 0);
-document.getElementById('todayIncome').innerHTML =
-  `+${fmtMoney(latestTodayIncomeRub, currency)} <span class="cur-sym">${currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€')}</span>`;
-
-          }
-        } catch (e) { /* silent */ }
+if (res && res.success) {
+  latestTodayIncomeRub = Number(res.accruedToday || 0);
+  renderTodayIncome();
+}
       }
 
       // -------- EVENTS --------
@@ -1472,14 +1485,16 @@ function selectWithdrawMethod(method) {
         await apiGet(`?action=saveUserPrefs&username=${username}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
       }
 
-      function openNewInvestment(rate) {
-        lastChosenRate = rate;
-        const name = `Стратегия ${rate}%`;
-        document.getElementById('niStrategyReadonly').textContent = name;
-        document.getElementById('niAmount').value = '';
-        ['strategy16', 'strategy17', 'strategy18'].forEach(m => closeModal(m));
-        openModal('newInvestment');
-      }
+function openNewInvestment(rate) {
+  lastChosenRate = rate;
+  const name = `Стратегия ${rate}%`;
+  document.getElementById('niStrategyReadonly').textContent = name;
+  document.getElementById('niAmount').value = '';
+  // NEW: закрыть любые модалки перед открытием «Новой инвестиции»
+  closeAllModals();
+  openModal('newInvestment');
+}
+
 
       function showAddRecipientForm(method) {
         if (method !== 'sbp') return;
