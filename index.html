@@ -312,7 +312,9 @@ body::-webkit-scrollbar,
   height: 0 !important;
   display: none !important;
 }
-    
+    /* Символ валюты в статах — той же яркости, что и число */
+.stat-value .cur-sym { opacity: 1 !important; color: currentColor !important; }
+
   </style>
 </head>
 <body>
@@ -550,6 +552,9 @@ body::-webkit-scrollbar,
     </div>
   </div>
 </div>
+    </div> <!-- / .modal -->
+</div> <!-- / #modalDeposit -->
+
     <!-- Withdraw -->
     <div id="modalWithdraw" class="modal-overlay">
       <div class="modal">
