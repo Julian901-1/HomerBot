@@ -109,12 +109,6 @@
   background: var(--accent-hover) !important;
 }
 
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none !important;
-  /* оставляем исходный фон, просто делаем полупрозрачным */
-}
 
     .strategies-section h2 { font-size: 20px; font-weight: 700; margin-bottom: 16px; }
     .strategy-cards { display: flex; flex-direction: column; gap: 12px; }
@@ -208,6 +202,49 @@
     
     /* Disable scroll when modal is open */
     body.modal-open { overflow: hidden; }
+
+    /* --- FIX: disabled-кнопка не должна менять внешний вид при нажатии/наведении --- */
+
+/* базовое состояние disabled */
+.btn:disabled,
+.btn[disabled],
+.btn.disabled {
+  pointer-events: none;            /* не пускать события мыши/тача */
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none !important;
+  filter: none !important;
+}
+
+/* полностью гасим все визуальные эффекты hover/active/focus у disabled */
+.btn:disabled:hover,
+.btn[disabled]:hover,
+.btn.disabled:hover,
+.btn:disabled:active,
+.btn[disabled]:active,
+.btn.disabled:active,
+.btn:disabled:focus,
+.btn[disabled]:focus,
+.btn.disabled:focus {
+  background: inherit !important;  /* оставить тот же фон, что и был */
+  box-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+/* эффекты hover/active только для НЕ disabled */
+.btn:hover:not(:disabled):not(.disabled),
+.btn:focus-visible:not(:disabled):not(.disabled) {
+  /* если у тебя есть ховер-эффекты — они сработают только для активных */
+}
+
+.btn:active:not(:disabled):not(.disabled),
+.btn.btn-primary:active:not(:disabled):not(.disabled) {
+  /* если есть "нажатое" состояние — тоже только для активных */
+}
+
+/* для iOS/Android убираем серую вспышку при тапе */
+button, .btn { -webkit-tap-highlight-color: transparent; }
   </style>
 </head>
 <body>
