@@ -1168,18 +1168,18 @@ async function cancelDeposit() {
   }
 }
       
-// Обновление "Доход сегодня" (надёжная версия)
+// Обновление "Доход сегодня" — без использования имени `res`
 async function refreshTodayIncome() {
+  let accrued = latestTodayIncomeRub; // значение по умолчанию — что было
   try {
-    const res = await apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`);
-    if (res && res.success) {
-      latestTodayIncomeRub = Number(res.accruedToday || 0);
+    const r = await apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`);
+    if (r && r.success) {
+      accrued = Number(r.accruedToday || 0);
     }
   } catch (e) {
-    // тихо игнорируем сетевые ошибки — просто оставим прошлое значение
     console.debug('refreshTodayIncome error:', e);
   } finally {
-    // В любом случае перерисовать значение с правильным символом валюты
+    latestTodayIncomeRub = accrued;
     renderTodayIncome();
   }
 }
