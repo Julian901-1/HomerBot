@@ -594,11 +594,6 @@ document.addEventListener('visibilitychange', () => {
   // возвращаемся на вкладку — быстрый пинг
   if (!document.hidden) scheduleSync(2000);
 });
-
-document.addEventListener('visibilitychange', () => {
-  // вернулись — сделаем быструю синхронизацию
-  if (!document.hidden) scheduleSync(1000);
-});
       
       function showPopup(text, timeout = 3000) {
         const el = document.createElement('div');
@@ -642,6 +637,13 @@ function showDepositStep(step) {
   if (step === 1) { s1.style.display = 'block'; s2.style.display = 'none'; }
   else { s1.style.display = 'none'; s2.style.display = 'block'; }
 }
+      // Депозит: тумблер согласия управляет доступностью кнопки
+function updateDepositBtnState() {
+  const agree = document.getElementById('depositAgree');
+  const btn = document.getElementById('depositConfirmBtn');
+  if (btn) btn.disabled = !(agree && agree.checked);
+}
+
       
       // -------- NAV & MODALS --------
       function openPage(pageId) {
@@ -999,13 +1001,6 @@ function setupEventListeners() {
       currencyDropdown.classList.remove('open');
     }
   });
-
-  // === Deposit: тумблер согласия управляет доступностью кнопки ===
-  function updateDepositBtnState() {
-    const agree = $id('depositAgree');
-    const btn = $id('depositConfirmBtn');
-    if (btn) btn.disabled = !(agree && agree.checked);
-  }
   // Реагируем на смену только конкретного тумблера
   document.addEventListener('change', (e) => {
     if (e.target && e.target.id === 'depositAgree') updateDepositBtnState();
