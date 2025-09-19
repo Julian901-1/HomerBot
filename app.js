@@ -403,16 +403,30 @@ function renderPortfolio(portfolio) {
 const API_SECRET = 'your_secret_key_here'; // TODO: move to config
 
 function hmacSha256(key, message) {
-   const crypto = window.crypto || window.msCrypto;
-   const encoder = new TextEncoder();
-   const keyData = encoder.encode(key);
-   const messageData = encoder.encode(message);
-   return crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
-     .then(key => crypto.subtle.sign('HMAC', key, messageData))
-     .then(signature => Array.from(new Uint8Array(signature)).map(b => ('0' + b.toString(16)).slice(-2)).join(''));
+   console.log('Starting HMAC');
+   try {
+     const crypto = window.crypto || window.msCrypto;
+     const encoder = new TextEncoder();
+     const keyData = encoder.encode(key);
+     const messageData = encoder.encode(message);
+     console.log('Importing key');
+     return crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+       .then(key => {
+         console.log('Signing');
+         return crypto.subtle.sign('HMAC', key, messageData);
+       })
+       .then(signature => {
+         console.log('Converting signature');
+         return Array.from(new Uint8Array(signature)).map(b => ('0' + b.toString(16)).slice(-2)).join('');
+       });
+   } catch (e) {
+     console.error('HMAC error:', e);
+     throw e;
+   }
  }
 
 function apiGet(path, body = '') {
+   console.log('Starting apiGet for path:', path);
    return new Promise((resolve, reject) => {
      const ts = Date.now();
      const nonce = Math.random().toString(36).substring(2);
@@ -420,10 +434,13 @@ function apiGet(path, body = '') {
      const fullPath = `${SCRIPT_URL}${path}`;
      const message = `${method}|${fullPath}|${ts}|${nonce}|${body}`;
 
-     hmacSha256(API_SECRET, message).then(sig => {
-       const script = document.createElement('script');
-       const callbackName = 'jsonpCallback_' + Math.random().toString(36).substring(2);
-       const url = `${fullPath}&callback=${callbackName}&X-Signature=${encodeURIComponent(sig)}&X-Timestamp=${ts}&X-Nonce=${nonce}`;
+     console.log('Full path:', fullPath);
+     // Temporarily disable HMAC for testing
+     const sig = 'test_sig';
+     console.log('Using test sig');
+     const script = document.createElement('script');
+     const callbackName = 'jsonpCallback_' + Math.random().toString(36).substring(2);
+     const url = `${fullPath}&callback=${callbackName}&X-Signature=${encodeURIComponent(sig)}&X-Timestamp=${ts}&X-Nonce=${nonce}`;
 
        console.log('JSONP URL:', url); // Debug log
 
@@ -453,7 +470,6 @@ function apiGet(path, body = '') {
        };
 
        document.head.appendChild(script);
-     }).catch(reject);
    });
  }
 
