@@ -314,12 +314,12 @@ function renderHistoryPage(append = false) {
     let title = '', amountStr = '', subTitle = '';
 
     switch(item.type) {
-      case 'DEPOSIT':  title = 'Deposit';    amountStr = `+${fmtMoney(absAmount, currency)}`; break;
-      case 'WITHDRAW': title = 'Withdrawal';      amountStr = `-${fmtMoney(absAmount, currency)}`; break;
+      case 'DEPOSIT':  title = 'Депозит';    amountStr = `+${fmtMoney(absAmount, currency)}`; break;
+      case 'WITHDRAW': title = 'Вывод';      amountStr = `-${fmtMoney(absAmount, currency)}`; break;
       case 'INVEST':
-        title = 'Investment';
+        title = 'Инвестиция';
         amountStr = `${fmtMoney(absAmount, currency)}`;
-        subTitle = `<div style="font-size:12px;color:var(--text-secondary);">Strategy: ${item.rate}%</div>`;
+        subTitle = `<div style="font-size:12px;color:var(--text-secondary);">Стратегия: ${item.rate}%</div>`;
         break;
     }
 
@@ -401,7 +401,11 @@ async function initializeApp() {
     const devToggle = document.getElementById('devModeToggle');
     if (devToggle) devToggle.checked = devMode;
     const dv = document.getElementById('devVersion');
- if (dv) dv.style.display = devMode ? 'block' : 'none';
+  if (dv) dv.style.display = devMode ? 'block' : 'none';
+
+    // Show simulation button in dev mode
+    const simBtn = document.getElementById('simulateMonthBtn');
+    if (simBtn) simBtn.style.display = devMode ? 'inline-block' : 'none';
 
     serverState = { ...serverState, ...data };
     hasPendingDeposit = computeHasPendingDeposit();
@@ -479,8 +483,8 @@ async function syncBalance(fromScheduler = false) {
 
     if (last && (last.status === 'APPROVED' || last.status === 'REJECTED' || last.status === 'CANCELED')) {
       const msg = last.status === 'APPROVED'
-        ? 'Funds credited to account'
-        : 'Deposit not successful';
+        ? 'Средства зачислены на счёт'
+        : 'Депозит не удался';
       closeDepositFlowWithPopup(msg);
 
       // confirm delivery to user (set G=TRUE on backend)
@@ -488,7 +492,7 @@ async function syncBalance(fromScheduler = false) {
         .catch(() => {}); // do not hinder poller due to network failures
     } else {
       // without explicit status just close flow, do not ACK
-      closeDepositFlowWithPopup('Deposit operation completed');
+      closeDepositFlowWithPopup('Операция с депозитом завершена');
     }
   }
 
@@ -510,14 +514,14 @@ async function cancelDeposit() {
     const r = await apiGet(`?action=cancelPendingDeposit&username=${username}`);
     if (r && r.success) {
       hasPendingDeposit = false;
-      showPopup('Deposit canceled');
+      showPopup('Депозит отменён');
       showDepositStep(1);
       initializeApp();
     } else {
-      showPopup('Failed to cancel deposit');
+      showPopup('Не удалось отменить депозит');
     }
   } catch {
-    showPopup('Network error');
+    showPopup('Ошибка сети');
   }
 }
 
@@ -601,7 +605,7 @@ function setupEventListeners() {
     const amount = amountEl ? parseAmount(amountEl.value) : 0;
 
     if (amount <= 0) {
-      showPopup('Enter amount.');
+      showPopup('Введите сумму.');
       return;
     }
 
@@ -613,10 +617,10 @@ function setupEventListeners() {
       );
 
       if (resp && resp.success) {
-        showPopup('Deposit request sent!');
+        showPopup('Запрос на депозит отправлен!');
         hasPendingDeposit = true;
         lastDepositAmount = amount;
- lastDepositShortId = resp && (resp.shortId || resp.requestShortId) || null;
+  lastDepositShortId = resp && (resp.shortId || resp.requestShortId) || null;
 // Clean amount for display value, but keep for copy
 const cleanAmount = lastDepositAmount.toString().replace(/[^\d]/g, '');
 amountEl.value = cleanAmount; // Set clean number to value for copying, but display formatted elsewhere if needed
@@ -627,7 +631,7 @@ initializeApp();    // pull history/balance
         showPopup('Error: ' + ((resp && resp.error) || 'unknown'));
       }
     } catch (e) {
-      showPopup('Network error.');
+      showPopup('Ошибка сети.');
     } finally {
       this.disabled = false;
     }
@@ -683,23 +687,23 @@ initializeApp();    // pull history/balance
     const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
     const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
 
-    if (amount <= 0) { showPopup('Enter amount.'); return; }
-    if (amount > available) { showPopup('Insufficient free funds.'); return; }
-    if (!recipient) { showPopup('Select withdrawal credentials.'); return; }
+    if (amount <= 0) { showPopup('Введите сумму.'); return; }
+    if (amount > available) { showPopup('Недостаточно свободных средств.'); return; }
+    if (!recipient) { showPopup('Выберите реквизиты для вывода.'); return; }
 
     this.disabled = true;
     try {
       const details = JSON.stringify({ method: 'sbp', phone: recipient.phone, bank: recipient.bank });
       const resp = await apiGet(`?action=requestWithdraw&username=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}&details=${encodeURIComponent(details)}`);
       if (resp && resp.success) {
-        showPopup('Withdrawal request sent!');
+        showPopup('Запрос на вывод отправлен!');
         closeModal('withdraw');
         initializeApp();
       } else {
-        showPopup('Error: ' + ((resp && resp.error) || 'unknown'));
+        showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестна'));
       }
     } catch (e) {
-      showPopup('Network error.');
+      showPopup('Ошибка сети.');
     } finally {
       this.disabled = false;
     }
@@ -715,14 +719,14 @@ initializeApp();    // pull history/balance
     try {
       const resp = await apiGet(`?action=logStrategyInvestment&username=${encodeURIComponent(username)}&rate=${encodeURIComponent(rate)}&amount=${encodeURIComponent(amount)}`);
       if (resp && resp.success) {
-        showPopup('Investment created!');
+        showPopup('Инвестиция создана!');
         closeModal('newInvestment');
         initializeApp();
       } else {
-        showPopup('Error: ' + ((resp && resp.error) || 'unknown'));
+        showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестна'));
       }
     } catch (e) {
-      showPopup('Network error');
+      showPopup('Ошибка сети');
     } finally {
       this.disabled = false;
     }
@@ -737,12 +741,12 @@ initializeApp();    // pull history/balance
 // -------- UI UTILS --------
 // Boot screen helpers
 const BOOT_HINTS = [
-  'Searching for best investment tools',
-  'Dancing with tambourine',
-  'Optimizing interest rates',
-  'Increasing profitability to infinity',
-  'Finding key to let you in',
-  'Carefully transferring your funds to deposit',
+  'Ищем лучшие инвестиционные инструменты',
+  'Танцуем с бубном',
+  'Оптимизируем процентные ставки',
+  'Увеличиваем прибыльность до бесконечности',
+  'Находим ключ, чтобы впустить тебя',
+  'Аккуратно переводим твои средства на депозит',
 ];
 
 let bootHintsPicked = [];
@@ -999,6 +1003,10 @@ function closeCustomSelect() {
   if (container) container.classList.remove('active');
 }
 
+function simulateMonth() {
+  showPopup('Для тестирования измените даты разморозки в Google Sheets вручную на прошедшие.');
+}
+
 // Update general click listener to close custom select
 // Already handled in document.click, but ensure closeCustomSelect() is called there
 
@@ -1031,14 +1039,14 @@ async function copyToClipboard(text, btnEl) {
       btnEl.blur(); // Remove focus to prevent stuck state
       setTimeout(() => { btnEl.innerHTML = btnEl.dataset.orig; }, 2000);
     }
-    let msg = 'Copied';
-    if (text.includes('₽') || text.includes('$') || text.includes('€')) msg = 'Amount copied';
-    else if (text.startsWith('#')) msg = 'Code copied';
-    else if (text.includes('+7') || text.includes('+')) msg = 'Number copied';
+    let msg = 'Скопировано';
+    if (text.includes('₽') || text.includes('$') || text.includes('€')) msg = 'Сумма скопирована';
+    else if (text.startsWith('#')) msg = 'Код скопирован';
+    else if (text.includes('+7') || text.includes('+')) msg = 'Номер скопирован';
     showPopup(msg);
   } else {
     if (btnEl) btnEl.blur();
-    showPopup('Failed to copy. Copy manually.');
+    showPopup('Не удалось скопировать. Скопируйте вручную.');
   }
 }
 
