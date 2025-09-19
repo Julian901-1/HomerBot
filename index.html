@@ -68,6 +68,7 @@
                 <div class="btn-group">
                   <button class="btn btn-primary" onclick="openModal('deposit')">Депозит</button>
                   <button class="btn" onclick="openModal('withdraw')">Вывод</button>
+                  <button class="btn" id="simulateMonthBtn" style="background: #ff9800; display: none;" onclick="simulateMonth()">Имитация месяца</button>
                 </div>
 
                 <div class="strategies-section">
@@ -188,8 +189,8 @@
                 <h2 style="margin-bottom: 16px;">История операций</h2>
                 <div class="filter-chips">
                   <div class="filter-chip active" onclick="applyHistoryFilter(this, 'all')">Все</div>
-                  <div class="filter-chip" onclick="applyHistoryFilter(this, 'deposit')">Депозит</div>
-                  <div class="filter-chip" onclick="applyHistoryFilter(this, 'withdraw')">Вывод</div>
+                  <div class="filter-chip" onclick="applyHistoryFilter(this, 'deposit')">Депозиты</div>
+                  <div class="filter-chip" onclick="applyHistoryFilter(this, 'withdraw')">Выводы</div>
                   <div class="filter-chip" onclick="applyHistoryFilter(this, 'invest')">Инвестиции</div>
                 </div>
                 <div id="history-list"></div>
