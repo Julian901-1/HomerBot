@@ -431,6 +431,7 @@ async function initializeApp() {
 
 // Updates balance + "Today income"; additionally tracks completion of PENDING deposit
 async function syncBalance(fromScheduler = false) {
+  console.log('Frontend syncBalance start', new Date().toISOString());
   // do not launch parallel cycles
   if (syncInFlight) { if (fromScheduler) scheduleSync(); return; }
   syncInFlight = true;
@@ -462,7 +463,7 @@ async function syncBalance(fromScheduler = false) {
       if (accrRes.status === 'fulfilled' && accrRes.value && accrRes.value.success) {
         latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
       }
- renderTodayIncome();
+  renderTodayIncome();
     }
 
     // === AFTER updating data: check deposit status transition ===
@@ -471,28 +472,29 @@ async function syncBalance(fromScheduler = false) {
     hasPendingDeposit = now; // synchronize flag
 
     // if previously PENDING, now not — show result and ACK delivery
- if (before && !now) {
-   const last = (serverState.history || [])
-     .filter(x => x.type === 'DEPOSIT')
-     .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  if (before && !now) {
+    const last = (serverState.history || [])
+      .filter(x => x.type === 'DEPOSIT')
+      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
 
-   if (last && (last.status === 'APPROVED' || last.status === 'REJECTED' || last.status === 'CANCELED')) {
-     const msg = last.status === 'APPROVED'
-       ? 'Funds credited to account'
-       : 'Deposit not successful';
-     closeDepositFlowWithPopup(msg);
+    if (last && (last.status === 'APPROVED' || last.status === 'REJECTED' || last.status === 'CANCELED')) {
+      const msg = last.status === 'APPROVED'
+        ? 'Funds credited to account'
+        : 'Deposit not successful';
+      closeDepositFlowWithPopup(msg);
 
-     // confirm delivery to user (set G=TRUE on backend)
-     void apiGet(`?action=ackDepositDelivery&username=${encodeURIComponent(username)}`)
-       .catch(() => {}); // do not hinder poller due to network failures
-   } else {
-     // without explicit status just close flow, do not ACK
-     closeDepositFlowWithPopup('Deposit operation completed');
-   }
- }
+      // confirm delivery to user (set G=TRUE on backend)
+      void apiGet(`?action=ackDepositDelivery&username=${encodeURIComponent(username)}`)
+        .catch(() => {}); // do not hinder poller due to network failures
+    } else {
+      // without explicit status just close flow, do not ACK
+      closeDepositFlowWithPopup('Deposit operation completed');
+    }
+  }
 
     // successful cycle — soft interval
     syncBackoffMs = 20000;
+    console.log('Frontend syncBalance response', data, new Date().toISOString());
 
   } catch (e) {
     // network/error — increase interval, but not more than 60s
@@ -835,6 +837,10 @@ function hydrateDepositStep2(amountRub, shortId) {
   const codeEl = document.getElementById('deposit-short-display');
   if (amountEl) amountEl.value = `${fmtMoney(amountRub, currency)} ${currencySymbol}`;
   if (codeEl) codeEl.value = shortId ? `#${shortId}` : '—';
+
+  // Hide the loading spinner after showing step 2
+  const spinner = document.querySelector('.spinner-big');
+  if (spinner) spinner.style.display = 'none';
 }
 
 function closeDepositFlowWithPopup(msg) {
