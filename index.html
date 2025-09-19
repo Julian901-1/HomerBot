@@ -9,16 +9,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-primary: #f1f5f9;
-      --text-primary: #1e293b;
-      --text-secondary: rgba(30,41,59,0.7);
+      --bg-primary: #e2e8f0;
+      --text-primary: #334155;
+      --text-secondary: rgba(51,65,85,0.8);
       --accent: #4c8bf5;
       --accent-hover: #5a95f7;
       --success: #34d399;
       --warning: #fbbf24;
       --error: #f87171;
-      --glass-bg: rgba(255, 255, 255, 0.8);
-      --glass-border: rgba(0, 0, 0, 0.1);
+      --glass-bg: rgba(229,231,235,0.9);
+      --glass-border: rgba(71,85,105,0.2);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { 
@@ -218,21 +218,33 @@
 
     .dev-notice { background: var(--warning); color: #000; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; display: inline-block; margin-left: 8px; vertical-align: middle; }
 
+    #devVersion {
+      margin-top: 12px;
+    }
+
     .copy-btn { border-radius: 8px; width: 48px; height: 48px; display:flex; align-items:center; justify-content:center; margin-left:8px; flex-shrink: 0;}
 
     .history-item.status-approved { background: rgba(52, 211, 153, 0.1); border-color: rgba(52, 211, 153, 0.3); }
     .history-item.status-pending { background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.3); }
     .history-item.status-rejected, .history-item.status-canceled { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.3); }
 
-    .bank-icons { gap: 12px; justify-content: center; }
+    .bank-icons {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      margin: 16px auto;
+      width: fit-content;
+    }
     .bank-icon.selected { border-color: var(--accent); }
     .bank-icon {
-      width: 64px;            /* можно 72px, если так было раньше */
-      height: 64px;
+      width: 48px;
+      height: 48px;
       border-radius: 12px;
       overflow: hidden;
       background: var(--glass-bg);
-      border: 1px solid var(--glass-border); /* не белый, а "стеклянный" контур */
+      border: 1px solid var(--glass-border);
       flex: 0 0 auto;
       transition: all 0.2s ease;
     }
@@ -246,7 +258,70 @@
   border-radius: inherit;
 }
 
-    #withdraw-recipient-select { width: 100%; padding: 12px; background: var(--glass-bg); border: 1px solid var(--glass-border); color: var(--text-primary); border-radius: 12px; margin: 16px 0; }
+    /* Custom select for withdrawal */
+    .custom-select {
+      position: relative;
+      width: 100%;
+      margin: 16px 0;
+    }
+    .select-trigger {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 12px;
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 16px;
+      transition: border-color 0.2s ease;
+    }
+    .select-trigger:hover {
+      border-color: var(--accent);
+    }
+    .select-trigger::after {
+      content: '▼';
+      font-size: 12px;
+      opacity: 0.7;
+      transition: transform 0.2s ease;
+    }
+    .select-trigger.active::after {
+      transform: rotate(180deg);
+    }
+    .select-options {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 10;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .select-options.active {
+      display: block;
+    }
+    .select-option {
+      padding: 12px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--glass-border);
+      transition: background 0.2s ease;
+    }
+    .select-option:last-child {
+      border-bottom: none;
+    }
+    .select-option:hover {
+      background: rgba(0,0,0,0.05);
+    }
+    .select-option.add-new {
+      font-weight: 600;
+      color: var(--accent);
+    }
 
     /* Toggle Switch */
     .toggle-switch { position: relative; display: inline-block; width: 50px; height: 26px; }
@@ -358,16 +433,6 @@ button, .btn { -webkit-tap-highlight-color: transparent; }
     }
     #boot-hint { margin-top: 12px; color: var(--text-secondary); font-size: 13px; transition: opacity 0.5s ease; }
 
-/* вылет заголовка к углу */
-#boot-screen.fly-out #boot-title {
-  position: fixed; left: 16px; top: 12px; transform-origin: top left;
-  animation: flyToCorner .6s cubic-bezier(.22,.61,.36,1) forwards;
-}
-@keyframes flyToCorner {
-  0% { transform: translate(0,0) scale(1); opacity: 1; }
-  100% { transform: translate(-42vw,-38vh) scale(.72); opacity: .0; }
-}
-
 /* скрыть оверлей */
 #boot-screen.hidden { opacity: 0; pointer-events: none; }
 
@@ -461,10 +526,8 @@ body::-webkit-scrollbar,
                           <div class="option-tools">
                             <span class="tool-icon">
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="2" y="7" width="20" height="10" rx="1"/>
-                                <path d="M3 7v10"/>
-                                <path d="M21 7v10"/>
-                                <path d="M12 17l-1-5h2l-1 5z"/>
+                                <path d="M8.56 2.9a7 7 0 0 1 14.82 0c.45.64.73 1.45.73 2.3A4.3 4.3 0 0 1 19.5 8.8c0 2.27-2.91 4.3-6 4.3s-6-2.03-6-4.3a4.3 4.3 0 0 1 4.21-4.6c.85-.05 1.66-.28 2.35-.73z"/>
+                                <path d="M15 13a3 3 0 1 0-6 0 3 3 0 0 0 6 0z"/>
                               </svg>
                             </span>
                           </div>
@@ -478,16 +541,15 @@ body::-webkit-scrollbar,
                           <div class="option-tools">
                             <span class="tool-icon">
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="2" y="7" width="20" height="10" rx="1"/>
-                                <path d="M3 7v10"/>
-                                <path d="M21 7v10"/>
-                                <path d="M12 17l-1-5h2l-1 5z"/>
+                                <path d="M8.56 2.9a7 7 0 0 1 14.82 0c.45.64.73 1.45.73 2.3A4.3 4.3 0 0 1 19.5 8.8c0 2.27-2.91 4.3-6 4.3s-6-2.03-6-4.3a4.3 4.3 0 0 1 4.21-4.6c.85-.05 1.66-.28 2.35-.73z"/>
+                                <path d="M15 13a3 3 0 1 0-6 0 3 3 0 0 0 6 0z"/>
                               </svg>
                             </span>
                             <span class="tool-icon">
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="3" y1="3" x2="21" y2="21"/>
-                                <line x1="21" y2="3" x2="3" y2="21"/>
+                                <line x1="22" y1="12" x2="2" y2="12"/>
+                                <polyline points="5,6 12,12 19,18"/>
+                                <polyline points="5,18 12,12 19,6"/>
                               </svg>
                             </span>
                           </div>
@@ -501,22 +563,20 @@ body::-webkit-scrollbar,
                           <div class="option-tools">
                             <span class="tool-icon">
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="2" y="7" width="20" height="10" rx="1"/>
-                                <path d="M3 7v10"/>
-                                <path d="M21 7v10"/>
-                                <path d="M12 17l-1-5h2l-1 5z"/>
+                                <path d="M8.56 2.9a7 7 0 0 1 14.82 0c.45.64.73 1.45.73 2.3A4.3 4.3 0 0 1 19.5 8.8c0 2.27-2.91 4.3-6 4.3s-6-2.03-6-4.3a4.3 4.3 0 0 1 4.21-4.6c.85-.05 1.66-.28 2.35-.73z"/>
+                                <path d="M15 13a3 3 0 1 0-6 0 3 3 0 0 0 6 0z"/>
                               </svg>
                             </span>
                             <span class="tool-icon">
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="3" y1="3" x2="21" y2="21"/>
-                                <line x1="21" y2="3" x2="3" y2="21"/>
+                                <line x1="22" y1="12" x2="2" y2="12"/>
+                                <polyline points="5,6 12,12 19,18"/>
+                                <polyline points="5,18 12,12 19,6"/>
                               </svg>
                             </span>
                             <span class="tool-icon">
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="2" y="3" width="20" height="18" rx="2" ry="2"/>
-                                <circle cx="12" cy="13" r="4"/>
+                                <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
                               </svg>
                             </span>
                           </div>
@@ -526,7 +586,7 @@ body::-webkit-scrollbar,
                           <p class="option-desc">Максимальная прибыль. Банковские вклады + ЦФА + краткосрочные займы.</p>
                           <button class="btn btn-primary invest-btn" onclick="event.stopPropagation(); openModal('strategy18')">Инвестировать</button>
                         </div>
-                    </div>
+                      </div>
                 </div>
             </div>
 
@@ -700,7 +760,10 @@ body::-webkit-scrollbar,
 
         <div id="withdraw-view" style="display:none;">
           <p style="text-align: center; color: var(--text-secondary);">Доступно для вывода: <b id="withdrawAvailable">0.00 ₽</b></p>
-          <select id="withdraw-recipient-select"></select>
+          <div id="withdraw-recipient-select" class="custom-select">
+            <div class="select-trigger" id="select-trigger">Выберите реквизиты</div>
+            <div class="select-options" id="select-options"></div>
+          </div>
           <input type="text" class="amount-input" id="withdrawAmount" placeholder="0" oninput="formatAmountInput(this)" inputmode="decimal">
           <button class="btn btn-primary" id="withdrawConfirmBtn" style="width:100%">Создать запрос</button>
         </div>
@@ -1347,9 +1410,7 @@ function setupEventListeners() {
 
     // Close custom select if click outside
     const customSelect = $id('withdraw-recipient-select');
-    const selectBtn = $id('select-btn');
-    const selectOptions = customSelect ? customSelect.querySelector('.select-options') : null;
-    if (customSelect && selectOptions && !customSelect.contains(target)) {
+    if (customSelect && !customSelect.contains(target)) {
       closeCustomSelect();
     }
   });
@@ -1456,23 +1517,21 @@ initializeApp();    // подтягиваем историю/баланс
     } finally { this.disabled = false; }
   });
 
-  // Withdraw — выбор «Добавить новые реквизиты»
-onIf($id('withdraw-recipient-select'), 'change', function () {
-  if (this.value === 'add_new') {
-    withdrawAddingNew = true; // <-- ключевая строка
-    $id('withdraw-view').style.display = 'none';
-    $id('withdraw-method-choice').style.display = 'block';
-    $id('withdraw-add-sbp-form').style.display = 'none';
-  }
-});
+  // Custom select for withdrawal
+  onIf($id('select-trigger'), 'click', function(e) {
+    e.stopPropagation();
+    toggleCustomSelect();
+  });
+
+  // Close custom select on outside click (already handled in general click listener)
 
   // Withdraw — создать запрос
   onIf($id('withdrawConfirmBtn'), 'click', async function () {
     const amountEl = $id('withdrawAmount');
-    const selEl = $id('withdraw-recipient-select');
+    const trigger = $id('select-trigger');
     const amount = amountEl ? parseAmount(amountEl.value) : 0;
-    const idx = selEl ? selEl.value : -1;
-    const recipient = (userPrefs.sbpMethods || [])[idx];
+    const idx = trigger ? parseInt(trigger.dataset.index) : -1;
+    const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
     const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
 
     if (amount <= 0) { showPopup('Введите сумму.'); return; }
@@ -1594,32 +1653,19 @@ function finishBootScreen() {
   setBootProgress(100);
 
   if (overlay && title && target) {
-    // вычисляем в экранных координатах
-    const tr = target.getBoundingClientRect();
-    const sr = title.getBoundingClientRect();
+    // Simple fade out for title
+    title.style.transition = 'opacity 1s ease';
+    title.style.opacity = '0';
 
-    // коэффициент масштаба — по высоте шрифта
-    const titleFs = parseFloat(getComputedStyle(title).fontSize) || 28;
-    const targetFs = parseFloat(getComputedStyle(target).fontSize) || 18;
-    const scale = Math.max(0.6, Math.min(1.2, targetFs / titleFs));
+    // Show target title immediately
+    target.style.opacity = '1';
 
-    const dx = (tr.left + tr.width/2) - (sr.left + sr.width/2);
-    const dy = (tr.top + tr.height/2) - (sr.top + sr.height/2);
-
-    // анимация 3 секунды
-    title.animate(
-      [
-        { transform: 'translate(0,0) scale(1)', opacity: 1 },
-        { transform: `translate(${dx}px, ${dy}px) scale(${scale})`, opacity: 0 }
-      ],
-      { duration: 3000, easing: 'cubic-bezier(.22,.61,.36,1)', fill: 'forwards' }
-    );
-
-    // через 2.5с — показываем целевой заголовок и затем прячем оверлей
-    setTimeout(() => { target.style.opacity = '1'; }, 2500);
-    setTimeout(() => { overlay.classList.add('hidden'); }, 3000);
+    // Hide overlay after fade
+    setTimeout(() => {
+      overlay.classList.add('hidden');
+    }, 1000);
   } else if (overlay) {
-    // запасной путь
+    // Fallback
     overlay.classList.add('hidden');
   }
 }
@@ -1720,20 +1766,28 @@ function openNewInvestment(rate) {
       }
 
       function updateWithdrawUI() {
-        const select = document.getElementById('withdraw-recipient-select');
-        select.innerHTML = '';
+        const optionsContainer = document.getElementById('select-options');
+        const trigger = document.getElementById('select-trigger');
+        if (!optionsContainer || !trigger) return;
+
+        optionsContainer.innerHTML = '';
+        trigger.textContent = 'Выберите реквизиты';
 
         if (userPrefs.sbpMethods && userPrefs.sbpMethods.length > 0) {
           userPrefs.sbpMethods.forEach((method, index) => {
-            const option = document.createElement('option');
-            option.value = index;
+            const option = document.createElement('div');
+            option.className = 'select-option';
+            option.dataset.index = index;
             option.textContent = `СБП: ${method.phone} (${method.bank})`;
-            select.appendChild(option);
+            option.onclick = () => selectCustomOption(option);
+            optionsContainer.appendChild(option);
           });
-          const addNewOption = document.createElement('option');
-          addNewOption.value = 'add_new';
+          const addNewOption = document.createElement('div');
+          addNewOption.className = 'select-option add-new';
+          addNewOption.dataset.value = 'add_new';
           addNewOption.textContent = '+ Добавить новые реквизиты';
-          select.appendChild(addNewOption);
+          addNewOption.onclick = () => selectCustomOption(addNewOption);
+          optionsContainer.appendChild(addNewOption);
 
           document.getElementById('withdraw-view').style.display = 'block';
           document.getElementById('withdraw-method-choice').style.display = 'none';
@@ -1745,6 +1799,58 @@ function openNewInvestment(rate) {
           document.getElementById('withdraw-add-sbp-form').style.display = 'none';
         }
       }
+
+      function toggleCustomSelect() {
+        const container = document.getElementById('withdraw-recipient-select');
+        const options = document.getElementById('select-options');
+        const trigger = document.getElementById('select-trigger');
+        if (!container || !options || !trigger) return;
+
+        const isActive = options.classList.contains('active');
+        closeCustomSelect(); // Close others if open
+        if (!isActive) {
+          options.classList.add('active');
+          trigger.classList.add('active');
+          container.classList.add('active');
+        }
+      }
+
+      function selectCustomOption(option) {
+        const container = document.getElementById('withdraw-recipient-select');
+        const trigger = document.getElementById('select-trigger');
+        const options = document.getElementById('select-options');
+        if (!container || !trigger || !options) return;
+
+        // Update trigger text
+        trigger.textContent = option.textContent;
+        trigger.dataset.value = option.dataset.value || option.dataset.index;
+        trigger.dataset.index = option.dataset.index || -1;
+
+        // Close dropdown
+        options.classList.remove('active');
+        trigger.classList.remove('active');
+        container.classList.remove('active');
+
+        // Handle add new
+        if (option.dataset.value === 'add_new') {
+          withdrawAddingNew = true;
+          document.getElementById('withdraw-view').style.display = 'none';
+          document.getElementById('withdraw-method-choice').style.display = 'block';
+          document.getElementById('withdraw-add-sbp-form').style.display = 'none';
+        }
+      }
+
+      function closeCustomSelect() {
+        const options = document.getElementById('select-options');
+        const trigger = document.getElementById('select-trigger');
+        const container = document.getElementById('withdraw-recipient-select');
+        if (options) options.classList.remove('active');
+        if (trigger) trigger.classList.remove('active');
+        if (container) container.classList.remove('active');
+      }
+
+      // Update general click listener to close custom select
+      // Already handled in document.click, but ensure closeCustomSelect() is called there
 
       // Надёжное копирование + смена иконки на галочку на 2 сек
 async function copyToClipboard(text, btnEl) {
