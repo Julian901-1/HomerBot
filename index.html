@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-primary: #f8fafc;
+      --bg-primary: #f1f5f9;
       --text-primary: #1e293b;
       --text-secondary: rgba(30,41,59,0.7);
       --accent: #4c8bf5;
@@ -153,6 +153,13 @@
    }
    .tool-icon {
      font-size: 20px;
+     transition: transform 0.2s ease;
+     border-radius: 8px;
+     padding: 4px;
+     background: rgba(0,0,0,0.05);
+   }
+   .tool-icon:hover {
+     transform: scale(1.1);
    }
    .rate-badge {
      background: var(--accent);
@@ -274,7 +281,7 @@
 /* Большой спиннер на шаге 2 */
 .spinner-big {
   width:56px; height:56px; border-radius:50%;
-  border:4px solid rgba(255,255,255,0.15); border-top-color:#fff;
+  border:4px solid rgba(0,0,0,0.1); border-top-color:var(--text-primary);
   margin: 0 auto;
   animation: sp 1s linear infinite;
 }
@@ -349,7 +356,7 @@ button, .btn { -webkit-tap-highlight-color: transparent; }
       background: linear-gradient(90deg, var(--accent), var(--accent-hover));
       border-radius: inherit; transition: width .4s ease; /* имитация "постепенно" */
     }
-    #boot-hint { margin-top: 12px; color: var(--text-secondary); font-size: 13px; }
+    #boot-hint { margin-top: 12px; color: var(--text-secondary); font-size: 13px; transition: opacity 0.5s ease; }
 
 /* вылет заголовка к углу */
 #boot-screen.fly-out #boot-title {
@@ -452,9 +459,16 @@ body::-webkit-scrollbar,
                     <div class="strategy-grid">
                         <div class="strategy-option" onclick="openModal('strategy16')">
                           <div class="option-tools">
-                            <span class="tool-icon">🏦</span>
+                            <span class="tool-icon">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="7" width="20" height="10" rx="1"/>
+                                <path d="M3 7v10"/>
+                                <path d="M21 7v10"/>
+                                <path d="M12 17l-1-5h2l-1 5z"/>
+                              </svg>
+                            </span>
                           </div>
-                          <h3 class="option-name">Ликвидный 16%</h3>
+                          <h3 class="option-name">Ликвидный</h3>
                           <div class="rate-badge">16% годовых</div>
                           <div class="lock-info">Вывод в любое время без штрафа</div>
                           <p class="option-desc">Идеально для подушки безопасности. Только надежные банковские вклады.</p>
@@ -462,10 +476,22 @@ body::-webkit-scrollbar,
                         </div>
                         <div class="strategy-option" onclick="openModal('strategy17')">
                           <div class="option-tools">
-                            <span class="tool-icon">🏦</span>
-                            <span class="tool-icon">📈</span>
+                            <span class="tool-icon">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="7" width="20" height="10" rx="1"/>
+                                <path d="M3 7v10"/>
+                                <path d="M21 7v10"/>
+                                <path d="M12 17l-1-5h2l-1 5z"/>
+                              </svg>
+                            </span>
+                            <span class="tool-icon">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="3" y1="3" x2="21" y2="21"/>
+                                <line x1="21" y2="3" x2="3" y2="21"/>
+                              </svg>
+                            </span>
                           </div>
-                          <h3 class="option-name">Стабильный 17%</h3>
+                          <h3 class="option-name">Стабильный</h3>
                           <div class="rate-badge">17% годовых</div>
                           <div class="lock-info">Заморозка на 30 дней (досрочный с потерей %)</div>
                           <p class="option-desc">Баланс риска и доходности. Банковские вклады + ЦФА умеренного риска.</p>
@@ -473,11 +499,28 @@ body::-webkit-scrollbar,
                         </div>
                         <div class="strategy-option" onclick="openModal('strategy18')">
                           <div class="option-tools">
-                            <span class="tool-icon">🏦</span>
-                            <span class="tool-icon">📈</span>
-                            <span class="tool-icon">💰</span>
+                            <span class="tool-icon">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="7" width="20" height="10" rx="1"/>
+                                <path d="M3 7v10"/>
+                                <path d="M21 7v10"/>
+                                <path d="M12 17l-1-5h2l-1 5z"/>
+                              </svg>
+                            </span>
+                            <span class="tool-icon">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="3" y1="3" x2="21" y2="21"/>
+                                <line x1="21" y2="3" x2="3" y2="21"/>
+                              </svg>
+                            </span>
+                            <span class="tool-icon">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="3" width="20" height="18" rx="2" ry="2"/>
+                                <circle cx="12" cy="13" r="4"/>
+                              </svg>
+                            </span>
                           </div>
-                          <h3 class="option-name">Агрессивный 18%</h3>
+                          <h3 class="option-name">Агрессивный</h3>
                           <div class="rate-badge">18% годовых</div>
                           <div class="lock-info">Заморозка на 90 дней (досрочный с потерей %)</div>
                           <p class="option-desc">Максимальная прибыль. Банковские вклады + ЦФА + краткосрочные займы.</p>
@@ -545,10 +588,10 @@ body::-webkit-scrollbar,
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-top:16px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:12px;">
           <label for="devModeToggle">Режим разработчика</label>
           <label class="toggle-switch"><input type="checkbox" id="devModeToggle"><span class="slider"></span></label>
-          <div id="devVersion" class="dev-version" style="display:none; text-align:center; font-size:12px; opacity:.7; margin-top:6px;">
-  v1
-</div>
         </div>
+        <div id="devVersion" class="dev-version" style="display:none; text-align:center; font-size:12px; opacity:.7; margin-top:6px;">
+ v1
+</div>
       </div>
     </div>
 
@@ -685,7 +728,7 @@ body::-webkit-scrollbar,
 <div id="modalStrategy16" class="modal-overlay">
   <div class="modal">
     <div class="modal-header">
-      <h2 class="modal-title">Гибкая 16%</h2>
+      <h2 class="modal-title">Ликвидный</h2>
       <button class="close-btn" onclick="closeModal('strategy16')">✕</button>
     </div>
     <div class="glass-card" style="margin-bottom:12px;">
@@ -701,7 +744,7 @@ body::-webkit-scrollbar,
     <div id="modalStrategy17" class="modal-overlay">
   <div class="modal">
     <div class="modal-header">
-      <h2 class="modal-title">30 дней 17%</h2>
+      <h2 class="modal-title">Стабильный</h2>
       <button class="close-btn" onclick="closeModal('strategy17')">✕</button>
     </div>
     <div class="glass-card" style="margin-bottom:12px;">
@@ -716,10 +759,10 @@ body::-webkit-scrollbar,
 </div>
    <div id="modalStrategy18" class="modal-overlay">
   <div class="modal">
-    <div class="modal-header">
-      <h2 class="modal-title">90 дней 18%</h2>
-      <button class="close-btn" onclick="closeModal('strategy18')">✕</button>
-    </div>
+     <div class="modal-header">
+       <h2 class="modal-title">Агрессивный</h2>
+       <button class="close-btn" onclick="closeModal('strategy18')">✕</button>
+     </div>
     <div class="glass-card" style="margin-bottom:12px;">
       <p style="color:var(--text-secondary);font-size:14px;">
         • Заморозка на 90 дней, досрочный вывод — с потерей процентов.<br>
@@ -1487,7 +1530,13 @@ function pickTwoHints_() {
 }
 function setBootHint(text) {
   const h = document.getElementById('boot-hint');
-  if (h) h.textContent = text;
+  if (h) {
+    h.style.opacity = '0';
+    setTimeout(() => {
+      h.textContent = text;
+      h.style.opacity = '1';
+    }, 250);
+  }
 }
 function setBootProgress(p) {
   // имитируем постепенную загрузку — плавно догоняем цель
@@ -1625,7 +1674,8 @@ function selectWithdrawMethod(method) {
 
 function openNewInvestment(rate) {
   lastChosenRate = rate;
-  const name = `Стратегия ${rate}%`;
+  const names = { 16: 'Ликвидный', 17: 'Стабильный', 18: 'Агрессивный' };
+  const name = names[rate] || `Стратегия ${rate}%`;
   document.getElementById('niStrategyReadonly').textContent = name;
   document.getElementById('niAmount').value = '';
   // NEW: закрыть любые модалки перед открытием «Новой инвестиции»
@@ -1698,7 +1748,11 @@ async function copyToClipboard(text, btnEl) {
       btnEl.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
       setTimeout(() => { btnEl.innerHTML = btnEl.dataset.orig; }, 2000);
     }
-    showPopup('Номер скопирован');
+    let msg = 'Скопировано';
+    if (text.includes('₽') || text.includes('$') || text.includes('€')) msg = 'Сумма скопирована';
+    else if (text.startsWith('#')) msg = 'Код скопирован';
+    else if (text.includes('+7') || text.includes('+')) msg = 'Номер скопирован';
+    showPopup(msg);
   } else {
     showPopup('Не удалось скопировать. Скопируйте вручную.');
   }
