@@ -10,29 +10,29 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Boot screen -->
-<div id="boot-screen">
-  <div id="boot-center">
-    <div id="boot-title">HomerBot</div>
-    <div id="boot-progress">
-      <div id="boot-progress-fill"></div>
-    </div>
-    <div id="boot-hint">Готовим платформу…</div>
-  </div>
+<!-- Boot screen -->
+<div id="boot-screen" role="status" aria-live="polite">
+<div id="boot-center">
+ <div id="boot-title">HomerBot</div>
+ <div id="boot-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+   <div id="boot-progress-fill"></div>
+ </div>
+ <div id="boot-hint">Готовим платформу…</div>
+</div>
 </div>
 
-    <div class="app-container">
-        <div class="header">
-          <div class="header-content">
-            <div id="appBrand" style="opacity:0">HomerBot</div>
-            <button class="profile-btn" onclick="openModal('profile')">
-              <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            </button>
-          </div>
-        </div>
-        <div id="status" class="status"></div>
+ <main class="app-container">
+     <header class="header">
+       <div class="header-content">
+         <div id="appBrand" style="opacity:0">HomerBot</div>
+         <button class="profile-btn" onclick="openModal('profile')" aria-label="Открыть профиль">
+           <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+         </button>
+       </div>
+     </header>
+     <div id="status" class="status" role="status" aria-live="polite"></div>
 
-        <div id="pageContainer">
+     <section id="pageContainer">
             <div class="page active" id="pageHome">
                 <div class="card">
                     <div class="balance-section">
@@ -197,30 +197,30 @@
                 <p id="history-placeholder" style="text-align: center; padding: 40px 0;">История операций пуста.</p>
               </div>
             </div>
-        </div>
+        </section>
 
-        <div class="bottom-nav">
+        <nav class="bottom-nav" role="navigation" aria-label="Основная навигация">
           <div class="nav-items">
-            <div class="nav-item active" onclick="openPage('Home')">
-              <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+            <div class="nav-item active" onclick="openPage('Home')" role="button" tabindex="0" aria-label="Главная страница">
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
               <span class="nav-label">Главная</span>
             </div>
-            <div class="nav-item" onclick="openPage('Portfolio')">
-              <svg class="nav-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            <div class="nav-item" onclick="openPage('Portfolio')" role="button" tabindex="0" aria-label="Портфель инвестиций">
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
               <span class="nav-label">Портфель</span>
             </div>
-            <div class="nav-item" onclick="openPage('History')">
-              <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+            <div class="nav-item" onclick="openPage('History')" role="button" tabindex="0" aria-label="История операций">
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
               <span class="nav-label">История</span>
             </div>
           </div>
-        </div>
-    </div>
+        </nav>
+    </main>
 
     <!-- Profile -->
-    <div id="modalProfile" class="modal-overlay">
+    <div id="modalProfile" class="modal-overlay" role="dialog" aria-labelledby="profile-title" aria-modal="true">
       <div class="modal">
-        <div class="modal-header"><h2 class="modal-title">Профиль</h2><button class="close-btn" onclick="closeModal('profile')">✕</button></div>
+        <div class="modal-header"><h2 id="profile-title" class="modal-title">Профиль</h2><button class="close-btn" onclick="closeModal('profile')" aria-label="Закрыть профиль">✕</button></div>
         <div class="card" style="text-align: center; margin: 0;">
           <h3 id="profileUsername">—</h3>
           <p style="color: var(--text-secondary); font-size: 14px;">Telegram пользователь</p>
@@ -241,14 +241,14 @@
     </div>
 
 <!-- Deposit -->
-<div id="modalDeposit" class="modal-overlay">
+<div id="modalDeposit" class="modal-overlay" role="dialog" aria-labelledby="deposit-title" aria-modal="true">
   <div class="modal">
     <div class="modal-header">
       <div>
-        <h2 class="modal-title">Депозит</h2>
+        <h2 id="deposit-title" class="modal-title">Депозит</h2>
         <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Выберите сумму депозита</div>
       </div>
-      <button class="close-btn" onclick="closeModal('deposit')">✕</button>
+      <button class="close-btn" onclick="closeModal('deposit')" aria-label="Закрыть депозит">✕</button>
     </div>
 
     <!-- Шаг 1: ввод суммы + согласие -->
@@ -331,9 +331,9 @@
 </div> <!-- / #modalDeposit -->
 
     <!-- Withdraw -->
-    <div id="modalWithdraw" class="modal-overlay">
+    <div id="modalWithdraw" class="modal-overlay" role="dialog" aria-labelledby="withdraw-title" aria-modal="true">
       <div class="modal">
-        <div class="modal-header"><h2 class="modal-title">Вывод средств</h2><button class="close-btn" onclick="closeModal('withdraw')">✕</button></div>
+        <div class="modal-header"><h2 id="withdraw-title" class="modal-title">Вывод средств</h2><button class="close-btn" onclick="closeModal('withdraw')" aria-label="Закрыть вывод">✕</button></div>
 
         <div id="withdraw-method-choice" style="display:none;">
 <div class="method-card" onclick="selectWithdrawMethod('sbp')">
@@ -373,11 +373,11 @@
     </div>
     
     <!-- Strategies -->
-<div id="modalStrategy16" class="modal-overlay">
+<div id="modalStrategy16" class="modal-overlay" role="dialog" aria-labelledby="strategy16-title" aria-modal="true">
   <div class="modal">
     <div class="modal-header">
-      <h2 class="modal-title">Ликвидный</h2>
-      <button class="close-btn" onclick="closeModal('strategy16')">✕</button>
+      <h2 id="strategy16-title" class="modal-title">Ликвидный</h2>
+      <button class="close-btn" onclick="closeModal('strategy16')" aria-label="Закрыть стратегию">✕</button>
     </div>
     <div class="glass-card" style="margin-bottom:12px;">
       <p style="color:var(--text-secondary);font-size:14px;">
@@ -389,11 +389,11 @@
     <button class="btn btn-primary" onclick="openNewInvestment('16')" style="width:100%;">Инвестировать</button>
   </div>
 </div>
-    <div id="modalStrategy17" class="modal-overlay">
+    <div id="modalStrategy17" class="modal-overlay" role="dialog" aria-labelledby="strategy17-title" aria-modal="true">
   <div class="modal">
     <div class="modal-header">
-      <h2 class="modal-title">Стабильный</h2>
-      <button class="close-btn" onclick="closeModal('strategy17')">✕</button>
+      <h2 id="strategy17-title" class="modal-title">Стабильный</h2>
+      <button class="close-btn" onclick="closeModal('strategy17')" aria-label="Закрыть стратегию">✕</button>
     </div>
     <div class="glass-card" style="margin-bottom:12px;">
       <p style="color:var(--text-secondary);font-size:14px;">
@@ -405,11 +405,11 @@
     <button class="btn btn-primary" onclick="openNewInvestment('17')" style="width:100%;">Инвестировать</button>
   </div>
 </div>
-   <div id="modalStrategy18" class="modal-overlay">
+   <div id="modalStrategy18" class="modal-overlay" role="dialog" aria-labelledby="strategy18-title" aria-modal="true">
   <div class="modal">
      <div class="modal-header">
-       <h2 class="modal-title">Агрессивный</h2>
-       <button class="close-btn" onclick="closeModal('strategy18')">✕</button>
+       <h2 id="strategy18-title" class="modal-title">Агрессивный</h2>
+       <button class="close-btn" onclick="closeModal('strategy18')" aria-label="Закрыть стратегию">✕</button>
      </div>
     <div class="glass-card" style="margin-bottom:12px;">
       <p style="color:var(--text-secondary);font-size:14px;">
@@ -422,1064 +422,17 @@
   </div>
 </div>
     <!-- New Investment -->
-    <div id="modalNewInvestment" class="modal-overlay">
+    <div id="modalNewInvestment" class="modal-overlay" role="dialog" aria-labelledby="new-investment-title" aria-modal="true">
       <div class="modal">
         <div class="modal-header">
-          <h2 class="modal-title">Новая инвестиция</h2>
-          <button class="close-btn" onclick="closeModal('newInvestment')">✕</button>
+          <h2 id="new-investment-title" class="modal-title">Новая инвестиция</h2>
+          <button class="close-btn" onclick="closeModal('newInvestment')" aria-label="Закрыть новую инвестицию">✕</button>
         </div>
         <div class="input-field" id="niStrategyReadonly" style="text-align:center;font-weight:700;margin-bottom:12px;">—</div>
         <input type="text" class="amount-input" id="niAmount" placeholder="0" oninput="formatAmountInput(this)" inputmode="decimal">
         <button class="btn btn-primary" style="width:100%" id="niConfirmBtn">Подтвердить</button>
       </div>
     </div>
-
-    <script>
-      const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
-
-      // -------- STATE --------
-      let username = null;
-      let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, history: [], portfolio: [] };
-      let userPrefs = { currency: 'RUB', sbpMethods: [] };
-      let devMode = false;
-      let lastChosenRate = null;
-let syncTimer = null;
-let syncInFlight = false;
-let syncBackoffMs = 20000;       // старт 20с
-const SYNC_BACKOFF_MAX = 60000;  // максимум 60с
-      let lastDepositAmount = 0;
-let lastDepositShortId = null;
-      let hasPendingDeposit = false;
-
-
-      // Status: показываем loading/synced только один раз
-      let hasShownInitialStatus = false;
-
-      // Курсы и доход сегодня (в RUB) для мгновенного пересчёта
-      const exchangeRates = { RUB: 1, USD: 0.011, EUR: 0.010 };
-      let latestTodayIncomeRub = 0;
-
-      // История — пагинация и фильтр
-      let historyOffset = 0;
-      // Вывод: пользователь явно выбрал "Добавить новые реквизиты"
-let withdrawAddingNew = false;
-      const HISTORY_PAGE_SIZE = 10;
-      let currentHistoryFilterType = 'all';
-      let filteredHistory = [];
-
-      // -------- HELPERS --------
-      const fmtMoney = (val, currency) => {
-        const rate = exchangeRates[currency];
-        const num = (Number(val) || 0) * rate;
-        return num.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      };
-
-function parseAmount(str) {
-  if (!str) return 0;
-  const s = String(str).replace(/\s/g, '').replace(',', '.');
-  const n = Number(s);
-  return isNaN(n) ? 0 : n;
-}
-
-      // Спрятать только этот специфический шум, не трогая другие ошибки
-window.addEventListener('unhandledrejection', (e) => {
-  const msg = String((e.reason && e.reason.message) || e.reason || '');
-  if (msg.includes('A listener indicated an asynchronous response')) {
-    e.preventDefault(); // не логировать в консоль
-  }
-});
-
-window.addEventListener('error', (e) => {
-  const msg = String(e.message || '');
-  if (msg.includes('A listener indicated an asynchronous response')) {
-    e.stopImmediatePropagation();
-  }
-});
-
-// форматирование с сохранением десятичной части
-function formatAmountInput(input) {
-  let v = (input.value || '').replace(/[^\d.,]/g, '');
-  // если есть несколько разделителей — оставляем первый, остальные удаляем
-  const firstSep = v.search(/[.,]/);
-  if (firstSep !== -1) {
-    const intPart = v.slice(0, firstSep).replace(/[.,]/g, '');
-    const fracPartRaw = v.slice(firstSep + 1).replace(/[^\d]/g, '');
-    const fracPart = fracPartRaw.slice(0, 2); // до 2 знаков
-    input.value = formatIntWithSpaces(intPart) + ',' + fracPart;
-  } else {
-    input.value = formatIntWithSpaces(v.replace(/[.,]/g, ''));
-  }
-}
-function formatIntWithSpaces(s) {
-  if (!s) return '';
-  const num = s.replace(/\D/g, '');
-  return num.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-}
-
-function scheduleSync(delay = syncBackoffMs) {
-  clearTimeout(syncTimer);
-  const jitter = Math.floor(Math.random() * 3000);
-  const next = Math.min(Math.max(delay, 5000), SYNC_BACKOFF_MAX); // 5с..60с
-  syncTimer = setTimeout(() => syncBalance(true), next + jitter);
-}
-document.addEventListener('visibilitychange', () => {
-  // возвращаемся на вкладку — быстрый пинг
-  if (!document.hidden) scheduleSync(2000);
-});
-      
-      function showPopup(text, timeout = 3000) {
-        const el = document.createElement('div');
-        el.className = 'popup';
-        el.textContent = text;
-        document.body.appendChild(el);
-        setTimeout(() => {
-          el.style.transition = 'opacity .25s ease, transform .25s ease';
-          el.style.opacity = '0';
-          el.style.transform = 'translateX(-50%) translateY(10px)';
-          setTimeout(() => el.remove(), 250);
-        }, timeout);
-      }
-
-      function setStatus(text, type = 'loading') {
-        const el = document.getElementById('status');
-        if (!el) return;
-
-        // Показываем "loading/synced" только при первом подключении
-        if ((type === 'loading' || type === 'synced') && hasShownInitialStatus) return;
-
-        el.textContent = text;
-        el.className = `status ${type} show`;
-
-        if (type === 'error') {
-          setTimeout(() => el.classList.remove('show'), 3000);
-        } else if (type === 'synced') {
-          setTimeout(() => el.classList.remove('show'), 1500);
-          hasShownInitialStatus = true;
-        }
-      }
-
-function computeHasPendingDeposit() {
-  const h = serverState.history || [];
-  return h.some(x => x.type === 'DEPOSIT' && x.status === 'PENDING');
-}
-function showDepositStep(step) {
-  const s1 = document.getElementById('deposit-step1');
-  const s2 = document.getElementById('deposit-step2');
-  if (!s1 || !s2) return;
-  if (step === 1) { s1.style.display = 'block'; s2.style.display = 'none'; }
-  else { s1.style.display = 'none'; s2.style.display = 'block'; }
-}
-      // Депозит: тумблер согласия управляет доступностью кнопки
-function updateDepositBtnState() {
-  const agree = document.getElementById('depositAgree');
-  const btn = document.getElementById('depositConfirmBtn');
-  if (btn) btn.disabled = !(agree && agree.checked);
-}
-
-      
-      // -------- NAV & MODALS --------
-      function openPage(pageId) {
-        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-        document.getElementById(`page${pageId}`).classList.add('active');
-        document.querySelectorAll('.nav-item').forEach(n => {
-          n.classList.remove('active');
-          if (n.onclick.toString().includes(`'${pageId}'`)) n.classList.add('active');
-        });
-      }
-// NEW: закрыть все модалки перед открытием новой
-function closeAllModals() {
-  document.querySelectorAll('.modal-overlay.active').forEach(m => {
-    m.classList.remove('active');
-    m.style.display = '';
-  });
-  document.body.classList.remove('modal-open');
-}
-
-function openModal(modalId) {
-  // NEW: гасим все старые модалки
-  closeAllModals();
-
-  const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
-  if (!modal) return;
-  modal.classList.add('active');
-  modal.style.display = 'flex';          // NEW: гарантированно показать
-  document.body.classList.add('modal-open');
-
-        // Спец-логика для "Вывод"
-if (modalId === 'withdraw') {
-  // Новый заход в модалку — забываем прошлое «Добавить новые реквизиты»
-  withdrawAddingNew = false;
-
-  const methodChoice = document.getElementById('withdraw-method-choice');
-  const addForm      = document.getElementById('withdraw-add-sbp-form');
-  const view         = document.getElementById('withdraw-view');
-  const sel          = document.getElementById('withdraw-recipient-select');
-
-  // Стандартное поведение:
-  // - если есть сохранённые реквизиты → сразу экран вывода;
-  // - если нет → экран выбора способа.
-  const hasMethods = (userPrefs.sbpMethods || []).length > 0;
-
-  if (hasMethods) {
-    if (methodChoice) methodChoice.style.display = 'none';
-    if (addForm)      addForm.style.display      = 'none';
-    if (view)         view.style.display         = 'block';
-    if (sel) {
-      // на всякий случай выберем первый реальный реквизит (не "add_new")
-      if (sel.value === 'add_new' || sel.selectedIndex < 0) sel.selectedIndex = 0;
-    }
-  } else {
-    if (methodChoice) methodChoice.style.display = 'block';
-    if (addForm)      addForm.style.display      = 'none';
-    if (view)         view.style.display         = 'none';
-    if (sel) sel.selectedIndex = -1; // ничего не выбрано
-  }
-
-  // прокрутка к началу на случай прошлой прокрутки
-  const modalEl = document.getElementById('modalWithdraw');
-  const inner   = modalEl && modalEl.querySelector('.modal');
-  if (inner) inner.scrollTop = 0;
-}
-if (modalId === 'deposit') {
-  if (hasPendingDeposit) {
-  // попробуем взять из истории последний PENDING депозит
-  const pending = (serverState.history || [])
-    .filter(x => x.type === 'DEPOSIT' && x.status === 'PENDING')
-    .sort((a,b) => b.date - a.date)[0];
-  const amt = pending ? Math.abs(Number(pending.amount||0)) : lastDepositAmount;
-  const sid = pending ? pending.shortId : lastDepositShortId;
-  hydrateDepositStep2(amt || 0, sid || null);
-}
-  showDepositStep(hasPendingDeposit ? 2 : 1);
-  // синхронизировать кнопку один раз на входе
-  setTimeout(updateDepositBtnState, 0);
-}
-}
-
-function closeModal(modalId) {
-  const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
-  if (modal) {
-    modal.classList.remove('active');
-    modal.style.display = ''; // NEW
-  }
-  if (modalId === 'withdraw') withdrawAddingNew = false;
-  const anyOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.classList.contains('active'));
-  if (!anyOpen) document.body.classList.remove('modal-open');
-}
-
-      // -------- BALANCE AUTOSIZE --------
-      function fitBalanceText() {
-        const el = document.getElementById('balanceValue');
-        if (!el) return;
-        const max = 42, min = 18;
-        el.style.fontSize = max + 'px';
-        const limit = el.parentElement ? el.parentElement.clientWidth - 24 : el.clientWidth;
-        let size = max, safety = 50;
-        while (el.scrollWidth > limit && size > min && safety-- > 0) {
-          size -= 1;
-          el.style.fontSize = size + 'px';
-        }
-      }
-      window.addEventListener('resize', fitBalanceText);
-
-      // -------- RENDER --------
-      function updateDashboard(data) {
-        serverState = { ...serverState, ...data };
-        const { balance, monthBase, lockedAmount } = serverState;
-        const currency = userPrefs.currency;
-        const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
-
-        document.getElementById('balanceValue').textContent = `${fmtMoney(balance, currency)} ${currencySymbol}`;
-        document.getElementById('freeBalance').textContent = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
-        document.getElementById('investedBalance').textContent = `${fmtMoney(monthBase, currency)} ${currencySymbol}`;
-        document.getElementById('profileUsername').textContent = username || 'Пользователь';
-        document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
-
-        // Доход сегодня — мгновенно под выбранную валюту
-renderTodayIncome();
-
-
-        fitBalanceText();
-      }
-function renderTodayIncome() {
-  const currency = userPrefs.currency;
-  const symbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
-  const el = document.getElementById('todayIncome');
-  if (el) el.innerHTML = `+${fmtMoney(latestTodayIncomeRub, currency)} <span class="cur-sym">${symbol}</span>`;
-}
-      function getHistoryFilterPredicate(type) {
-        if (!type || type === 'all') return () => true;
-        const map = { deposit: 'DEPOSIT', withdraw: 'WITHDRAW', invest: 'INVEST' };
-        const wanted = map[type] || null;
-        return (item) => !wanted || (item.type === wanted);
-      }
-
-      function recomputeFilteredHistory() {
-        const pred = getHistoryFilterPredicate(currentHistoryFilterType);
-        filteredHistory = (serverState.history || []).filter(pred);
-      }
-
-      function renderHistoryPage(append = false) {
-        const list = document.getElementById('history-list');
-        const placeholder = document.getElementById('history-placeholder');
-        const loadMoreBtn = document.getElementById('load-more-history');
-
-        if (!append) {
-          historyOffset = 0;
-          list.innerHTML = '';
-        }
-
-        const slice = filteredHistory.slice(historyOffset, historyOffset + HISTORY_PAGE_SIZE);
-
-        if (!append && filteredHistory.length === 0) {
-          placeholder.style.display = 'block';
-          loadMoreBtn.style.display = 'none';
-          return;
-        }
-        placeholder.style.display = 'none';
-
-        const currency = userPrefs.currency;
-        const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
-
-        slice.forEach(item => {
-          const el = document.createElement('div');
-          el.className = `glass-card history-item status-${item.status.toLowerCase()}`;
-
-          const date = new Date(item.date);
-          const timeStr = `${String(date.getDate()).padStart(2,'0')}.${String(date.getMonth()+1).padStart(2,'0')}.${String(date.getFullYear()).slice(-2)} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
-
-          const absAmount = Math.abs(item.amount);
-          let title = '', amountStr = '', subTitle = '';
-
-          switch(item.type) {
-            case 'DEPOSIT':  title = 'Депозит';    amountStr = `+${fmtMoney(absAmount, currency)}`; break;
-            case 'WITHDRAW': title = 'Вывод';      amountStr = `-${fmtMoney(absAmount, currency)}`; break;
-            case 'INVEST':
-              title = 'Инвестиция';
-              amountStr = `${fmtMoney(absAmount, currency)}`;
-              subTitle = `<div style="font-size:12px;color:var(--text-secondary);">Стратегия: ${item.rate}%</div>`;
-              break;
-          }
-
-          const uid = devMode ? ` · #${item.shortId}` : '';
-          el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;">
-              <div><b>${title}</b>${subTitle}<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${timeStr}${uid}</div></div>
-              <div style="font-weight:700;font-size:16px;text-align:right;">${amountStr} ${currencySymbol}</div>
-            </div>`;
-          list.appendChild(el);
-        });
-
-        historyOffset += slice.length;
-        loadMoreBtn.style.display = historyOffset < filteredHistory.length ? 'block' : 'none';
-      }
-
-      function applyHistoryFilter(element, type) {
-        if (type) currentHistoryFilterType = type;
-        if (element) {
-          document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
-          element.classList.add('active');
-        }
-        recomputeFilteredHistory();
-        renderHistoryPage(false);
-      }
-
-      function renderPortfolio(portfolio) {
-        const list = document.getElementById('portfolio-list');
-        const placeholder = document.getElementById('portfolio-placeholder');
-        list.innerHTML = '';
-        if (!portfolio || portfolio.length === 0) { placeholder.style.display = 'block'; return; }
-        placeholder.style.display = 'none';
-
-        const currency = userPrefs.currency;
-        const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
-
-        portfolio.forEach(item => {
-          const el = document.createElement('div');
-          el.className = 'glass-card';
-          const uid = devMode ? `<b>#${item.shortId}</b> · ` : '';
-          el.innerHTML = `${uid}${fmtMoney(item.amount, currency)} ${currencySymbol} · <b>${item.rate}%</b>`;
-          list.appendChild(el);
-        });
-      }
-
-      // -------- API --------
-      async function apiGet(path) {
-        try {
-          const r = await fetch(`${SCRIPT_URL}${path}`);
-          if (!r.ok) throw new Error(`Network error: ${r.statusText}`);
-          const data = await r.json();
-          if (!data) throw new Error("Empty response from server");
-          return data;
-        } catch (e) {
-          console.error("API Fetch Error:", e);
-          return { success: false, error: e.message };
-        }
-      }
-
-async function initializeApp() {
-  try {
-    // Полноэкранный загрузчик и старт прогресса
-    startBootScreen();
-    setBootProgress(10);
-
-    // Telegram init + имя пользователя
-    const tg = window.Telegram?.WebApp;
-    tg?.expand?.();
-    username = (tg?.initDataUnsafe?.user?.username) || 'marulin';
-
-    setBootProgress(25);
-
-    // Первичные данные с бэкенда
-    const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
-    if (!data || !data.success) throw new Error(data?.error || 'Failed to get initial data');
-
-    // Применяем настройки/состояние
-    userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
-    devMode = localStorage.getItem('devMode') === 'true';
-    const devToggle = document.getElementById('devModeToggle');
-    if (devToggle) devToggle.checked = devMode;
-    const dv = document.getElementById('devVersion');
-if (dv) dv.style.display = devMode ? 'block' : 'none';
-
-    serverState = { ...serverState, ...data };
-    hasPendingDeposit = computeHasPendingDeposit();
-
-    // Перерисовка основных экранов
-    setBootProgress(60);
-    updateDashboard(serverState);
-    recomputeFilteredHistory();
-    renderHistoryPage(false);
-    renderPortfolio(serverState.portfolio);
-
-    // Доход сегодня + вывод UI
-    setBootProgress(80);
-    await refreshTodayIncome();
-    updateWithdrawUI();
-
-    // Финализация
-    setBootProgress(95);
-    scheduleSync(2000); // запускаем поллер
-    finishBootScreen(); // заголовок «улетит», оверлей исчезнет
-  } catch (e) {
-    console.error('Initialization error:', e);
-    finishBootScreen();                 // даже в случае ошибки убираем оверлей
-    setStatus(`Ошибка: ${e.message}`, 'error'); // поп-ап только для ошибок
-  }
-}
-
-// Обновляет баланс + "Доход сегодня"; дополнительно отслеживает завершение PENDING депозита
-async function syncBalance(fromScheduler = false) {
-  // не запускаем параллельные циклы
-  if (syncInFlight) { if (fromScheduler) scheduleSync(); return; }
-  syncInFlight = true;
-
-  try {
-    // если есть PENDING депозит — подтягиваем полный срез (включая историю), иначе — лёгкие запросы
-    let data = null;
-    if (hasPendingDeposit) {
-      // один запрос вернёт и баланс, и историю, и prefs
-      const full = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
-      if (full && full.success) {
-        data = full;
-        serverState = { ...serverState, ...full };
-        updateDashboard(serverState);
-        recomputeFilteredHistory();
-        renderHistoryPage(false);
-        renderPortfolio(serverState.portfolio);
-      }
-    } else {
-      // быстрый путь: баланс + доход
-      const [balRes, accrRes] = await Promise.allSettled([
-        apiGet(`?action=syncBalance&username=${encodeURIComponent(username)}`),
-        apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`)
-      ]);
-      if (balRes.status === 'fulfilled' && balRes.value && balRes.value.success) {
-        data = balRes.value;
-        updateDashboard(balRes.value);
-      }
-      if (accrRes.status === 'fulfilled' && accrRes.value && accrRes.value.success) {
-        latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
-      }
-renderTodayIncome();
-    }
-
-    // === ПОСЛЕ обновления данных: проверяем переход статуса депозита ===
-    const before = hasPendingDeposit;
-    const now = computeHasPendingDeposit();
-    hasPendingDeposit = now; // синхронизируем флаг
-
-    // если раньше был PENDING, а теперь нет — показываем результат и ACK'аем доставку
-if (before && !now) {
-  const last = (serverState.history || [])
-    .filter(x => x.type === 'DEPOSIT')
-    .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-
-  if (last && (last.status === 'APPROVED' || last.status === 'REJECTED' || last.status === 'CANCELED')) {
-    const msg = last.status === 'APPROVED'
-      ? 'Деньги зачислены на счёт'
-      : 'Депозит не прошёл успешно';
-    closeDepositFlowWithPopup(msg);
-
-    // подтверждаем доставку результата пользователю (ставим G=TRUE на бэкенде)
-    void apiGet(`?action=ackDepositDelivery&username=${encodeURIComponent(username)}`)
-      .catch(() => {}); // не мешаем поллеру из-за сетевых сбоев
-  } else {
-    // без явного статуса просто закроем flow, ACK не отправляем
-    closeDepositFlowWithPopup('Операция по депозиту завершена');
-  }
-}
-
-    // успешный цикл — мягкий интервал
-    syncBackoffMs = 20000;
-
-  } catch (e) {
-    // сеть/ошибка — увеличим интервал, но не больше 60с
-    syncBackoffMs = Math.min((syncBackoffMs || 20000) * 2, 60000);
-  } finally {
-    syncInFlight = false;
-    if (fromScheduler) scheduleSync(); // планируем следующий заход
-  }
-}
-
-async function cancelDeposit() {
-  try {
-    const r = await apiGet(`?action=cancelPendingDeposit&username=${username}`);
-    if (r && r.success) {
-      hasPendingDeposit = false;
-      showPopup('Депозит отменён');
-      showDepositStep(1);
-      initializeApp();
-    } else {
-      showPopup('Не удалось отменить депозит');
-    }
-  } catch {
-    showPopup('Ошибка сети');
-  }
-}
-      
-// Обновление "Доход сегодня" — без использования имени `res`
-async function refreshTodayIncome() {
-  let accrued = latestTodayIncomeRub; // значение по умолчанию — что было
-  try {
-    const r = await apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`);
-    if (r && r.success) {
-      accrued = Number(r.accruedToday || 0);
-    }
-  } catch (e) {
-    console.debug('refreshTodayIncome error:', e);
-  } finally {
-    latestTodayIncomeRub = accrued;
-    renderTodayIncome();
-  }
-}
-
-      // -------- EVENTS --------
-function setupEventListeners() {
-  const $id = (x) => document.getElementById(x);
-  const onIf = (el, ev, fn, opts) => { if (el) el.addEventListener(ev, fn, opts); };
-
-  // Клик по фону модалки — закрыть. Закрытие дропдауна валюты и custom select.
-  document.addEventListener('click', (e) => {
-    const target = e.target;
-    if (target && target.classList && target.classList.contains('modal-overlay')) {
-      target.classList.remove('active');
-    }
-    const anyOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.classList.contains('active'));
-    if (!anyOpen) document.body.classList.remove('modal-open');
-
-    const currencyDropdown = $id('currencyDropdown');
-    const currencyToggler  = document.querySelector('.balance-currency');
-    if (currencyDropdown && currencyToggler && !currencyDropdown.contains(target) && !currencyToggler.contains(target)) {
-      currencyDropdown.classList.remove('open');
-    }
-
-    // Close custom select if click outside
-    const customSelect = $id('withdraw-recipient-select');
-    if (customSelect && !customSelect.contains(target)) {
-      closeCustomSelect();
-    }
-  });
-  // Реагируем на смену только конкретного тумблера
-  document.addEventListener('change', (e) => {
-    if (e.target && e.target.id === 'depositAgree') updateDepositBtnState();
-  });
-  // (ВАЖНО) при открытии модалки вызывается setTimeout(updateDepositBtnState, 0) в openModal('deposit')
-
-  // Custom select events
-  const selectBtn = $id('select-btn');
-  onIf(selectBtn, 'click', (e) => {
-    e.stopPropagation();
-    toggleCustomSelect();
-  });
-
-  const selectOptions = document.querySelectorAll('#withdraw-recipient-select .select-options li');
-  selectOptions.forEach(li => {
-    onIf(li, 'click', (e) => {
-      e.stopPropagation();
-      selectCustomOption(li);
-    });
-  });
-
-  // Dev mode
-  onIf(document.getElementById('devModeToggle'), 'change', function () {
-  devMode = this.checked;
-  localStorage.setItem('devMode', devMode);
-  const dv = document.getElementById('devVersion');
-  if (dv) dv.style.display = devMode ? 'block' : 'none';
-  renderHistoryPage(false);
-  renderPortfolio(serverState.portfolio);
-});
-
-
-  // Deposit — создать запрос
-  onIf($id('depositConfirmBtn'), 'click', async function () {
-    const amountEl = $id('depositAmount');
-    const amount = amountEl ? parseAmount(amountEl.value) : 0;
-
-    if (amount <= 0) {
-      showPopup('Введите сумму.');
-      return;
-    }
-
-    this.disabled = true;
-
-    try {
-      const resp = await apiGet(
-        `?action=requestDeposit&username=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}`
-      );
-
-      if (resp && resp.success) {
-        showPopup('Запрос на депозит отправлен!');
-        hasPendingDeposit = true;
-        lastDepositAmount = amount;
-lastDepositShortId = resp && (resp.shortId || resp.requestShortId) || null;
-// Clean amount for display value, but keep for copy
-const cleanAmount = lastDepositAmount.toString().replace(/[^\d]/g, '');
-amountEl.value = cleanAmount; // Set clean number to value for copying, but display formatted elsewhere if needed
-hydrateDepositStep2(lastDepositAmount, lastDepositShortId);
-showDepositStep(2); // закрепляем экран инструкций
-initializeApp();    // подтягиваем историю/баланс
-      } else {
-        showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестно'));
-      }
-    } catch (e) {
-      showPopup('Сетевая ошибка.');
-    } finally {
-      this.disabled = false;
-    }
-  });
-
-  // Withdraw — выбор банка (иконки)
-  document.querySelectorAll('.bank-icon').forEach((icon) => {
-    icon.addEventListener('click', () => {
-      document.querySelectorAll('.bank-icon').forEach(i => i.classList.remove('selected'));
-      icon.classList.add('selected');
-    });
-  });
-
-  // Withdraw — сохранить СБП реквизиты
-  onIf($id('save-sbp-btn'), 'click', async function () {
-    const phoneEl = $id('withdraw-sbp-phone');
-    const phone = phoneEl ? phoneEl.value : '';
-    const selectedBankEl = document.querySelector('.bank-icon.selected');
-    if (!phone || !selectedBankEl) { showPopup('Пожалуйста, введите номер и выберите банк.'); return; }
-    const bank = selectedBankEl.dataset.bank;
-    userPrefs.sbpMethods = userPrefs.sbpMethods || [];
-    userPrefs.sbpMethods.unshift({ phone, bank });
-
-    this.disabled = true;
-    try {
-      const resp = await apiGet(`?action=saveUserPrefs&username=${encodeURIComponent(username)}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
-      if (resp && resp.success) {
-        userPrefs = resp.savedPrefs;
-        withdrawAddingNew = false; // <-- сбрасываем, реквизит добавлен
-        updateWithdrawUI();
-      } else {
-        showPopup('Не удалось сохранить реквизиты.');
-      }
-    } catch (e) {
-      showPopup('Ошибка сети.');
-    } finally { this.disabled = false; }
-  });
-
-  // Custom select for withdrawal
-  onIf($id('select-trigger'), 'click', function(e) {
-    e.stopPropagation();
-    toggleCustomSelect();
-  });
-
-  // Close custom select on outside click (already handled in general click listener)
-
-  // Withdraw — создать запрос
-  onIf($id('withdrawConfirmBtn'), 'click', async function () {
-    const amountEl = $id('withdrawAmount');
-    const trigger = $id('select-trigger');
-    const amount = amountEl ? parseAmount(amountEl.value) : 0;
-    const idx = trigger ? parseInt(trigger.dataset.index) : -1;
-    const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
-    const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
-
-    if (amount <= 0) { showPopup('Введите сумму.'); return; }
-    if (amount > available) { showPopup('Недостаточно свободных средств.'); return; }
-    if (!recipient) { showPopup('Выберите реквизиты для вывода.'); return; }
-
-    this.disabled = true;
-    try {
-      const details = JSON.stringify({ method: 'sbp', phone: recipient.phone, bank: recipient.bank });
-      const resp = await apiGet(`?action=requestWithdraw&username=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}&details=${encodeURIComponent(details)}`);
-      if (resp && resp.success) {
-        showPopup('Запрос на вывод отправлен!');
-        closeModal('withdraw');
-        initializeApp();
-      } else {
-        showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестно'));
-      }
-    } catch (e) {
-      showPopup('Сетевая ошибка.');
-    } finally {
-      this.disabled = false;
-    }
-  });
-
-  // New Investment — подтвердить
-  onIf($id('niConfirmBtn'), 'click', async function () {
-    const amountEl = $id('niAmount');
-    const amount = amountEl ? parseAmount(amountEl.value) : 0;
-    const rate = lastChosenRate;
-    if (!rate || amount <= 0) { showPopup('Введите корректную сумму.'); return; }
-    this.disabled = true;
-    try {
-      const resp = await apiGet(`?action=logStrategyInvestment&username=${encodeURIComponent(username)}&rate=${encodeURIComponent(rate)}&amount=${encodeURIComponent(amount)}`);
-      if (resp && resp.success) {
-        showPopup('Инвестиция создана!');
-        closeModal('newInvestment');
-        initializeApp();
-      } else {
-        showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестно'));
-      }
-    } catch (e) {
-      showPopup('Ошибка сети');
-    } finally {
-      this.disabled = false;
-    }
-  });
-
-  // История — «Загрузить ещё»
-  onIf($id('load-more-history'), 'click', () => {
-    renderHistoryPage(true);
-  });
-}
-
-      // -------- UI UTILS --------
-// Boot screen helpers
-const BOOT_HINTS = [
-  'Ищем лучшие инструменты для инвестиций',
-  'Танцуем с бубном',
-  'Оптимизируем процентные ставки',
-  'Увеличиваем прибыльность до бесконечности',
-  'Ищем ключ, чтобы Вас впустить',
-  'Бережно переносим ваши средства на депозит',
-];
-
-let bootHintsPicked = [];
-let bootProgressTarget = 0, bootProgressTimer = null;
-
-function startBootScreen() {
-  const el = document.getElementById('boot-screen');
-  if (!el) return;
-  el.classList.remove('hidden');
-  bootHintsPicked = pickTwoHints_();
-  setBootHint(bootHintsPicked[0]);
-  setBootProgress(5);
-}
-function pickTwoHints_() {
-  const arr = [...BOOT_HINTS];
-  const a = arr.splice(Math.floor(Math.random()*arr.length),1)[0];
-  const b = arr[Math.floor(Math.random()*arr.length)];
-  return [a,b];
-}
-function setBootHint(text) {
-  const h = document.getElementById('boot-hint');
-  if (h) {
-    h.style.opacity = '0';
-    setTimeout(() => {
-      h.textContent = text;
-      h.style.opacity = '1';
-    }, 250);
-  }
-}
-function setBootProgress(p) {
-  // имитируем постепенную загрузку — плавно догоняем цель
-  bootProgressTarget = Math.max(0, Math.min(100, p));
-  const fill = document.getElementById('boot-progress-fill');
-  if (!fill) return;
-  clearInterval(bootProgressTimer);
-  bootProgressTimer = setInterval(() => {
-    const cur = parseFloat(fill.style.width||'0');
-    const step = Math.max(0.8, (bootProgressTarget - cur) * 0.25); // easing
-    const next = Math.min(bootProgressTarget, cur + step);
-    fill.style.width = next + '%';
-    // сменим фразу примерно на середине
-    if (next > 55 && bootHintsPicked[1]) {
-      setBootHint(bootHintsPicked[1]);
-      bootHintsPicked[1] = null;
-    }
-    if (Math.abs(next - bootProgressTarget) < 0.5) {
-      fill.style.width = bootProgressTarget + '%';
-      clearInterval(bootProgressTimer);
-    }
-  }, 80);
-}
-function finishBootScreen() {
-  const overlay = document.getElementById('boot-screen');
-  const title = document.getElementById('boot-title');
-  const target = document.getElementById('appBrand');
-
-  setBootProgress(100);
-
-  if (overlay && title && target) {
-    // Instant hide for title
-    title.style.opacity = '0';
-
-    // Show target title immediately
-    target.style.opacity = '1';
-
-    // Hide overlay immediately
-    overlay.classList.add('hidden');
-  } else if (overlay) {
-    // Fallback
-    overlay.classList.add('hidden');
-  }
-}
-// Переопределяем setStatus: используем только для ошибок
-function setStatus(text, type = 'error') {
-  if (type === 'error') {
-    // показываем ваш существующий popup-уведомитель
-    showPopup(text || 'Ошибка', 3000);
-  }
-  // loading/synced здесь игнорируем — этим занимается boot screen
-}
-      
-      function setDepositAmount(amount) {
-        const input = document.getElementById('depositAmount');
-        input.value = amount;
-        formatAmountInput(input);
-      }
-function hydrateDepositStep2(amountRub, shortId) {
-  const currency = userPrefs.currency;
-  const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
-
-  const amountEl = document.getElementById('deposit-amount-display');
-  const codeEl = document.getElementById('deposit-short-display');
-  if (amountEl) amountEl.value = `${fmtMoney(amountRub, currency)} ${currencySymbol}`;
-  if (codeEl) codeEl.value = shortId ? `#${shortId}` : '—';
-}
-
-function closeDepositFlowWithPopup(msg) {
-  closeModal('deposit');    // закрыть модалку
-  openPage('Home');         // перейти на Главную
-  showPopup(msg, 3500);     // показать уведомление
-}
-
-function selectWithdrawMethod(method) {
-  // если пришли сюда после "Добавить новые реквизиты" — ведём на форму добавления
-  if (withdrawAddingNew && method === 'sbp') {
-    showAddRecipientForm('sbp');
-    return;
-  }
-
-  if (method === 'sbp') {
-    const has = (userPrefs.sbpMethods || []).length > 0;
-    if (has) {
-      // сразу к форме вывода с выпадающим списком
-      document.getElementById('withdraw-method-choice').style.display = 'none';
-      document.getElementById('withdraw-add-sbp-form').style.display = 'none';
-      document.getElementById('withdraw-view').style.display = 'block';
-      const sel = document.getElementById('withdraw-recipient-select');
-      if (sel) sel.selectedIndex = Math.max(0, sel.selectedIndex); // на всякий
-    } else {
-      showAddRecipientForm('sbp');
-    }
-  }
-
-  // TODO: если добавишь crypto/bank — логика по аналогии
-}
-      
-      function toggleCurrencyDropdown(event) {
-        event.stopPropagation();
-        document.getElementById('currencyDropdown').classList.toggle('open');
-      }
-
-      async function selectCurrency(currency, event) {
-        event.stopPropagation();
-        userPrefs.currency = currency;
-        document.getElementById('currentCurrency').textContent = currency;
-        document.querySelectorAll('.currency-option').forEach(opt => opt.classList.remove('active'));
-        event.target.classList.add('active');
-        document.getElementById('currencyDropdown').classList.remove('open');
-
-        updateDashboard(serverState);
-        recomputeFilteredHistory();
-        renderHistoryPage(false);
-        renderPortfolio(serverState.portfolio);
-
-        await apiGet(`?action=saveUserPrefs&username=${username}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
-      }
-
-function openNewInvestment(rate) {
-  lastChosenRate = rate;
-  const names = { 16: 'Ликвидный', 17: 'Стабильный', 18: 'Агрессивный' };
-  const name = names[rate] || `Стратегия ${rate}%`;
-  document.getElementById('niStrategyReadonly').textContent = name;
-  document.getElementById('niAmount').value = '';
-  // NEW: закрыть любые модалки перед открытием «Новой инвестиции»
-  closeAllModals();
-  openModal('newInvestment');
-}
-
-
-      function showAddRecipientForm(method) {
-        if (method !== 'sbp') return;
-        document.getElementById('withdraw-method-choice').style.display = 'none';
-        document.getElementById('withdraw-add-sbp-form').style.display = 'block';
-        const phoneInput = document.getElementById('withdraw-sbp-phone');
-        if (phoneInput) phoneInput.focus();
-        document.querySelectorAll('.bank-icon').forEach(i => i.classList.remove('selected'));
-      }
-
-      function updateWithdrawUI() {
-        const optionsContainer = document.getElementById('select-options');
-        const trigger = document.getElementById('select-trigger');
-        if (!optionsContainer || !trigger) return;
-
-        optionsContainer.innerHTML = '';
-        trigger.textContent = 'Выберите реквизиты';
-
-        if (userPrefs.sbpMethods && userPrefs.sbpMethods.length > 0) {
-          userPrefs.sbpMethods.forEach((method, index) => {
-            const option = document.createElement('div');
-            option.className = 'select-option';
-            option.dataset.index = index;
-            option.textContent = `СБП: ${method.phone} (${method.bank})`;
-            option.onclick = () => selectCustomOption(option);
-            optionsContainer.appendChild(option);
-          });
-          const addNewOption = document.createElement('div');
-          addNewOption.className = 'select-option add-new';
-          addNewOption.dataset.value = 'add_new';
-          addNewOption.textContent = '+ Добавить новые реквизиты';
-          addNewOption.onclick = () => selectCustomOption(addNewOption);
-          optionsContainer.appendChild(addNewOption);
-
-          document.getElementById('withdraw-view').style.display = 'block';
-          document.getElementById('withdraw-method-choice').style.display = 'none';
-          document.getElementById('withdraw-add-sbp-form').style.display = 'none';
-
-        } else {
-          document.getElementById('withdraw-view').style.display = 'none';
-          document.getElementById('withdraw-method-choice').style.display = 'block';
-          document.getElementById('withdraw-add-sbp-form').style.display = 'none';
-        }
-      }
-
-      function toggleCustomSelect() {
-        const container = document.getElementById('withdraw-recipient-select');
-        const options = document.getElementById('select-options');
-        const trigger = document.getElementById('select-trigger');
-        if (!container || !options || !trigger) return;
-
-        const isActive = options.classList.contains('active');
-        closeCustomSelect(); // Close others if open
-        if (!isActive) {
-          options.classList.add('active');
-          trigger.classList.add('active');
-          container.classList.add('active');
-        }
-      }
-
-      function selectCustomOption(option) {
-        const container = document.getElementById('withdraw-recipient-select');
-        const trigger = document.getElementById('select-trigger');
-        const options = document.getElementById('select-options');
-        if (!container || !trigger || !options) return;
-
-        // Update trigger text
-        trigger.textContent = option.textContent;
-        trigger.dataset.value = option.dataset.value || option.dataset.index;
-        trigger.dataset.index = option.dataset.index || -1;
-
-        // Close dropdown
-        options.classList.remove('active');
-        trigger.classList.remove('active');
-        container.classList.remove('active');
-
-        // Handle add new
-        if (option.dataset.value === 'add_new') {
-          withdrawAddingNew = true;
-          document.getElementById('withdraw-view').style.display = 'none';
-          document.getElementById('withdraw-method-choice').style.display = 'block';
-          document.getElementById('withdraw-add-sbp-form').style.display = 'none';
-        }
-      }
-
-      function closeCustomSelect() {
-        const options = document.getElementById('select-options');
-        const trigger = document.getElementById('select-trigger');
-        const container = document.getElementById('withdraw-recipient-select');
-        if (options) options.classList.remove('active');
-        if (trigger) trigger.classList.remove('active');
-        if (container) container.classList.remove('active');
-      }
-
-      // Update general click listener to close custom select
-      // Already handled in document.click, but ensure closeCustomSelect() is called there
-
-      // Надёжное копирование + смена иконки на галочку на 2 сек
-async function copyToClipboard(text, btnEl) {
-  const inTG = !!(window.Telegram && window.Telegram.WebApp); // ключевая строка
-
-  const ok = await (async () => {
-    try {
-      if (!inTG && navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-        return true; // здесь раньше сыпался violation — теперь не вызовем вовсе в TG
-      }
-      throw new Error();
-    } catch {
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.left='-9999px';
-        document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, ta.value.length);
-        const res = document.execCommand('copy'); document.body.removeChild(ta);
-        return res;
-      } catch { return false; }
-    }
-  })();
-
-  if (ok) {
-    if (btnEl) {
-      if (!btnEl.dataset.orig) btnEl.dataset.orig = btnEl.innerHTML;
-      btnEl.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
-      btnEl.blur(); // Remove focus to prevent stuck state
-      setTimeout(() => { btnEl.innerHTML = btnEl.dataset.orig; }, 2000);
-    }
-    let msg = 'Скопировано';
-    if (text.includes('₽') || text.includes('$') || text.includes('€')) msg = 'Сумма скопирована';
-    else if (text.startsWith('#')) msg = 'Код скопирован';
-    else if (text.includes('+7') || text.includes('+')) msg = 'Номер скопирован';
-    showPopup(msg);
-  } else {
-    if (btnEl) btnEl.blur();
-    showPopup('Не удалось скопировать. Скопируйте вручную.');
-  }
-}
-
-      // -------- INIT --------
-      document.addEventListener('DOMContentLoaded', () => {
-        setupEventListeners();
-        initializeApp();
-      });
-    </script>
+    <script src="app.js"></script>
   </body>
 </html>
-
