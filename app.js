@@ -157,15 +157,23 @@ function closeAllModals() {
   document.body.classList.remove('modal-open');
 }
 
-function openModal(modalId) {
-  // NEW: extinguish all old modals
-  closeAllModals();
+function openNewInvestment(rate) {
+   const available = serverState.balance - serverState.lockedAmount;
+   document.getElementById('niAvailable').textContent = fmtMoney(available, userPrefs.currency) + ' ' + userPrefs.currency;
+   document.getElementById('niStrategyReadonly').textContent = `${rate}% годовых`;
+   document.getElementById('niConfirmBtn').onclick = () => confirmNewInvestment(rate);
+   openModal('newInvestment');
+}
 
-  const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
-  if (!modal) return;
-  modal.classList.add('active');
-  modal.style.display = 'flex';          // NEW: ensure shown
-  document.body.classList.add('modal-open');
+function openModal(modalId) {
+   // NEW: extinguish all old modals
+   closeAllModals();
+
+   const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
+   if (!modal) return;
+   modal.classList.add('active');
+   modal.style.display = 'flex';          // NEW: ensure shown
+   document.body.classList.add('modal-open');
 
         // Special logic for "Withdraw"
  if (modalId === 'withdraw') {
@@ -365,18 +373,43 @@ function renderPortfolio(portfolio) {
 }
 
 // -------- API --------
-async function apiGet(path) {
-  try {
-    const r = await fetch(`${SCRIPT_URL}${path}`);
-    if (!r.ok) throw new Error(`Network error: ${r.statusText}`);
-    const data = await r.json();
-    if (!data) throw new Error("Empty response from server");
-    return data;
-  } catch (e) {
-    console.error("API Fetch Error:", e);
-    return { success: false, error: e.message };
-  }
-}
+const API_SECRET = 'your_secret_key_here'; // TODO: move to config
+
+function hmacSha256(key, message) {
+   const crypto = window.crypto || window.msCrypto;
+   const encoder = new TextEncoder();
+   const keyData = encoder.encode(key);
+   const messageData = encoder.encode(message);
+   return crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+     .then(key => crypto.subtle.sign('HMAC', key, messageData))
+     .then(signature => Array.from(new Uint8Array(signature)).map(b => ('0' + b.toString(16)).slice(-2)).join(''));
+ }
+
+async function apiGet(path, body = '') {
+   try {
+     const ts = Date.now();
+     const nonce = Math.random().toString(36).substring(2);
+     const method = 'GET';
+     const fullPath = `${SCRIPT_URL}${path}`;
+     const message = `${method}|${fullPath}|${ts}|${nonce}|${body}`;
+     const sig = await hmacSha256(API_SECRET, message);
+
+     const headers = {
+       'X-Signature': sig,
+       'X-Timestamp': ts.toString(),
+       'X-Nonce': nonce
+     };
+
+     const r = await fetch(fullPath, { headers });
+     if (!r.ok) throw new Error(`Network error: ${r.statusText}`);
+     const data = await r.json();
+     if (!data) throw new Error("Empty response from server");
+     return data;
+   } catch (e) {
+     console.error("API Fetch Error:", e);
+     return { success: false, error: e.message };
+   }
+ }
 
 async function initializeApp() {
   try {
@@ -403,9 +436,6 @@ async function initializeApp() {
     const dv = document.getElementById('devVersion');
   if (dv) dv.style.display = devMode ? 'block' : 'none';
 
-    // Show simulation button in dev mode
-    const simBtn = document.getElementById('simulateMonthBtn');
-    if (simBtn) simBtn.style.display = devMode ? 'inline-block' : 'none';
 
     serverState = { ...serverState, ...data };
     hasPendingDeposit = computeHasPendingDeposit();
@@ -1003,9 +1033,6 @@ function closeCustomSelect() {
   if (container) container.classList.remove('active');
 }
 
-function simulateMonth() {
-  showPopup('Для тестирования измените даты разморозки в Google Sheets вручную на прошедшие.');
-}
 
 // Update general click listener to close custom select
 // Already handled in document.click, but ensure closeCustomSelect() is called there
