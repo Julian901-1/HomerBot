@@ -425,17 +425,31 @@ function apiGet(path, body = '') {
        const callbackName = 'jsonpCallback_' + Math.random().toString(36).substring(2);
        const url = `${fullPath}&callback=${callbackName}&X-Signature=${encodeURIComponent(sig)}&X-Timestamp=${ts}&X-Nonce=${nonce}`;
 
+       console.log('JSONP URL:', url); // Debug log
+
        window[callbackName] = function(data) {
+         console.log('JSONP response:', data); // Debug log
          delete window[callbackName];
          document.head.removeChild(script);
          resolve(data);
        };
 
        script.src = url;
-       script.onerror = function() {
+       script.onload = function() {
+         // If no callback called, assume success but wait
+         setTimeout(() => {
+           if (window[callbackName]) {
+             delete window[callbackName];
+             document.head.removeChild(script);
+             reject(new Error('JSONP timeout'));
+           }
+         }, 5000);
+       };
+       script.onerror = function(e) {
+         console.error('JSONP error:', e);
          delete window[callbackName];
          document.head.removeChild(script);
-         reject(new Error('JSONP request failed'));
+         reject(new Error('JSONP request failed: ' + (e.message || 'Network error')));
        };
 
        document.head.appendChild(script);
