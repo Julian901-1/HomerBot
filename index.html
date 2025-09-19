@@ -121,6 +121,69 @@
     .strategy-description { font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; }
     .strategy-features { display: flex; gap: 8px; flex-wrap: wrap; }
     .feature-tag { padding: 4px 8px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); border-radius: 8px; font-size: 12px; }
+   
+   /* New Investment Strategies Design */
+   .strategy-grid {
+     display: flex;
+     flex-direction: column;
+     gap: 16px;
+     margin-top: 16px;
+   }
+   .strategy-option {
+     background: var(--glass-bg);
+     border: 1px solid var(--glass-border);
+     border-radius: 20px;
+     padding: 20px;
+     cursor: pointer;
+     transition: all 0.3s ease;
+     box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+     display: flex;
+     flex-direction: column;
+     align-items: center;
+     text-align: center;
+   }
+   .strategy-option:hover {
+     transform: translateY(-2px);
+     box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+   }
+   .option-tools {
+     display: flex;
+     gap: 8px;
+     margin-bottom: 12px;
+   }
+   .tool-icon {
+     font-size: 20px;
+   }
+   .rate-badge {
+     background: var(--accent);
+     color: white;
+     padding: 8px 16px;
+     border-radius: 20px;
+     font-size: 18px;
+     font-weight: 700;
+     margin: 8px 0;
+   }
+   .lock-info {
+     font-size: 14px;
+     color: var(--text-secondary);
+     margin: 8px 0;
+   }
+   .option-name {
+     font-size: 18px;
+     font-weight: 700;
+     margin: 8px 0 4px;
+   }
+   .option-desc {
+     font-size: 14px;
+     color: var(--text-secondary);
+     margin: 12px 0;
+     line-height: 1.4;
+   }
+   .invest-btn {
+     margin-top: 16px;
+     width: 100%;
+     font-size: 14px;
+   }
 
     .status { position:fixed; top:80px; right:20px; padding:8px 12px; border-radius:12px; background:var(--glass-bg); border:1px solid var(--glass-border); font-size:12px; backdrop-filter:blur(10px); z-index:9999; transform:translateX(130%); opacity:0; transition:transform .35s ease, opacity .35s ease; pointer-events:none; color: var(--text-primary); }
     .status.show { transform:translateX(0); opacity:1; }
@@ -386,21 +449,39 @@ body::-webkit-scrollbar,
 
                 <div class="strategies-section">
                     <h2>Инвестиционные стратегии</h2>
-                    <div class="strategy-cards">
-                        <div class="strategy-card glass-card" onclick="openModal('strategy16')">
-                          <div class="strategy-header"><div class="strategy-name">Гибкая</div><div class="strategy-rate">16%</div></div>
-                          <div class="strategy-description">Вывод в любое время без штрафа.</div>
-                          <div class="strategy-features"><span class="feature-tag">Без заморозки</span><span class="feature-tag">Банковские вклады</span></div>
+                    <div class="strategy-grid">
+                        <div class="strategy-option" onclick="openModal('strategy16')">
+                          <div class="option-tools">
+                            <span class="tool-icon">🏦</span>
+                          </div>
+                          <h3 class="option-name">Ликвидный 16%</h3>
+                          <div class="rate-badge">16% годовых</div>
+                          <div class="lock-info">Вывод в любое время без штрафа</div>
+                          <p class="option-desc">Идеально для подушки безопасности. Только надежные банковские вклады.</p>
+                          <button class="btn btn-primary invest-btn" onclick="event.stopPropagation(); openModal('strategy16')">Инвестировать</button>
                         </div>
-                        <div class="strategy-card glass-card" onclick="openModal('strategy17')">
-                          <div class="strategy-header"><div class="strategy-name">30 дней</div><div class="strategy-rate">17%</div></div>
-                          <div class="strategy-description">Доступен досрочный вывод, но с потерей процентов.</div>
-                          <div class="strategy-features"><span class="feature-tag">Заморозка на 30 дней</span><span class="feature-tag">Банковские вклады</span><span class="feature-tag">ЦФА</span></div>
+                        <div class="strategy-option" onclick="openModal('strategy17')">
+                          <div class="option-tools">
+                            <span class="tool-icon">🏦</span>
+                            <span class="tool-icon">📈</span>
+                          </div>
+                          <h3 class="option-name">Стабильный 17%</h3>
+                          <div class="rate-badge">17% годовых</div>
+                          <div class="lock-info">Заморозка на 30 дней (досрочный с потерей %)</div>
+                          <p class="option-desc">Баланс риска и доходности. Банковские вклады + ЦФА умеренного риска.</p>
+                          <button class="btn btn-primary invest-btn" onclick="event.stopPropagation(); openModal('strategy17')">Инвестировать</button>
                         </div>
-                        <div class="strategy-card glass-card" onclick="openModal('strategy18')">
-                          <div class="strategy-header"><div class="strategy-name">90 дней</div><div class="strategy-rate">18%</div></div>
-                          <div class="strategy-description">Доступен досрочный вывод, но с потерей процентов.</div>
-                          <div class="strategy-features"><span class="feature-tag">Заморозка на 90 дней</span><span class="feature-tag">Банковские вклады</span><span class="feature-tag">ЦФА</span><span class="feature-tag">Займы</span><span class="feature-tag">Максимальная прибыль</span></div>
+                        <div class="strategy-option" onclick="openModal('strategy18')">
+                          <div class="option-tools">
+                            <span class="tool-icon">🏦</span>
+                            <span class="tool-icon">📈</span>
+                            <span class="tool-icon">💰</span>
+                          </div>
+                          <h3 class="option-name">Агрессивный 18%</h3>
+                          <div class="rate-badge">18% годовых</div>
+                          <div class="lock-info">Заморозка на 90 дней (досрочный с потерей %)</div>
+                          <p class="option-desc">Максимальная прибыль. Банковские вклады + ЦФА + краткосрочные займы.</p>
+                          <button class="btn btn-primary invest-btn" onclick="event.stopPropagation(); openModal('strategy18')">Инвестировать</button>
                         </div>
                     </div>
                 </div>
