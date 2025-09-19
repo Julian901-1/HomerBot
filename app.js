@@ -158,11 +158,38 @@ function closeAllModals() {
 }
 
 function openNewInvestment(rate) {
+   lastChosenRate = rate;
    const available = serverState.balance - serverState.lockedAmount;
    document.getElementById('niAvailable').textContent = fmtMoney(available, userPrefs.currency) + ' ' + userPrefs.currency;
    document.getElementById('niStrategyReadonly').textContent = `${rate}% годовых`;
+   document.getElementById('niAmount').value = '';
    document.getElementById('niConfirmBtn').onclick = () => confirmNewInvestment(rate);
    openModal('newInvestment');
+}
+
+async function confirmNewInvestment(rate) {
+   const amountEl = document.getElementById('niAmount');
+   const amount = amountEl ? parseAmount(amountEl.value) : 0;
+   if (amount < 100) { showPopup('Минимальная сумма: 100 руб.'); return; }
+   const available = serverState.balance - serverState.lockedAmount;
+   if (amount > available) { showPopup('Недостаточно свободных средств.'); return; }
+
+   const btn = document.getElementById('niConfirmBtn');
+   btn.disabled = true;
+   try {
+     const resp = await apiGet(`?action=logStrategyInvestment&username=${encodeURIComponent(username)}&rate=${encodeURIComponent(lastChosenRate)}&amount=${encodeURIComponent(amount)}`);
+     if (resp && resp.success) {
+       showPopup('Инвестиция создана!');
+       closeModal('newInvestment');
+       initializeApp();
+     } else {
+       showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестна'));
+     }
+   } catch (e) {
+     showPopup('Ошибка сети');
+   } finally {
+     btn.disabled = false;
+   }
 }
 
 function openModal(modalId) {
@@ -385,30 +412,35 @@ function hmacSha256(key, message) {
      .then(signature => Array.from(new Uint8Array(signature)).map(b => ('0' + b.toString(16)).slice(-2)).join(''));
  }
 
-async function apiGet(path, body = '') {
-   try {
+function apiGet(path, body = '') {
+   return new Promise((resolve, reject) => {
      const ts = Date.now();
      const nonce = Math.random().toString(36).substring(2);
      const method = 'GET';
      const fullPath = `${SCRIPT_URL}${path}`;
      const message = `${method}|${fullPath}|${ts}|${nonce}|${body}`;
-     const sig = await hmacSha256(API_SECRET, message);
 
-     const headers = {
-       'X-Signature': sig,
-       'X-Timestamp': ts.toString(),
-       'X-Nonce': nonce
-     };
+     hmacSha256(API_SECRET, message).then(sig => {
+       const script = document.createElement('script');
+       const callbackName = 'jsonpCallback_' + Math.random().toString(36).substring(2);
+       const url = `${fullPath}&callback=${callbackName}&X-Signature=${encodeURIComponent(sig)}&X-Timestamp=${ts}&X-Nonce=${nonce}`;
 
-     const r = await fetch(fullPath, { headers });
-     if (!r.ok) throw new Error(`Network error: ${r.statusText}`);
-     const data = await r.json();
-     if (!data) throw new Error("Empty response from server");
-     return data;
-   } catch (e) {
-     console.error("API Fetch Error:", e);
-     return { success: false, error: e.message };
-   }
+       window[callbackName] = function(data) {
+         delete window[callbackName];
+         document.head.removeChild(script);
+         resolve(data);
+       };
+
+       script.src = url;
+       script.onerror = function() {
+         delete window[callbackName];
+         document.head.removeChild(script);
+         reject(new Error('JSONP request failed'));
+       };
+
+       document.head.appendChild(script);
+     }).catch(reject);
+   });
  }
 
 async function initializeApp() {
@@ -634,8 +666,8 @@ function setupEventListeners() {
     const amountEl = $id('depositAmount');
     const amount = amountEl ? parseAmount(amountEl.value) : 0;
 
-    if (amount <= 0) {
-      showPopup('Введите сумму.');
+    if (amount < 100) {
+      showPopup('Минимальная сумма: 100 руб.');
       return;
     }
 
@@ -717,7 +749,7 @@ initializeApp();    // pull history/balance
     const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
     const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
 
-    if (amount <= 0) { showPopup('Введите сумму.'); return; }
+    if (amount < 100) { showPopup('Минимальная сумма: 100 руб.'); return; }
     if (amount > available) { showPopup('Недостаточно свободных средств.'); return; }
     if (!recipient) { showPopup('Выберите реквизиты для вывода.'); return; }
 
@@ -864,17 +896,17 @@ function setDepositAmount(amount) {
   formatAmountInput(input);
 }
 function hydrateDepositStep2(amountRub, shortId) {
-  const currency = userPrefs.currency;
-  const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+   const currency = userPrefs.currency;
+   const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
 
-  const amountEl = document.getElementById('deposit-amount-display');
-  const codeEl = document.getElementById('deposit-short-display');
-  if (amountEl) amountEl.value = `${fmtMoney(amountRub, currency)} ${currencySymbol}`;
-  if (codeEl) codeEl.value = shortId ? `#${shortId}` : '—';
+   const amountEl = document.getElementById('deposit-amount-display');
+   const codeEl = document.getElementById('deposit-short-display');
+   if (amountEl) amountEl.value = `${fmtMoney(lastDepositAmount, currency)} ${currencySymbol}`;
+   if (codeEl) codeEl.value = shortId ? `#${shortId}` : '—';
 
-  // Hide the loading spinner after showing step 2
-  const spinner = document.querySelector('.spinner-big');
-  if (spinner) spinner.style.display = 'none';
+   // Hide the loading spinner after showing step 2
+   const spinner = document.querySelector('.spinner-big');
+   if (spinner) spinner.style.display = 'none';
 }
 
 function closeDepositFlowWithPopup(msg) {
@@ -928,16 +960,6 @@ async function selectCurrency(currency, event) {
   await apiGet(`?action=saveUserPrefs&username=${username}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
 }
 
-function openNewInvestment(rate) {
-  lastChosenRate = rate;
-  const names = { 16: 'Liquid', 17: 'Stable', 18: 'Aggressive' };
-  const name = names[rate] || `Strategy ${rate}%`;
-  document.getElementById('niStrategyReadonly').textContent = name;
-  document.getElementById('niAmount').value = '';
-  // NEW: close any modals before opening "New Investment"
-  closeAllModals();
-  openModal('newInvestment');
-}
 
 
 function showAddRecipientForm(method) {
