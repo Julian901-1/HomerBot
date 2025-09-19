@@ -24,7 +24,7 @@
     .header-content { display: flex; justify-content: space-between; align-items: center; }
     .logo { font-family: 'Comfortaa', cursive; font-size: 24px; color: var(--text-primary); }
     .profile-btn, .btn, .copy-btn, .quick-amount-btn, .method-card, .filter-chip { background: var(--glass-bg); border: 1px solid var(--glass-border); transition: all 0.2s ease; cursor: pointer; color: var(--text-primary); }
-    .profile-btn:hover, .btn:hover:not(:disabled), .copy-btn:hover, .quick-amount-btn:hover, .method-card:not(.disabled):hover, .filter-chip:hover:not(.active) { background: rgba(255,255,255,0.95); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .profile-btn:hover, .btn:hover:not(:disabled), .copy-btn:hover, .quick-amount-btn:hover, .method-card:not(.disabled):hover, .filter-chip:hover:not(.active) { background: rgba(255,255,255,0.7); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
     .profile-btn { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
     .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; background: var(--glass-bg); backdrop-filter: blur(20px); border-top: 1px solid var(--glass-border); padding: 12px 20px 20px; z-index: 100; border-radius: 24px 24px 0 0; box-shadow: 0 -2px 10px rgba(0,0,0,0.05); }
 /* Bottom nav — всегда горизонтально */
@@ -82,7 +82,7 @@
     .balance-stats { display: flex; justify-content: space-between; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--glass-border); gap: 8px; }
     .balance-stat { flex: 1; text-align: center; }
     .stat-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
-    .stat-value { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+    .stat-value { font-size: 16px; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
     .stat-positive { color: var(--success); }
 
     .btn-group { display: flex; gap: 12px; margin-bottom: 24px; }
@@ -190,10 +190,51 @@
      margin: 12px 0;
      line-height: 1.4;
    }
-   .invest-btn {
-     margin-top: 16px;
-     width: 100%;
+   .strategy-card {
+     display: flex;
+     background: var(--glass-bg);
+     border: 1px solid var(--glass-border);
+     border-radius: 20px;
+     padding: 20px;
+     margin-bottom: 16px;
+     box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+     align-items: center;
+   }
+   .strategy-left {
+     flex: 1;
+     display: flex;
+     align-items: center;
+     gap: 16px;
+   }
+   .rate-square {
+     width: 60px;
+     height: 60px;
+     background: var(--accent);
+     color: white;
+     border-radius: 12px;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     font-size: 20px;
+     font-weight: 700;
+   }
+   .strategy-left h3 {
+     margin: 0;
+     font-size: 18px;
+     font-weight: 700;
+   }
+   .strategy-left p {
+     margin: 4px 0 0 0;
+     color: var(--text-secondary);
      font-size: 14px;
+   }
+   .strategy-right {
+     flex: 0 0 150px;
+     text-align: center;
+   }
+   .strategy-right .btn {
+     width: 100%;
+     font-size: 12px;
    }
 
    .composition-section {
