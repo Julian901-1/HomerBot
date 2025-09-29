@@ -437,7 +437,7 @@ function apiGet(path, body = '') {
 
      console.log('Full path:', fullPath);
      // Temporarily disable HMAC for testing
-     const sig = 'test_sig';
+     const sig = Utilities.computeHmacSha256Signature(message, API_SECRET).map(...).join('');
      console.log('Using test sig');
      const script = document.createElement('script');
      const callbackName = 'jsonpCallback_' + Math.random().toString(36).substring(2);
@@ -1135,4 +1135,3 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   initializeApp();
 });
-
