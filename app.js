@@ -426,7 +426,7 @@ function hmacSha256(key, message) {
    }
  }
 
-function apiGet(path, body = '') {
+async function apiGet(path, body = '') {
    console.log('Starting apiGet for path:', path);
    return new Promise((resolve, reject) => {
      const ts = Date.now();
@@ -436,8 +436,7 @@ function apiGet(path, body = '') {
      const message = `${method}|${fullPath}|${ts}|${nonce}|${body}`;
 
      console.log('Full path:', fullPath);
-     // Temporarily disable HMAC for testing
-     const sig = Utilities.computeHmacSha256Signature(message, API_SECRET).map(...).join('');
+     const sig = await hmacSha256(API_SECRET, message);
      console.log('Using test sig');
      const script = document.createElement('script');
      const callbackName = 'jsonpCallback_' + Math.random().toString(36).substring(2);
