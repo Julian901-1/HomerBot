@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://script.google.com https://script.googleusercontent.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://script.google.com;" />
   <title>HomerBot — Инвестиционный Кошелёк</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -67,42 +66,110 @@
                 </div>
 
                 <div class="btn-group">
-                  <button class="btn btn-primary" onclick="openModal('deposit')">Депозит</button>
-                  <button class="btn" onclick="openModal('withdraw')">Вывод</button>
+                   <button class="btn btn-primary" onclick="openModal('deposit')">Депозит</button>
+                   <button class="btn" onclick="openModal('withdraw')">Вывод</button>
                 </div>
 
                 <div class="strategies-section">
                     <h2>Инвестиционные стратегии</h2>
                     <div class="strategy-grid">
-                        <div class="strategy-card">
-                          <div class="strategy-left">
-                            <div class="rate-square">16%</div>
-                            <h3>Ликвидный</h3>
-                            <p>Вывод в любое время без штрафа. Идеально для подушки безопасности.</p>
+                        <div class="strategy-option" onclick="openModal('strategy16')">
+                          <h3 class="option-name">Ликвидный</h3>
+                          <div class="rate-badge">16% годовых</div>
+                          <div class="lock-info">Вывод в любое время без штрафа</div>
+                          <p class="option-desc">Идеально для подушки безопасности. Только надежные банковские вклады.</p>
+                          <div class="composition-section">
+                            <h4>Состав:</h4>
+                            <div class="option-tools">
+                              <div class="tool-item">
+                                <span class="tool-icon">
+                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="5" width="18" height="14" rx="2"/>
+                                    <line x1="3" y1="10" x2="21" y2="10"/>
+                                    <line x1="7" y1="15" x2="7" y2="15"/>
+                                    <line x1="11" y1="15" x2="11" y2="15"/>
+                                  </svg>
+                                </span>
+                                <span class="tool-label">Банковские вклады</span>
+                              </div>
+                            </div>
                           </div>
-                          <div class="strategy-right">
-                            <button class="btn btn-secondary" onclick="showPopup('Функция вывода на вечер не реализована из-за рисков нарушения условий банка.')">Вывод на вечер</button>
-                          </div>
+                          <button class="btn btn-primary invest-btn" onclick="event.stopPropagation(); openModal('strategy16')">Инвестировать</button>
                         </div>
-                        <div class="strategy-card">
-                          <div class="strategy-left">
-                            <div class="rate-square">17%</div>
-                            <h3>Стабильный</h3>
-                            <p>Заморозка на 30 дней. Баланс риска и доходности.</p>
+                        <div class="strategy-option" onclick="openModal('strategy17')">
+                          <h3 class="option-name">Стабильный</h3>
+                          <div class="rate-badge">17% годовых</div>
+                          <div class="lock-info">Заморозка на 30 дней (досрочный с потерей %)</div>
+                          <p class="option-desc">Баланс риска и доходности. Банковские вклады + ЦФА умеренного риска.</p>
+                          <div class="composition-section">
+                            <h4>Состав:</h4>
+                            <div class="option-tools">
+                              <div class="tool-item">
+                                <span class="tool-icon">
+                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="5" width="18" height="14" rx="2"/>
+                                    <line x1="3" y1="10" x2="21" y2="10"/>
+                                    <line x1="7" y1="15" x2="7" y2="15"/>
+                                    <line x1="11" y1="15" x2="11" y2="15"/>
+                                  </svg>
+                                </span>
+                                <span class="tool-label">Банковские вклады</span>
+                              </div>
+                              <div class="tool-item">
+                                <span class="tool-icon">
+                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="20" x2="18" y2="10"/>
+                                    <line x1="12" y1="20" x2="12" y2="4"/>
+                                    <line x1="6" y1="20" x2="6" y2="14"/>
+                                  </svg>
+                                </span>
+                                <span class="tool-label">ЦФА умеренного риска</span>
+                              </div>
+                            </div>
                           </div>
-                          <div class="strategy-right">
-                            <button class="btn btn-secondary" onclick="showPopup('Функция вывода на вечер не реализована из-за рисков нарушения условий банка.')">Вывод на вечер</button>
-                          </div>
+                          <button class="btn btn-primary invest-btn" onclick="event.stopPropagation(); openModal('strategy17')">Инвестировать</button>
                         </div>
-                        <div class="strategy-card">
-                          <div class="strategy-left">
-                            <div class="rate-square">18%</div>
-                            <h3>Агрессивный</h3>
-                            <p>Заморозка на 90 дней. Максимальная прибыль.</p>
+                        <div class="strategy-option" onclick="openModal('strategy18')">
+                          <h3 class="option-name">Агрессивный</h3>
+                          <div class="rate-badge">18% годовых</div>
+                          <div class="lock-info">Заморозка на 90 дней (досрочный с потерей %)</div>
+                          <p class="option-desc">Максимальная прибыль. Банковские вклады + ЦФА + краткосрочные займы.</p>
+                          <div class="composition-section">
+                            <h4>Состав:</h4>
+                            <div class="option-tools">
+                              <div class="tool-item">
+                                <span class="tool-icon">
+                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="5" width="18" height="14" rx="2"/>
+                                    <line x1="3" y1="10" x2="21" y2="10"/>
+                                    <line x1="7" y1="15" x2="7" y2="15"/>
+                                    <line x1="11" y1="15" x2="11" y2="15"/>
+                                  </svg>
+                                </span>
+                                <span class="tool-label">Банковские вклады</span>
+                              </div>
+                              <div class="tool-item">
+                                <span class="tool-icon">
+                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="20" x2="18" y2="10"/>
+                                    <line x1="12" y1="20" x2="12" y2="4"/>
+                                    <line x1="6" y1="20" x2="6" y2="14"/>
+                                  </svg>
+                                </span>
+                                <span class="tool-label">ЦФА</span>
+                              </div>
+                              <div class="tool-item">
+                                <span class="tool-icon">
+                                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="1" x2="12" y2="23"/>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                                  </svg>
+                                </span>
+                                <span class="tool-label">Краткосрочные займы</span>
+                              </div>
+                            </div>
                           </div>
-                          <div class="strategy-right">
-                            <button class="btn btn-secondary" onclick="showPopup('Функция вывода на вечер не реализована из-за рисков нарушения условий банка.')">Вывод на вечер</button>
-                          </div>
+                          <button class="btn btn-primary invest-btn" onclick="event.stopPropagation(); openModal('strategy18')">Инвестировать</button>
                         </div>
                       </div>
                 </div>
@@ -187,7 +254,6 @@
     <!-- Шаг 1: ввод суммы + согласие -->
     <div id="deposit-step1">
       <input type="text" id="depositAmount" class="amount-input" placeholder="0" oninput="formatAmountInput(this)" inputmode="decimal">
-      <small style="color: gray;">Минимальная сумма: 100 руб.</small>
       <div class="quick-amounts">
         <button class="quick-amount-btn" onclick="setDepositAmount(1000)">1 000</button>
         <button class="quick-amount-btn" onclick="setDepositAmount(5000)">5 000</button>
@@ -284,7 +350,6 @@
             <div class="select-options" id="select-options"></div>
           </div>
           <input type="text" class="amount-input" id="withdrawAmount" placeholder="0" oninput="formatAmountInput(this)" inputmode="decimal">
-          <small style="color: gray;">Минимальная сумма: 100 руб.</small>
           <button class="btn btn-primary" id="withdrawConfirmBtn" style="width:100%">Создать запрос</button>
         </div>
 
@@ -364,7 +429,6 @@
           <button class="close-btn" onclick="closeModal('newInvestment')" aria-label="Закрыть новую инвестицию">✕</button>
         </div>
         <div class="input-field" id="niStrategyReadonly" style="text-align:center;font-weight:700;margin-bottom:12px;">—</div>
-        <p style="text-align: center; color: var(--text-secondary);">Доступная сумма для инвестирования: <b id="niAvailable">0.00 ₽</b></p>
         <input type="text" class="amount-input" id="niAmount" placeholder="0" oninput="formatAmountInput(this)" inputmode="decimal">
         <button class="btn btn-primary" style="width:100%" id="niConfirmBtn">Подтвердить</button>
       </div>
