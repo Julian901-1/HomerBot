@@ -254,9 +254,9 @@ function fitStatText() {
    statIds.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
-      const max = 24, min = 14;
+      const max = 20, min = 14;
       el.style.fontSize = max + 'px';
-      const limit = el.parentElement ? el.parentElement.clientWidth - 20 : el.clientWidth;
+      const limit = el.parentElement ? el.parentElement.clientWidth - 24 : el.clientWidth;
       let size = max, safety = 50;
       while (el.scrollWidth > limit && size > min && safety-- > 0) {
          size -= 1;
