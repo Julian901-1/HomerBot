@@ -163,6 +163,10 @@
      color: var(--text-primary);
      width: 100%;
      height: 100%;
+     text-align: center;
+   }
+   .option-rectangle span {
+     text-align: center;
    }
    .option-tools {
      display: flex;
