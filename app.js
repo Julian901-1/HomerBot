@@ -278,6 +278,7 @@ function updateDashboard(data) {
   document.getElementById('investedBalance').innerHTML = `${fmtMoney(monthBase, currency)} <span class="cur-sym">${currencySymbol}</span>`;
   document.getElementById('profileUsername').textContent = username || 'User';
   document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+  document.getElementById('investAvailable').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
 
   // Today income — instant under selected currency
  renderTodayIncome();
