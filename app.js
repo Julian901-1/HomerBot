@@ -193,6 +193,7 @@ function openModal(modalId) {
        // just in case choose first real credential (not "add_new")
        if (sel.value === 'add_new' || sel.selectedIndex < 0) sel.selectedIndex = 0;
      }
+     setTimeout(updateWithdrawBtnState, 0);
    } else {
      if (methodChoice) methodChoice.style.display = 'block';
      if (addForm)      addForm.style.display      = 'none';
@@ -961,6 +962,18 @@ function updateInvestButtonState() {
   btn.disabled = amount <= 0 || amount > available;
 }
 
+function updateWithdrawBtnState() {
+  const amountEl = document.getElementById('withdrawAmount');
+  const trigger = document.getElementById('select-trigger');
+  const btn = document.getElementById('withdrawConfirmBtn');
+  const amount = parseAmount(amountEl.value);
+  const idx = trigger ? parseInt(trigger.dataset.index) : -1;
+  const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
+  const availableText = document.getElementById('withdrawAvailable').textContent;
+  const available = parseAmount(availableText.replace(/[^\d.,]/g, ''));
+  btn.disabled = amount <= 0 || amount > available || !recipient;
+}
+
 
 function showAddRecipientForm(method) {
   if (method !== 'sbp') return;
@@ -1043,6 +1056,8 @@ function selectCustomOption(option) {
     document.getElementById('withdraw-view').style.display = 'none';
     document.getElementById('withdraw-method-choice').style.display = 'block';
     document.getElementById('withdraw-add-sbp-form').style.display = 'none';
+  } else {
+    updateWithdrawBtnState();
   }
 }
 

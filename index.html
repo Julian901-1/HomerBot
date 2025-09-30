@@ -168,7 +168,7 @@
     <div class="modal-header">
       <div>
         <h2 id="deposit-title" class="modal-title">Депозит</h2>
-        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Выберите сумму депозита</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Выберите сумму депозита (100 - 10 млн. ₽)</div>
       </div>
       <button class="close-btn" onclick="closeModal('deposit')" aria-label="Закрыть депозит">✕</button>
     </div>
@@ -176,7 +176,6 @@
     <!-- Шаг 1: ввод суммы + согласие -->
     <div id="deposit-step1">
       <input type="text" id="depositAmount" class="amount-input" placeholder="0" oninput="formatAmountInput(this); updateDepositBtnState();" inputmode="decimal">
-      <p style="font-size:12px; color:var(--text-secondary); text-align:center; margin:8px 0;">Минимальная сумма: 100 ₽<br>Максимальная сумма: 10 000 000 ₽</p>
       <div class="quick-amounts">
         <button class="quick-amount-btn" onclick="setDepositAmount(1000)">1 000</button>
         <button class="quick-amount-btn" onclick="setDepositAmount(5000)">5 000</button>
@@ -272,7 +271,7 @@
             <div class="select-trigger" id="select-trigger">Выберите реквизиты</div>
             <div class="select-options" id="select-options"></div>
           </div>
-          <input type="text" class="amount-input" id="withdrawAmount" placeholder="0" oninput="formatAmountInput(this)" inputmode="decimal">
+          <input type="text" class="amount-input" id="withdrawAmount" placeholder="0" oninput="formatAmountInput(this); updateWithdrawBtnState();" inputmode="decimal">
           <button class="btn btn-primary" id="withdrawConfirmBtn" style="width:100%">Создать запрос</button>
         </div>
 
