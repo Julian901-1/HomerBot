@@ -3,7 +3,7 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cg
 // -------- STATE --------
 let username = null;
 let initData = '';
-let serverState = { balance: 10000, rate: 16, monthBase: 1000, lockedAmount: 0, history: [{type: 'DEPOSIT', amount: 10000, date: Date.now(), status: 'APPROVED', shortId: '123'}], portfolio: [{amount: 1000, rate: 16, shortId: '456'}] };
+let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, history: [], portfolio: [] };
 let userPrefs = { currency: 'RUB', sbpMethods: [] };
 let devMode = false;
 let lastChosenRate = null;
@@ -142,16 +142,8 @@ function updateDepositBtnState() {
 
 // -------- NAV & MODALS --------
 function openPage(pageId) {
-  console.log('openPage called with', pageId);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  const targetPage = document.getElementById(`page${pageId}`);
-  console.log('targetPage', targetPage);
-  if (targetPage) {
-    targetPage.classList.add('active');
-    console.log('page activated');
-  } else {
-    console.error('page not found', `page${pageId}`);
-  }
+  document.getElementById(`page${pageId}`).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => {
     n.classList.remove('active');
     if (n.onclick.toString().includes(`'${pageId}'`)) n.classList.add('active');
