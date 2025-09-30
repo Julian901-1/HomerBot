@@ -2,6 +2,7 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cg
 
 // -------- STATE --------
 let username = null;
+let initData = '';
 let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, history: [], portfolio: [] };
 let userPrefs = { currency: 'RUB', sbpMethods: [] };
 let devMode = false;
@@ -385,16 +386,18 @@ function renderPortfolio(portfolio) {
 
 // -------- API --------
 async function apiGet(path) {
-  try {
-    const r = await fetch(`${SCRIPT_URL}${path}`);
-    if (!r.ok) throw new Error(`Network error: ${r.statusText}`);
-    const data = await r.json();
-    if (!data) throw new Error("Empty response from server");
-    return data;
-  } catch (e) {
-    console.error("API Fetch Error:", e);
-    return { success: false, error: e.message };
-  }
+   try {
+     const separator = path.includes('?') ? '&' : '?';
+     const fullPath = initData ? `${path}${separator}initData=${encodeURIComponent(initData)}` : path;
+     const r = await fetch(`${SCRIPT_URL}${fullPath}`);
+     if (!r.ok) throw new Error(`Network error: ${r.statusText}`);
+     const data = await r.json();
+     if (!data) throw new Error("Empty response from server");
+     return data;
+   } catch (e) {
+     console.error("API Fetch Error:", e);
+     return { success: false, error: e.message };
+   }
 }
 
 async function initializeApp() {
@@ -407,6 +410,7 @@ async function initializeApp() {
     const tg = window.Telegram?.WebApp;
     tg?.expand?.();
     username = (tg?.initDataUnsafe?.user?.username) || 'marulin';
+    initData = tg?.initData || '';
 
     setBootProgress(25);
 
