@@ -135,8 +135,10 @@ function showDepositStep(step) {
 // Deposit: toggle agreement controls button availability
 function updateDepositBtnState() {
   const agree = document.getElementById('depositAgree');
+  const amountEl = document.getElementById('depositAmount');
+  const amount = parseAmount(amountEl.value);
   const btn = document.getElementById('depositConfirmBtn');
-  if (btn) btn.disabled = !(agree && agree.checked);
+  if (btn) btn.disabled = !(agree && agree.checked) || amount < 100 || amount > 10000000;
 }
 
 
@@ -637,8 +639,12 @@ function setupEventListeners() {
     const amountEl = $id('depositAmount');
     const amount = amountEl ? parseAmount(amountEl.value) : 0;
 
-    if (amount <= 0) {
-      showPopup('Введите сумму.');
+    if (amount < 100) {
+      showPopup('Минимальная сумма депозита: 100 ₽');
+      return;
+    }
+    if (amount > 10000000) {
+      showPopup('Максимальная сумма депозита: 10 000 000 ₽');
       return;
     }
 

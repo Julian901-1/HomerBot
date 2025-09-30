@@ -175,7 +175,7 @@
 
     <!-- Шаг 1: ввод суммы + согласие -->
     <div id="deposit-step1">
-      <input type="text" id="depositAmount" class="amount-input" placeholder="0" oninput="formatAmountInput(this)" inputmode="decimal">
+      <input type="text" id="depositAmount" class="amount-input" placeholder="0" oninput="formatAmountInput(this); updateDepositBtnState();" inputmode="decimal">
       <div class="quick-amounts">
         <button class="quick-amount-btn" onclick="setDepositAmount(1000)">1 000</button>
         <button class="quick-amount-btn" onclick="setDepositAmount(5000)">5 000</button>
@@ -193,6 +193,7 @@
           <span class="slider"></span>
         </label>
       </div>
+      <p style="font-size:12px; color:var(--text-secondary); text-align:center; margin:8px 0;">Минимальная сумма: 100 ₽<br>Максимальная сумма: 10 000 000 ₽</p>
 <button class="btn btn-primary" id="depositConfirmBtn" style="width:100%" disabled>
   Пополнить счёт по СБП
 </button>
