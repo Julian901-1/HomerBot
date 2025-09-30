@@ -142,8 +142,16 @@ function updateDepositBtnState() {
 
 // -------- NAV & MODALS --------
 function openPage(pageId) {
+  console.log('openPage called with', pageId);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById(`page${pageId}`).classList.add('active');
+  const targetPage = document.getElementById(`page${pageId}`);
+  console.log('targetPage', targetPage);
+  if (targetPage) {
+    targetPage.classList.add('active');
+    console.log('page activated');
+  } else {
+    console.error('page not found', `page${pageId}`);
+  }
   document.querySelectorAll('.nav-item').forEach(n => {
     n.classList.remove('active');
     if (n.onclick.toString().includes(`'${pageId}'`)) n.classList.add('active');
