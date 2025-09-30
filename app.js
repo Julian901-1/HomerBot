@@ -202,6 +202,9 @@ function openModal(modalId) {
    const modalEl = document.getElementById('modalWithdraw');
    const inner   = modalEl && modalEl.querySelector('.modal');
    if (inner) inner.scrollTop = 0;
+
+   // Ensure stat text is resized after modal opens
+   setTimeout(fitStatText, 0);
  }
  if (modalId === 'deposit') {
    if (hasPendingDeposit) {
@@ -247,11 +250,11 @@ window.addEventListener('resize', fitBalanceText);
 
 // -------- STAT VALUES AUTOSIZE --------
 function fitStatText() {
-   const statIds = ['freeBalance', 'investedBalance', 'withdrawAvailable'];
+   const statIds = ['freeBalance', 'investedBalance', 'withdrawAvailable', 'todayIncome'];
    statIds.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
-      const max = 16, min = 10;
+      const max = 32, min = 16;
       el.style.fontSize = max + 'px';
       const limit = el.parentElement ? el.parentElement.clientWidth - 8 : el.clientWidth;
       let size = max, safety = 50;
