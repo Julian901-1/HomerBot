@@ -162,7 +162,10 @@
      font-size: 16px;
      font-weight: 600;
      color: var(--text-primary);
-     height: 60px; /* adjust to match total height of 3 squares */
+     width: 100px;
+     height: 158px;
+     writing-mode: vertical-rl;
+     text-orientation: mixed;
    }
    .option-tools {
      display: flex;
