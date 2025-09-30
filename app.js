@@ -591,10 +591,10 @@ function setupEventListeners() {
 
   // Click on modal background — close. Close currency dropdown and custom select.
   document.addEventListener('click', (e) => {
-    const target = e.target;
-    if (target && target.classList && target.classList.contains('modal-overlay')) {
-      target.classList.remove('active');
-    }
+      const target = e.target;
+      if (target && target.classList && target.classList.contains('modal-overlay')) {
+          closeAllModals();
+      }
     const anyOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.classList.contains('active'));
     if (!anyOpen) document.body.classList.remove('modal-open');
 
