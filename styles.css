@@ -80,9 +80,9 @@
     .currency-option.active { background: var(--accent); color: white; }
 
     .balance-stats { display: flex; justify-content: space-between; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--glass-border); gap: 8px; }
-    .balance-stat { flex: 1; display: flex; align-items: center; }
-    .stat-label { font-size: 12px; color: var(--text-secondary); margin-right: 8px; flex-shrink: 0; }
-    .stat-value { font-size: 16px; font-weight: 700; color: var(--text-primary); white-space: nowrap; line-height: 1.2; text-align: center; flex: 1; }
+    .balance-stat { flex: 1; display: flex; flex-direction: column; align-items: center; }
+    .stat-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+    .stat-value { font-size: 16px; font-weight: 700; color: var(--text-primary); white-space: nowrap; line-height: 1.2; text-align: center; }
     .stat-positive { color: var(--success); }
 
     .btn-group { display: flex; gap: 12px; margin-bottom: 24px; }
@@ -147,25 +147,25 @@
    }
    .right-options {
      display: flex;
-     flex-direction: column;
+     flex-direction: row;
      gap: 16px;
+     justify-content: center;
+     margin-bottom: 16px;
    }
    .option-rectangle {
      background: var(--glass-bg);
      border: 1px solid var(--glass-border);
      border-radius: 20px;
-     padding: 20px;
+     padding: 16px 24px;
      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
      display: flex;
      align-items: center;
      justify-content: center;
-     font-size: 16px;
+     font-size: 14px;
      font-weight: 600;
      color: var(--text-primary);
-     width: 100px;
-     height: 158px;
-     writing-mode: vertical-rl;
-     text-orientation: mixed;
+     min-width: 120px;
+     height: 50px;
    }
    .option-tools {
      display: flex;
