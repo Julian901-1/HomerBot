@@ -3,7 +3,7 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cg
 // -------- STATE --------
 let username = null;
 let initData = '';
-let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, history: [], portfolio: [] };
+let serverState = { balance: 10000, rate: 16, monthBase: 1000, lockedAmount: 0, history: [{type: 'DEPOSIT', amount: 10000, date: Date.now(), status: 'APPROVED', shortId: '123'}], portfolio: [{amount: 1000, rate: 16, shortId: '456'}] };
 let userPrefs = { currency: 'RUB', sbpMethods: [] };
 let devMode = false;
 let lastChosenRate = null;
