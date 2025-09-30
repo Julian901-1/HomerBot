@@ -218,8 +218,7 @@ function openModal(modalId) {
  }
  if (modalId === 'deposit') {
    // Update history to check for pending deposits
-   fetch('/api?action=getHistory&username=' + encodeURIComponent(username))
-     .then(r => r.json())
+   apiGet('?action=getHistory&username=' + encodeURIComponent(username))
      .then(data => {
        if (data.success && data.history) {
          serverState.history = data.history;

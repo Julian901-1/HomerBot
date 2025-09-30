@@ -126,6 +126,8 @@ function doPost(e) {
     const chatId = cq.message.chat.id;
     const messageId = cq.message.message_id;
 
+    console.log('doPost data:', data, 'username:', username, 'requestId:', requestId);
+
     const action = act === 'approve' ? 'APPROVED' : act === 'reject' ? 'REJECTED' : '';
     if (!username || !requestId || !action) {
       safeAnswerCallbackQuery(cq.id, 'Ошибка: неверные данные.', true);
@@ -140,24 +142,33 @@ function doPost(e) {
       console.log('doPost lock acquired:', new Date().toISOString());
       try {
         const reqResult = findRequestRowByIdAcrossSheets(requestId);
+        console.log('doPost reqResult:', reqResult);
         if (reqResult) {
           const { sheet: reqSheet, row: reqRow } = reqResult;
+          console.log('doPost processing sheet:', reqSheet.getName(), 'row:', reqRow);
           if (reqSheet.getRange(reqRow, 2).getValue() === username && reqSheet.getRange(reqRow, 4).getValue() === 'PENDING') {
             reqSheet.getRange(reqRow, 4).setValue(action);
-            reqSheet.getRange(reqRow, 6).setValue(new Date());
+            reqSheet.getRange(reqRow, 5).setValue(new Date()); // decidedAt
+            // Don't overwrite column 6 (delivered) - it should remain false until user sees the result
 
             if (action === 'APPROVED') {
               const type = reqSheet.getRange(reqRow, 7).getValue();
               const amount = Number(reqSheet.getRange(reqRow, 8).getValue() || 0);
+              console.log('doPost type:', type, 'amount:', amount);
               if (type === 'DEPOSIT' || type === 'WITHDRAW') {
                 const usersSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
                 const { row: userRow } = findOrCreateUserRow_(usersSheet, username);
                 const currentBalance = Number(usersSheet.getRange(userRow, 3).getValue() || 0);
+                console.log('doPost updating balance from', currentBalance, 'to', round2(currentBalance + amount));
                 usersSheet.getRange(userRow, 3).setValue(round2(currentBalance + amount));
                 usersSheet.getRange(userRow, 4).setValue(new Date());
               }
             }
+          } else {
+            console.log('doPost username or status mismatch');
           }
+        } else {
+          console.log('doPost request not found');
         }
       } finally {
         lock.releaseLock();
@@ -390,23 +401,42 @@ function getHistory(username) {
     const sheets = [
         ensureInvestTransactionsSheet_(),
         ensureRateChangeTransactionsSheet_(),
-        ensureDepositWithdrawTransactionsSheet_()
+        ensureDepositWithdrawTransactionsSheet_(),
+        ensureRequestsSheet_() // include old sheet for backward compatibility
     ];
     let allData = [];
     sheets.forEach(sheet => {
         const lastRow = sheet.getLastRow();
         if (lastRow < 2) return;
         const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-        allData = allData.concat(data.filter(row => String(row[1]).trim() === username));
+        const filteredData = data.filter(row => String(row[1]).trim() === username);
+        // Map columns based on sheet structure
+        const mappedData = filteredData.map(row => {
+            const numCols = row.length;
+            let typeCol, amountCol, rateCol = 8;
+            if (numCols === 11) { // INVEST_TRANSACTIONS
+                typeCol = 6; amountCol = 7; rateCol = 8;
+            } else if (numCols === 8) { // DEPOSIT_WITHDRAW_TRANSACTIONS
+                typeCol = 6; amountCol = 7; rateCol = -1; // no rate column
+            } else if (numCols === 7) { // RATE_CHANGE_TRANSACTIONS
+                typeCol = -1; amountCol = -1; rateCol = 5; // only rate changes
+            } else if (numCols >= 14) { // REQ_SHEET (old format)
+                typeCol = 9; amountCol = 10; rateCol = 11;
+            } else {
+                return null; // unknown format
+            }
+            return {
+                date: new Date(row[0]).getTime(),
+                shortId: shortIdFromUuid(String(row[2])),
+                status: String(row[3]).trim(),
+                type: typeCol >= 0 ? String(row[typeCol]).trim() : '',
+                amount: amountCol >= 0 ? Number(row[amountCol]) : 0,
+                rate: rateCol >= 0 ? Number(row[rateCol] || 0) : 0
+            };
+        }).filter(item => item !== null);
+        allData = allData.concat(mappedData);
     });
-    return allData.map(row => ({
-        date: new Date(row[0]).getTime(),
-        shortId: shortIdFromUuid(String(row[2])),
-        status: String(row[3]).trim(),
-        type: String(row[6]).trim(),
-        amount: Number(row[7]),
-        rate: Number(row[8] || 0)
-    })).sort((a, b) => b.date - a.date);
+    return allData.sort((a, b) => b.date - a.date);
 }
 
 function getPortfolio(username) {
@@ -543,14 +573,14 @@ function ensureEventJournalSheet_() {
     let sh = ss.getSheetByName(EVENT_JOURNAL);
     if (!sh) {
         sh = ss.insertSheet(EVENT_JOURNAL);
-        sh.getRange(1,1,1,13).setValues([['Дата создания','Пользователь','Request ID','Статус','Message ID','Дата решения','Доставлено','Admin Chat ID','Дата сообщения','Тип','Сумма','Ставка','Дата разморозки']]);
+        sh.getRange(1,1,1,8).setValues([['Дата создания','Пользователь','Request ID','Статус','Дата решения','Доставлено','Тип','Сумма']]);
     }
     return sh;
 }
 
 function logToEventJournal(createdAt, username, requestId, status, messageId, decidedAt, delivered, adminChatId, messageDate, type, amount, rate, unfreezeDate) {
     const sheet = ensureEventJournalSheet_();
-    sheet.appendRow([createdAt, username, requestId, status, messageId, decidedAt, delivered, adminChatId, messageDate, type, amount, rate, unfreezeDate]);
+    sheet.appendRow([createdAt, username, requestId, status, decidedAt, delivered, type, amount]);
 }
 
 function ensurePrefsSheet_() {
@@ -651,16 +681,21 @@ function findRequestRowById_(sheet, requestId) {
 }
 
 function findRequestRowByIdAcrossSheets(requestId) {
+    console.log('findRequestRowByIdAcrossSheets: looking for', requestId);
     const sheets = [
+        ensureDepositWithdrawTransactionsSheet_(), // prioritize new sheets
         ensureInvestTransactionsSheet_(),
         ensureRateChangeTransactionsSheet_(),
-        ensureDepositWithdrawTransactionsSheet_(),
         ensureRequestsSheet_() // fallback for old data
     ];
     for (let sheet of sheets) {
         const row = findRequestRowById_(sheet, requestId);
-        if (row) return { sheet, row };
+        if (row) {
+            console.log('found in', sheet.getName(), 'row', row);
+            return { sheet, row };
+        }
     }
+    console.log('not found');
     return null;
 }
 function ensureColO_(sheet){ if (sheet.getMaxColumns() < 15) { sheet.insertColumnsAfter(14, 15 - sheet.getMaxColumns()); } }
