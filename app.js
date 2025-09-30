@@ -193,6 +193,13 @@ function openModal(modalId) {
        // just in case choose first real credential (not "add_new")
        if (sel.value === 'add_new' || sel.selectedIndex < 0) sel.selectedIndex = 0;
      }
+     // Ensure trigger shows first credential, not "Add new"
+     const trigger = document.getElementById('select-trigger');
+     if (trigger && userPrefs.sbpMethods && userPrefs.sbpMethods.length > 0) {
+       const first = userPrefs.sbpMethods[0];
+       trigger.textContent = `SBP: ${first.phone} (${first.bank})`;
+       trigger.dataset.index = 0;
+     }
      setTimeout(updateWithdrawBtnState, 0);
    } else {
      if (methodChoice) methodChoice.style.display = 'block';
@@ -875,6 +882,7 @@ function setDepositAmount(amount) {
   const input = document.getElementById('depositAmount');
   input.value = amount;
   formatAmountInput(input);
+  updateDepositBtnState();
 }
 function hydrateDepositStep2(amountRub, shortId) {
   const currency = userPrefs.currency;
