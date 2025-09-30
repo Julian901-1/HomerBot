@@ -85,6 +85,9 @@ case 'ackDepositDelivery': {
       case 'saveUserPrefs':
         return jsonOk(saveUserPrefs(username, p.prefs));
 
+      case 'getHistory':
+        return jsonOk({ history: getHistory(username) });
+
       // >>> добавлено: отмена незавершенного (PENDING) депозита
       case 'cancelPendingDeposit': {
         var u = (p.username || '').toString();
@@ -342,11 +345,11 @@ function requestAmount(username, amount, type, details) {
         });
         const jsonResponse = JSON.parse(response.getContentText());
         messageId = jsonResponse.ok ? jsonResponse.result.message_id : null;
-        reqSheet.appendRow([now, username, requestId, 'PENDING', messageId, null, false, ADMIN_CHAT_ID, now, type, Number(amount)]);
+        reqSheet.appendRow([now, username, requestId, 'PENDING', null, false, type, Number(amount)]);
         logToEventJournal(now, username, requestId, 'PENDING', messageId, null, false, ADMIN_CHAT_ID, now, type, Number(amount), null, null);
     } catch(e) {
         console.error("TG notification failed:", e);
-        reqSheet.appendRow([now, username, requestId, 'PENDING', null, null, false, null, null, type, Number(amount)]);
+        reqSheet.appendRow([now, username, requestId, 'PENDING', null, false, type, Number(amount)]);
         logToEventJournal(now, username, requestId, 'PENDING', null, null, false, null, null, type, Number(amount), null, null);
     }
 

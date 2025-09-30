@@ -217,16 +217,28 @@ function openModal(modalId) {
    setTimeout(fitStatText, 0);
  }
  if (modalId === 'deposit') {
-   if (hasPendingDeposit) {
-   // try to take from history the last PENDING deposit
-   const pending = (serverState.history || [])
-     .filter(x => x.type === 'DEPOSIT' && x.status === 'PENDING')
-     .sort((a,b) => b.date - a.date)[0];
-   const amt = pending ? Math.abs(Number(pending.amount||0)) : lastDepositAmount;
-   const sid = pending ? pending.shortId : lastDepositShortId;
-   hydrateDepositStep2(amt || 0, sid || null);
- }
-   showDepositStep(hasPendingDeposit ? 2 : 1);
+   // Update history to check for pending deposits
+   fetch('/api?action=getHistory&username=' + encodeURIComponent(username))
+     .then(r => r.json())
+     .then(data => {
+       if (data.success && data.history) {
+         serverState.history = data.history;
+         hasPendingDeposit = computeHasPendingDeposit();
+         if (hasPendingDeposit) {
+           // try to take from history the last PENDING deposit
+           const pending = (serverState.history || [])
+             .filter(x => x.type === 'DEPOSIT' && x.status === 'PENDING')
+             .sort((a,b) => b.date - a.date)[0];
+           const amt = pending ? Math.abs(Number(pending.amount||0)) : lastDepositAmount;
+           const sid = pending ? pending.shortId : lastDepositShortId;
+           hydrateDepositStep2(amt || 0, sid || null);
+         }
+         showDepositStep(hasPendingDeposit ? 2 : 1);
+       }
+     })
+     .catch(() => {
+       showDepositStep(hasPendingDeposit ? 2 : 1);
+     });
    // synchronize button once on entry
    setTimeout(updateDepositBtnState, 0);
  }
