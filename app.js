@@ -251,17 +251,26 @@ window.addEventListener('resize', fitBalanceText);
 // -------- STAT VALUES AUTOSIZE --------
 function fitStatText() {
     const statIds = ['freeBalance', 'investedBalance', 'withdrawAvailable', 'todayIncome'];
+    const max = 20, min = 14;
+    let commonSize = max;
+
+    // First pass: find the smallest size that fits all
     statIds.forEach(id => {
        const el = document.getElementById(id);
        if (!el) return;
-       const max = 16, min = 14;
        el.style.fontSize = max + 'px';
        const limit = el.parentElement ? el.parentElement.clientWidth - 24 : el.clientWidth;
        let size = max, safety = 50;
        while (el.scrollWidth > limit && size > min && safety-- > 0) {
           size -= 1;
-          el.style.fontSize = size + 'px';
        }
+       if (size < commonSize) commonSize = size;
+    });
+
+    // Second pass: apply the common size to all
+    statIds.forEach(id => {
+       const el = document.getElementById(id);
+       if (el) el.style.fontSize = commonSize + 'px';
     });
  }
 window.addEventListener('resize', fitStatText);
