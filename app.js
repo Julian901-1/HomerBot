@@ -748,6 +748,9 @@ initializeApp();    // pull history/balance
     const amount = amountEl ? parseAmount(amountEl.value) : 0;
     const rate = lastChosenRate;
     if (!rate || amount <= 0) { showPopup('Enter correct amount.'); return; }
+    const availableText = document.getElementById('investAvailable').textContent;
+    const available = parseAmount(availableText.replace(/[^\d.,]/g, ''));
+    if (amount > available) { showPopup('Недостаточно средств для инвестирования.'); return; }
     this.disabled = true;
     try {
       const resp = await apiGet(`?action=logStrategyInvestment&username=${encodeURIComponent(username)}&rate=${encodeURIComponent(rate)}&amount=${encodeURIComponent(amount)}`);
@@ -940,6 +943,16 @@ function openNewInvestment(rate) {
   // NEW: close any modals before opening "New Investment"
   closeAllModals();
   openModal('newInvestment');
+  setTimeout(updateInvestButtonState, 0);
+}
+
+function updateInvestButtonState() {
+  const amountEl = document.getElementById('niAmount');
+  const btn = document.getElementById('niConfirmBtn');
+  const amount = parseAmount(amountEl.value);
+  const availableText = document.getElementById('investAvailable').textContent;
+  const available = parseAmount(availableText.replace(/[^\d.,]/g, ''));
+  btn.disabled = amount <= 0 || amount > available;
 }
 
 

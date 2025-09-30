@@ -352,8 +352,8 @@
         </div>
         <div class="input-field" id="niStrategyReadonly" style="text-align:center;font-weight:700;margin-bottom:12px;">—</div>
         <p style="text-align: center; color: var(--text-secondary); margin-bottom: 12px;">Доступно для инвестирования: <b id="investAvailable">—</b></p>
-        <input type="text" class="amount-input" id="niAmount" placeholder="0" oninput="formatAmountInput(this)" inputmode="decimal">
-        <button class="btn btn-primary" style="width:100%" id="niConfirmBtn">Подтвердить</button>
+        <input type="text" class="amount-input" id="niAmount" placeholder="0" oninput="formatAmountInput(this); updateInvestButtonState();" inputmode="decimal">
+        <button class="btn btn-primary" style="width:100%" id="niConfirmBtn" disabled>Подтвердить</button>
       </div>
     </div>
     <script src="app.js"></script>
