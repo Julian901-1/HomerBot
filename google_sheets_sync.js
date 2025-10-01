@@ -710,6 +710,20 @@ function findRequestRowByIdAcrossSheets(requestId) {
     console.log('not found');
     return null;
 }
+
+function findMessageIdForRequest_(requestId) {
+    const sheet = ensureEventJournalSheet_();
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return null;
+    const data = sheet.getRange(2, 3, lastRow - 1, 1).getValues(); // column 3: requestId
+    for (let i = 0; i < data.length; i++) {
+        if (data[i][0] === requestId) {
+            const messageId = sheet.getRange(i + 2, 5).getValue(); // column 5: messageId
+            return messageId ? Number(messageId) : null;
+        }
+    }
+    return null;
+}
 function ensureColO_(sheet){ if (sheet.getMaxColumns() < 15) { sheet.insertColumnsAfter(14, 15 - sheet.getMaxColumns()); } }
 function jsonOk(obj) { return ContentService.createTextOutput(JSON.stringify({ success: true, ...obj })).setMimeType(ContentService.MimeType.JSON); }
 function jsonErr(message) { return ContentService.createTextOutput(JSON.stringify({ success: false, error: message })).setMimeType(ContentService.MimeType.JSON); }
@@ -726,8 +740,24 @@ function cancelPendingDeposit_(username) {
     for (var i = data.length - 1; i >= 0; i--) {
       var row = data[i];
       if (row[1] === username && row[3] === 'PENDING' && row[6] === 'DEPOSIT') { // type in column 7 (0-indexed 6)
+        var requestId = row[2]; // column 3 (0-indexed 2)
         reqSheet.getRange(i + 2, 4).setValue('CANCELED');     // status
         reqSheet.getRange(i + 2, 6).setValue(new Date());     // processedAt
+
+        // Find and update admin message
+        var messageId = findMessageIdForRequest_(requestId);
+        if (messageId) {
+          var shortId = shortIdFromUuid(requestId);
+          var text = `[#${shortId}] ❌ Отменено пользователем: Депозит от ${username}.`;
+          try {
+            UrlFetchApp.fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+              method: 'post', contentType: 'application/json',
+              payload: JSON.stringify({ chat_id: ADMIN_CHAT_ID, message_id: messageId, text: text, reply_markup: {inline_keyboard: []} }),
+              muteHttpExceptions: true
+            });
+          } catch (e) { console.error("TG edit failed:", e); }
+        }
+
         return true;
       }
     }
