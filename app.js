@@ -304,11 +304,11 @@ function updateDashboard(data) {
   const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
 
   document.getElementById('balanceValue').textContent = `${fmtMoney(balance, currency)} ${currencySymbol}`;
-  document.getElementById('freeBalance').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+  document.getElementById('freeBalance').innerHTML = `${fmtMoney(availableBalance - monthBase, currency)} <span class="cur-sym">${currencySymbol}</span>`;
   document.getElementById('investedBalance').innerHTML = `${fmtMoney(monthBase, currency)} <span class="cur-sym">${currencySymbol}</span>`;
   document.getElementById('profileUsername').textContent = username || 'User';
-  document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(availableBalance || (balance - (serverState.lockedAmountForWithdrawal || 0)), currency)} <span class="cur-sym">${currencySymbol}</span>`;
-  document.getElementById('investAvailable').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
+  document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(availableBalance, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+  document.getElementById('investAvailable').innerHTML = `${fmtMoney(availableBalance - monthBase, currency)} ${currencySymbol}`;
 
   // Today income — instant under selected currency
   renderTodayIncome();
