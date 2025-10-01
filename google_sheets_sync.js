@@ -6,7 +6,6 @@ const SHEET_NAME = 'HomerBot';
 const REQ_SHEET  = 'HB_Requests';
 const PREFS_SHEET = 'HB_UserPrefs';
 const INVEST_TRANSACTIONS = 'INVEST_TRANSACTIONS';
-const RATE_CHANGE_TRANSACTIONS = 'RATE_CHANGE_TRANSACTIONS';
 const DEPOSIT_WITHDRAW_TRANSACTIONS = 'DEPOSIT_WITHDRAW_TRANSACTIONS';
 const EVENT_JOURNAL = 'EVENT_JOURNAL';
 const BOT_TOKEN  = '7631840452:AAH4O93qQ6J914x5FhPTQX7YhJC3bTiJ_XA';
@@ -207,8 +206,9 @@ function getInitialData(username) {
     const history = getHistory(username);
     const portfolio = getPortfolio(username);
     const lockedAmount = getLockedAmount(username);
+    const lockedAmountForWithdrawal = getLockedAmountForWithdrawal(username);
     const userPrefs = getUserPrefs(username);
-    return { ...balanceData, history, portfolio, lockedAmount, userPrefs };
+    return { ...balanceData, history, portfolio, lockedAmount, lockedAmountForWithdrawal, userPrefs };
 }
 
 /**
@@ -277,17 +277,15 @@ function syncBalance(username) {
       paidThisMonth = round2(paidThisMonth + delta);
       paidCell.setValue(paidThisMonth);
 
-      // Distribute accrued interest to locked investments
+      // Distribute accrued interest to all investments
       const portfolio = getPortfolio(username);
       const investSheet = ensureInvestTransactionsSheet_();
       portfolio.forEach(inv => {
-        if ((inv.rate === 17 || inv.rate === 18) && (!inv.unfreezeDate || inv.unfreezeDate > now)) {
-          const share = round2((inv.amount / investedAmount) * delta);
-          const reqRow = findRequestRowById_(investSheet, inv.requestId);
-          if (reqRow) {
-            const currentAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
-            investSheet.getRange(reqRow, 11).setValue(round2(currentAccrued + share));
-          }
+        const share = round2((inv.amount / investedAmount) * delta);
+        const reqRow = findRequestRowById_(investSheet, inv.requestId);
+        if (reqRow) {
+          const currentAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
+          investSheet.getRange(reqRow, 11).setValue(round2(currentAccrued + share));
         }
       });
     }
@@ -301,8 +299,9 @@ function syncBalance(username) {
     usersSheet.getRange(row, 6).setValue(effectiveRate);
 
     const lockedAmount = getLockedAmount(username);
+    const lockedAmountForWithdrawal = getLockedAmountForWithdrawal(username);
     console.log('syncBalance end:', new Date().toISOString());
-    return { balance, monthBase: investedAmount, lockedAmount };
+    return { balance, monthBase: investedAmount, lockedAmount, lockedAmountForWithdrawal };
   } finally {
     lock.releaseLock();
     console.log('syncBalance lock released:', new Date().toISOString());
@@ -395,7 +394,6 @@ function getBalance(username) {
 function getHistory(username) {
     const sheets = [
         ensureInvestTransactionsSheet_(),
-        ensureRateChangeTransactionsSheet_(),
         ensureDepositWithdrawTransactionsSheet_()
     ];
     let allData = [];
@@ -412,8 +410,6 @@ function getHistory(username) {
                 typeCol = 6; amountCol = 7; rateCol = 8;
             } else if (numCols === 8) { // DEPOSIT_WITHDRAW_TRANSACTIONS
                 typeCol = 6; amountCol = 7; rateCol = -1; // no rate column
-            } else if (numCols === 7) { // RATE_CHANGE_TRANSACTIONS
-                typeCol = -1; amountCol = -1; rateCol = 5; // only rate changes
             } else {
                 return null; // unknown format
             }
@@ -453,6 +449,13 @@ function getInvestedAmount(username) {
 }
 
 function getLockedAmount(username) {
+    // All invested amounts are locked (not available for re-investment)
+    return getPortfolio(username)
+        .reduce((sum, item) => sum + item.amount + item.accruedInterest, 0);
+}
+
+function getLockedAmountForWithdrawal(username) {
+    // Only 17% and 18% investments are locked for withdrawal
     const now = new Date();
     return getPortfolio(username)
         .filter(item => {
@@ -474,12 +477,25 @@ function computeInterestForPeriod(username, fromDate, toDate) {
     const portfolio = getPortfolio(username);
     if (portfolio.length === 0) return 0;
     let totalInterest = 0;
-    const periodMs = toDate.getTime() - fromDate.getTime();
-    if (periodMs <= 0) return 0;
+    const toDateMs = toDate.getTime();
+    const fromDateMs = fromDate.getTime();
+    if (toDateMs <= fromDateMs) return 0;
+
     portfolio.forEach(investment => {
-        const dailyRate = (investment.rate / 100) / 365.25;
-        const interestForPeriod = investment.amount * dailyRate * (periodMs / (24 * 60 * 60 * 1000));
-        totalInterest += interestForPeriod;
+        // Get creation date for this investment
+        const investSheet = ensureInvestTransactionsSheet_();
+        const reqRow = findRequestRowById_(investSheet, investment.requestId);
+        if (!reqRow) return;
+
+        const createdAt = new Date(investSheet.getRange(reqRow, 1).getValue()); // column 1: createdAt
+        const effectiveFromMs = Math.max(fromDateMs, createdAt.getTime());
+        const periodMs = toDateMs - effectiveFromMs;
+
+        if (periodMs > 0) {
+            const dailyRate = (investment.rate / 100) / 365.25;
+            const interestForPeriod = investment.amount * dailyRate * (periodMs / (24 * 60 * 60 * 1000));
+            totalInterest += interestForPeriod;
+        }
     });
     return round2(totalInterest);
 }
@@ -540,15 +556,6 @@ function ensureInvestTransactionsSheet_() {
     return sh;
 }
 
-function ensureRateChangeTransactionsSheet_() {
-    const ss = SpreadsheetApp.openById(SHEET_ID);
-    let sh = ss.getSheetByName(RATE_CHANGE_TRANSACTIONS);
-    if (!sh) {
-        sh = ss.insertSheet(RATE_CHANGE_TRANSACTIONS);
-        sh.getRange(1,1,1,7).setValues([['Дата создания','Пользователь','Request ID','Статус','Дата решения','Доставлено','Ставка']]);
-    }
-    return sh;
-}
 
 function ensureDepositWithdrawTransactionsSheet_() {
     const ss = SpreadsheetApp.openById(SHEET_ID);
@@ -572,7 +579,9 @@ function ensureEventJournalSheet_() {
 
 function logToEventJournal(createdAt, username, requestId, status, messageId, decidedAt, delivered, adminChatId, messageDate, type, amount, rate, unfreezeDate) {
     const sheet = ensureEventJournalSheet_();
-    sheet.appendRow([createdAt, username, requestId, status, decidedAt, null, type, amount, rate]);
+    // For DEPOSIT and WITHDRAW operations, set status to "-"
+    const finalStatus = (type === 'DEPOSIT' || type === 'WITHDRAW') ? '-' : status;
+    sheet.appendRow([createdAt, username, requestId, finalStatus, decidedAt, null, type, amount, rate]);
 }
 
 function ensurePrefsSheet_() {
@@ -676,8 +685,7 @@ function findRequestRowByIdAcrossSheets(requestId) {
     console.log('findRequestRowByIdAcrossSheets: looking for', requestId);
     const sheets = [
         ensureDepositWithdrawTransactionsSheet_(), // prioritize new sheets
-        ensureInvestTransactionsSheet_(),
-        ensureRateChangeTransactionsSheet_()
+        ensureInvestTransactionsSheet_()
     ];
     for (let sheet of sheets) {
         const row = findRequestRowById_(sheet, requestId);

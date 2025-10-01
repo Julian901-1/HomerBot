@@ -3,7 +3,7 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cg
 // -------- STATE --------
 let username = null;
 let initData = '';
-let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, history: [], portfolio: [] };
+let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, lockedAmountForWithdrawal: 0, history: [], portfolio: [] };
 let userPrefs = { currency: 'RUB', sbpMethods: [] };
 let devMode = false;
 let lastChosenRate = null;
@@ -299,7 +299,7 @@ window.addEventListener('resize', fitStatText);
 // -------- RENDER --------
 function updateDashboard(data) {
   serverState = { ...serverState, ...data };
-  const { balance, monthBase, lockedAmount } = serverState;
+  const { balance, monthBase, lockedAmount, lockedAmountForWithdrawal } = serverState;
   const currency = userPrefs.currency;
   const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
 
@@ -307,11 +307,11 @@ function updateDashboard(data) {
   document.getElementById('freeBalance').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} <span class="cur-sym">${currencySymbol}</span>`;
   document.getElementById('investedBalance').innerHTML = `${fmtMoney(monthBase, currency)} <span class="cur-sym">${currencySymbol}</span>`;
   document.getElementById('profileUsername').textContent = username || 'User';
-  document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+  document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(balance - lockedAmountForWithdrawal, currency)} <span class="cur-sym">${currencySymbol}</span>`;
   document.getElementById('investAvailable').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
 
   // Today income — instant under selected currency
- renderTodayIncome();
+  renderTodayIncome();
 
 
   fitBalanceText();
@@ -516,7 +516,8 @@ async function syncBalance(fromScheduler = false) {
       ]);
       if (balRes.status === 'fulfilled' && balRes.value && balRes.value.success) {
         data = balRes.value;
-        updateDashboard(balRes.value);
+        serverState = { ...serverState, ...balRes.value };
+        updateDashboard(serverState);
       }
       if (accrRes.status === 'fulfilled' && accrRes.value && accrRes.value.success) {
         latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
@@ -973,8 +974,7 @@ function updateInvestButtonState() {
   const amountEl = document.getElementById('niAmount');
   const btn = document.getElementById('niConfirmBtn');
   const amount = parseAmount(amountEl.value);
-  const availableText = document.getElementById('investAvailable').textContent;
-  const available = parseAmount(availableText.replace(/[^\d.,]/g, ''));
+  const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
   btn.disabled = amount <= 0 || amount > available;
 }
 
@@ -985,8 +985,7 @@ function updateWithdrawBtnState() {
   const amount = parseAmount(amountEl.value);
   const idx = trigger ? parseInt(trigger.dataset.index) : -1;
   const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
-  const availableText = document.getElementById('withdrawAvailable').textContent;
-  const available = parseAmount(availableText.replace(/[^\d.,]/g, ''));
+  const available = (serverState.balance || 0) - (serverState.lockedAmountForWithdrawal || 0);
   btn.disabled = amount <= 0 || amount > available || !recipient;
 }
 
