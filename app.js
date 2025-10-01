@@ -303,12 +303,35 @@ function updateDashboard(data) {
   const currency = userPrefs.currency;
   const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
 
-  document.getElementById('balanceValue').textContent = `${fmtMoney(balance, currency)} ${currencySymbol}`;
-  document.getElementById('freeBalance').innerHTML = `${fmtMoney(availableBalance - monthBase, currency)} <span class="cur-sym">${currencySymbol}</span>`;
-  document.getElementById('investedBalance').innerHTML = `${fmtMoney(monthBase, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+  // New formulas based on user requirements
+  const userDeposits = serverState.userDeposits || 0;
+  const totalEarnings = serverState.totalEarnings || 0;
+  const accruedToday = serverState.accruedToday || 0;
+  const investedAmount = monthBase; // investedAmount
+  const lockedAmountForWithdrawal = serverState.lockedAmountForWithdrawal || 0;
+
+  // "Баланс" = userDeposits + totalEarnings
+  const totalBalance = userDeposits + totalEarnings;
+  document.getElementById('balanceValue').textContent = `${fmtMoney(totalBalance, currency)} ${currencySymbol}`;
+
+  // "Свободный баланс" = userDeposits - investedAmount - accruedToday
+  const freeBalance = userDeposits - investedAmount - accruedToday;
+  document.getElementById('freeBalance').innerHTML = `${fmtMoney(freeBalance, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+
+  // "Инвестировано" = investedAmount
+  document.getElementById('investedBalance').innerHTML = `${fmtMoney(investedAmount, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+
   document.getElementById('profileUsername').textContent = username || 'User';
-  document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(availableBalance, currency)} <span class="cur-sym">${currencySymbol}</span>`;
-  document.getElementById('investAvailable').innerHTML = `${fmtMoney(availableBalance - monthBase, currency)} ${currencySymbol}`;
+
+  // "Доступно для вывода" = userDeposits - lockedAmountForWithdrawal - accruedToday
+  const withdrawAvailable = userDeposits - lockedAmountForWithdrawal - accruedToday;
+  document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(withdrawAvailable, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+
+  // "Доступно для инвестирования" = userDeposits - investedAmount - accruedToday (same as freeBalance)
+  document.getElementById('investAvailable').innerHTML = `${fmtMoney(freeBalance, currency)} ${currencySymbol}`;
+
+  // "Доход сегодня" = accruedToday
+  renderTodayIncome(accruedToday);
 
   // Today income — instant under selected currency
   renderTodayIncome();
@@ -317,11 +340,12 @@ function updateDashboard(data) {
   fitBalanceText();
   fitStatText();
 }
-function renderTodayIncome() {
+function renderTodayIncome(accruedToday) {
   const currency = userPrefs.currency;
   const symbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+  const value = accruedToday !== undefined ? accruedToday : latestTodayIncomeRub;
   const el = document.getElementById('todayIncome');
-  if (el) el.innerHTML = `+${fmtMoney(latestTodayIncomeRub, currency)} <span class="cur-sym">${symbol}</span>`;
+  if (el) el.innerHTML = `+${fmtMoney(value, currency)} <span class="cur-sym">${symbol}</span>`;
 }
 function getHistoryFilterPredicate(type) {
   if (!type || type === 'all') return () => true;
