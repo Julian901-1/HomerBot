@@ -136,7 +136,7 @@ function showDepositStep(step) {
 function updateDepositBtnState() {
   const agree = document.getElementById('depositAgree');
   const amountEl = document.getElementById('depositAmount');
-  const amount = parseAmount(amountEl.value);
+  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100; // round to 2 decimal places
   const btn = document.getElementById('depositConfirmBtn');
   if (btn) btn.disabled = !(agree && agree.checked) || amount < 100 || amount > 10000000;
 }
@@ -654,7 +654,7 @@ function setupEventListeners() {
   // Deposit — create request
   onIf($id('depositConfirmBtn'), 'click', async function () {
     const amountEl = $id('depositAmount');
-    const amount = amountEl ? parseAmount(amountEl.value) : 0;
+    const amount = amountEl ? Math.round(parseAmount(amountEl.value) * 100) / 100 : 0;
 
     if (amount < 100) {
       showPopup('Минимальная сумма депозита: 100 ₽');
@@ -738,7 +738,7 @@ initializeApp();    // pull history/balance
   onIf($id('withdrawConfirmBtn'), 'click', async function () {
     const amountEl = $id('withdrawAmount');
     const trigger = $id('select-trigger');
-    const amount = amountEl ? parseAmount(amountEl.value) : 0;
+    const amount = amountEl ? Math.round(parseAmount(amountEl.value) * 100) / 100 : 0;
     const idx = trigger ? parseInt(trigger.dataset.index) : -1;
     const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
     const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
@@ -768,7 +768,7 @@ initializeApp();    // pull history/balance
   // New Investment — confirm
   onIf($id('niConfirmBtn'), 'click', async function () {
     const amountEl = $id('niAmount');
-    const amount = amountEl ? parseAmount(amountEl.value) : 0;
+    const amount = amountEl ? Math.round(parseAmount(amountEl.value) * 100) / 100 : 0;
     const rate = lastChosenRate;
     if (!rate || amount <= 0) { showPopup('Enter correct amount.'); return; }
     const availableText = document.getElementById('investAvailable').textContent;
@@ -973,8 +973,8 @@ function openNewInvestment(rate) {
 function updateInvestButtonState() {
   const amountEl = document.getElementById('niAmount');
   const btn = document.getElementById('niConfirmBtn');
-  const amount = parseAmount(amountEl.value);
-  const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
+  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100; // round to 2 decimal places
+  const available = Math.round(((serverState.balance || 0) - (serverState.lockedAmount || 0)) * 100) / 100;
   btn.disabled = amount <= 0 || amount > available;
 }
 
@@ -982,10 +982,10 @@ function updateWithdrawBtnState() {
   const amountEl = document.getElementById('withdrawAmount');
   const trigger = document.getElementById('select-trigger');
   const btn = document.getElementById('withdrawConfirmBtn');
-  const amount = parseAmount(amountEl.value);
+  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100; // round to 2 decimal places
   const idx = trigger ? parseInt(trigger.dataset.index) : -1;
   const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
-  const available = (serverState.balance || 0) - (serverState.lockedAmountForWithdrawal || 0);
+  const available = Math.round(((serverState.balance || 0) - (serverState.lockedAmountForWithdrawal || 0)) * 100) / 100;
   btn.disabled = amount <= 0 || amount > available || !recipient;
 }
 
