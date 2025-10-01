@@ -243,7 +243,7 @@ function getInitialData(username) {
  * @returns {Object} Object containing balance, monthBase, and lockedAmount.
  */
 function syncBalance(username) {
-  console.log('syncBalance start for', username, new Date().toISOString(), 'v3.0');
+  console.log('syncBalance start for', username, new Date().toISOString(), 'v3.2');
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const usersSheet = ss.getSheetByName(SHEET_NAME);
   const reqSheet = ensureRequestsSheet_();
@@ -270,9 +270,14 @@ function syncBalance(username) {
     const currentDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const lastUpdateDayStart = new Date(lastAvailableUpdate.getFullYear(), lastAvailableUpdate.getMonth(), lastAvailableUpdate.getDate());
 
-    // If it's a new day, move pending interest to available balance
+    // If it's a new day, move pending interest to available balance and add 16% interest to userDeposits
     if (currentDayStart > lastUpdateDayStart) {
       availableBalance = round2(availableBalance + pendingInterest);
+      const userDeposits = Number(usersSheet.getRange(row, 19).getValue() || 0);
+      // Add yesterday's 16% interest to userDeposits (becomes available for withdrawal)
+      const yesterday16Interest = computeInterestForPeriod(username, lastUpdateDayStart, currentDayStart, 16);
+      const newUserDeposits = round2(userDeposits + yesterday16Interest);
+      usersSheet.getRange(row, 19).setValue(newUserDeposits);
       pendingInterest = 0;
       lastAvailableUpdate = currentDayStart;
       usersSheet.getRange(row, 16).setValue(availableBalance);
@@ -482,10 +487,9 @@ function logStrategyInvestment(username, amount, rate) {
 function getBalance(username) {
   const usersSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
   const { row } = findOrCreateUserRow_(usersSheet, username);
-  const availableBalance = Number(usersSheet.getRange(row, 16).getValue() || 0);
-  const pendingInterest = Number(usersSheet.getRange(row, 17).getValue() || 0);
-  const lockedAmountForWithdrawal = getLockedAmountForWithdrawal(username);
-  const balance = round2(availableBalance + pendingInterest + lockedAmountForWithdrawal);
+  const userDeposits = Number(usersSheet.getRange(row, 19).getValue() || 0);
+  const totalEarnings = Number(usersSheet.getRange(row, 20).getValue() || 0);
+  const balance = round2(userDeposits + totalEarnings);
   const rate = Number(usersSheet.getRange(row, 6).getValue() || 16);
   const monthBase = getInvestedAmount(username);
   usersSheet.getRange(row, 2).setValue(round2(monthBase)); // Round for storage

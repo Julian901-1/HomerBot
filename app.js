@@ -314,8 +314,8 @@ function updateDashboard(data) {
   const totalBalance = userDeposits + totalEarnings;
   document.getElementById('balanceValue').textContent = `${fmtMoney(totalBalance, currency)} ${currencySymbol}`;
 
-  // "Свободный баланс" = userDeposits - investedAmount - accruedToday
-  const freeBalance = userDeposits - investedAmount - accruedToday;
+  // "Свободный баланс" = userDeposits - investedAmount
+  const freeBalance = userDeposits - investedAmount;
   document.getElementById('freeBalance').innerHTML = `${fmtMoney(freeBalance, currency)} <span class="cur-sym">${currencySymbol}</span>`;
 
   // "Инвестировано" = investedAmount
@@ -323,11 +323,11 @@ function updateDashboard(data) {
 
   document.getElementById('profileUsername').textContent = username || 'User';
 
-  // "Доступно для вывода" = userDeposits - lockedAmountForWithdrawal - accruedToday
-  const withdrawAvailable = userDeposits - lockedAmountForWithdrawal - accruedToday;
+  // "Доступно для вывода" = userDeposits - lockedAmountForWithdrawal
+  const withdrawAvailable = userDeposits - lockedAmountForWithdrawal;
   document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(withdrawAvailable, currency)} <span class="cur-sym">${currencySymbol}</span>`;
 
-  // "Доступно для инвестирования" = userDeposits - investedAmount - accruedToday (same as freeBalance)
+  // "Доступно для инвестирования" = userDeposits - investedAmount (same as freeBalance)
   document.getElementById('investAvailable').innerHTML = `${fmtMoney(freeBalance, currency)} ${currencySymbol}`;
 
   // "Доход сегодня" = accruedToday
