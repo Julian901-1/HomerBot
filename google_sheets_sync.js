@@ -59,11 +59,6 @@ function doGet(e) {
       case 'getInitialData':
         return jsonOk(getInitialData(username));
 
-case 'ackDepositDelivery': {
-  var u = (p.username || '').toString();
-  var ok = ackDepositDelivery_(u);
-  return jsonOk({ delivered: ok });
-}
 
       case 'syncBalance':
         return jsonOk(syncBalance(username));
@@ -356,8 +351,8 @@ function requestAmount(username, amount, type, details) {
         });
         const jsonResponse = JSON.parse(response.getContentText());
         messageId = jsonResponse.ok ? jsonResponse.result.message_id : null;
-        reqSheet.appendRow([now, username, requestId, 'PENDING', null, false, type, Number(amount)]);
-        logToEventJournal(now, username, requestId, 'PENDING', messageId, null, false, ADMIN_CHAT_ID, now, type, Number(amount), null, null);
+        reqSheet.appendRow([now, username, requestId, 'PENDING', null, null, type, Number(amount)]);
+        logToEventJournal(now, username, requestId, 'PENDING', messageId, null, null, ADMIN_CHAT_ID, now, type, Number(amount), null, null);
     } catch(e) {
         console.error("TG notification failed:", e);
         reqSheet.appendRow([now, username, requestId, 'PENDING', null, false, type, Number(amount)]);
@@ -379,8 +374,8 @@ function logStrategyInvestment(username, amount, rate) {
     const freezeDays = (rate === 17) ? 30 : (rate === 18) ? 90 : 0;
     const unfreezeDate = new Date(now);
     unfreezeDate.setDate(unfreezeDate.getDate() + freezeDays);
-    reqSheet.appendRow([now, username, requestId, 'APPROVED', null, now, true, 'INVEST', Number(amount), Number(rate), unfreezeDate, 0]);
-    logToEventJournal(now, username, requestId, 'APPROVED', null, now, true, null, null, 'INVEST', Number(amount), Number(rate), unfreezeDate);
+    reqSheet.appendRow([now, username, requestId, 'APPROVED', now, null, 'INVEST', Number(amount), Number(rate), unfreezeDate, 0]);
+    logToEventJournal(now, username, requestId, 'APPROVED', null, now, null, null, null, 'INVEST', Number(amount), Number(rate), unfreezeDate);
     const usersSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
     const { row } = findOrCreateUserRow_(usersSheet, username);
     usersSheet.getRange(row, 6).setValue(rate);
@@ -401,8 +396,7 @@ function getHistory(username) {
     const sheets = [
         ensureInvestTransactionsSheet_(),
         ensureRateChangeTransactionsSheet_(),
-        ensureDepositWithdrawTransactionsSheet_(),
-        ensureRequestsSheet_() // include old sheet for backward compatibility
+        ensureDepositWithdrawTransactionsSheet_()
     ];
     let allData = [];
     sheets.forEach(sheet => {
@@ -420,8 +414,6 @@ function getHistory(username) {
                 typeCol = 6; amountCol = 7; rateCol = -1; // no rate column
             } else if (numCols === 7) { // RATE_CHANGE_TRANSACTIONS
                 typeCol = -1; amountCol = -1; rateCol = 5; // only rate changes
-            } else if (numCols >= 14) { // REQ_SHEET (old format)
-                typeCol = 9; amountCol = 10; rateCol = 11;
             } else {
                 return null; // unknown format
             }
@@ -573,14 +565,14 @@ function ensureEventJournalSheet_() {
     let sh = ss.getSheetByName(EVENT_JOURNAL);
     if (!sh) {
         sh = ss.insertSheet(EVENT_JOURNAL);
-        sh.getRange(1,1,1,8).setValues([['Дата создания','Пользователь','Request ID','Статус','Дата решения','Доставлено','Тип','Сумма']]);
+        sh.getRange(1,1,1,9).setValues([['Дата создания','Пользователь','Request ID','Статус','Дата решения','Доставлено','Тип','Сумма','Ставка']]);
     }
     return sh;
 }
 
 function logToEventJournal(createdAt, username, requestId, status, messageId, decidedAt, delivered, adminChatId, messageDate, type, amount, rate, unfreezeDate) {
     const sheet = ensureEventJournalSheet_();
-    sheet.appendRow([createdAt, username, requestId, status, decidedAt, delivered, type, amount]);
+    sheet.appendRow([createdAt, username, requestId, status, decidedAt, null, type, amount, rate]);
 }
 
 function ensurePrefsSheet_() {
@@ -611,7 +603,7 @@ function reapplyMissedApproved_(username) {
   const lastAppliedAt = usersSheet.getRange(userRow, 4).getValue(); // can be null
   const lastAppliedTs = lastAppliedAt ? new Date(lastAppliedAt).getTime() : 0;
 
-  const sheets = [ensureDepositWithdrawTransactionsSheet_(), ensureRequestsSheet_()]; // check new and old sheets
+  const sheets = [ensureDepositWithdrawTransactionsSheet_()]; // check new sheet only
   let sum = 0, maxProcessed = 0, applied = 0;
 
   sheets.forEach(sheet => {
@@ -685,8 +677,7 @@ function findRequestRowByIdAcrossSheets(requestId) {
     const sheets = [
         ensureDepositWithdrawTransactionsSheet_(), // prioritize new sheets
         ensureInvestTransactionsSheet_(),
-        ensureRateChangeTransactionsSheet_(),
-        ensureRequestsSheet_() // fallback for old data
+        ensureRateChangeTransactionsSheet_()
     ];
     for (let sheet of sheets) {
         const row = findRequestRowById_(sheet, requestId);
@@ -703,7 +694,7 @@ function jsonOk(obj) { return ContentService.createTextOutput(JSON.stringify({ s
 function jsonErr(message) { return ContentService.createTextOutput(JSON.stringify({ success: false, error: message })).setMimeType(ContentService.MimeType.JSON); }
 function cancelPendingDeposit_(username) {
   if (!username) return false;
-  var sheets = [ensureDepositWithdrawTransactionsSheet_(), ensureRequestsSheet_()];
+  var sheets = [ensureDepositWithdrawTransactionsSheet_()];
   for (var s = 0; s < sheets.length; s++) {
     var reqSheet = sheets[s];
     var lastRow = reqSheet.getLastRow();
@@ -716,38 +707,6 @@ function cancelPendingDeposit_(username) {
       if (row[1] === username && row[3] === 'PENDING' && row[6] === 'DEPOSIT') { // type in column 7 (0-indexed 6)
         reqSheet.getRange(i + 2, 4).setValue('CANCELED');     // status
         reqSheet.getRange(i + 2, 6).setValue(new Date());     // processedAt
-        reqSheet.getRange(i + 2, 7).setValue(true);           // delivered/applied
-        return true;
-      }
-    }
-  }
-  return false;
-}
-/**
- * Mark the deposit result as delivered to the user (after Pop-up on frontend).
- * Columns in Requests:
- * 1:createdAt, 2:username, 3:requestId, 4:status, 5:messageId, 
- * 6:processedAt, 7:delivered, 8:adminChatId, 9:messageDate, 10:type, 11:amount, 12:rate
- */
-function ackDepositDelivery_(username) {
-  if (!username) return false;
-  var sheets = [ensureDepositWithdrawTransactionsSheet_(), ensureRequestsSheet_()];
-  for (var s = 0; s < sheets.length; s++) {
-    var reqSheet = sheets[s];
-    var lastRow = reqSheet.getLastRow();
-    if (lastRow < 2) continue;
-
-    var data = reqSheet.getRange(2, 1, lastRow - 1, reqSheet.getLastColumn()).getValues();
-    // find the LATEST deposit of the user with final status where delivered != TRUE
-    for (var i = data.length - 1; i >= 0; i--) {
-      var row = data[i];
-      var user    = row[1];
-      var status  = row[3];
-      var delivered = row[6] === true;
-      var type    = row[6]; // column 7
-
-      if (user === username && type === 'DEPOSIT' && !delivered && status && status !== 'PENDING') {
-        reqSheet.getRange(i + 2, 7).setValue(true); // delivered = TRUE
         return true;
       }
     }

@@ -541,9 +541,6 @@ async function syncBalance(fromScheduler = false) {
         : 'Депозит не удался';
       closeDepositFlowWithPopup(msg);
 
-      // confirm delivery to user (set G=TRUE on backend)
-      void apiGet(`?action=ackDepositDelivery&username=${encodeURIComponent(username)}`)
-        .catch(() => {}); // do not hinder poller due to network failures
     } else {
       // without explicit status just close flow, do not ACK
       closeDepositFlowWithPopup('Операция с депозитом завершена');
