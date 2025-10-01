@@ -523,34 +523,31 @@ async function syncBalance(fromScheduler = false) {
         latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
       }
   renderTodayIncome();
-    }
+     }
 
-    // === AFTER updating data: check deposit status transition ===
-    const before = hasPendingDeposit;
-    const now = computeHasPendingDeposit();
-    hasPendingDeposit = now; // synchronize flag
+     // === AFTER updating data: check deposit status transition ===
+     const before = hasPendingDeposit;
+     const now = computeHasPendingDeposit();
+     hasPendingDeposit = now; // synchronize flag
 
-    // if previously PENDING, now not — show result and ACK delivery
-  if (before && !now) {
-    const last = (serverState.history || [])
-      .filter(x => x.type === 'DEPOSIT')
-      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+     // Only show completion message for deposits with final status (APPROVED/REJECTED/CANCELED)
+     if (before && !now) {
+       const last = (serverState.history || [])
+         .filter(x => x.type === 'DEPOSIT')
+         .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
 
-    if (last && (last.status === 'APPROVED' || last.status === 'REJECTED' || last.status === 'CANCELED')) {
-      const msg = last.status === 'APPROVED'
-        ? 'Средства зачислены на счёт'
-        : 'Депозит не удался';
-      closeDepositFlowWithPopup(msg);
+       if (last && (last.status === 'APPROVED' || last.status === 'REJECTED' || last.status === 'CANCELED')) {
+         const msg = last.status === 'APPROVED'
+           ? 'Средства зачислены на счёт'
+           : 'Депозит не удался';
+         closeDepositFlowWithPopup(msg);
+       }
+       // Don't show "Операция завершена" for PENDING deposits that disappeared from history
+     }
 
-    } else {
-      // without explicit status just close flow, do not ACK
-      closeDepositFlowWithPopup('Операция с депозитом завершена');
-    }
-  }
-
-    // successful cycle — soft interval
-    syncBackoffMs = 20000;
-    console.log('Frontend syncBalance response', data, new Date().toISOString());
+     // successful cycle — soft interval
+     syncBackoffMs = 20000;
+     console.log('Frontend syncBalance response', data, new Date().toISOString());
 
   } catch (e) {
     // network/error — increase interval, but not more than 60s

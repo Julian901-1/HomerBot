@@ -153,8 +153,8 @@ function doPost(e) {
                 const usersSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
                 const { row: userRow } = findOrCreateUserRow_(usersSheet, username);
                 const currentBalance = Number(usersSheet.getRange(userRow, 3).getValue() || 0);
-                console.log('doPost updating balance from', currentBalance, 'to', round2(currentBalance + amount));
-                usersSheet.getRange(userRow, 3).setValue(round2(currentBalance + amount));
+                console.log('doPost updating balance from', currentBalance, 'to', currentBalance + amount);
+                usersSheet.getRange(userRow, 3).setValue(currentBalance + amount);
                 usersSheet.getRange(userRow, 4).setValue(new Date());
               }
             }
@@ -208,7 +208,14 @@ function getInitialData(username) {
     const lockedAmount = getLockedAmount(username);
     const lockedAmountForWithdrawal = getLockedAmountForWithdrawal(username);
     const userPrefs = getUserPrefs(username);
-    return { ...balanceData, history, portfolio, lockedAmount, lockedAmountForWithdrawal, userPrefs };
+    return {
+        ...balanceData,
+        history,
+        portfolio,
+        lockedAmount: round2(lockedAmount),
+        lockedAmountForWithdrawal: round2(lockedAmountForWithdrawal),
+        userPrefs
+    };
 }
 
 /**
@@ -259,8 +266,8 @@ function syncBalance(username) {
       const mStart = new Date(y, m - 1, 1);
       const mEnd = endOfMonth_(mStart);
       const fullInterest = computeInterestForPeriod(username, mStart, mEnd);
-      const toAdd = Math.max(0, round2(fullInterest - paidThisMonth));
-      if (toAdd > 0) balance = round2(balance + toAdd);
+      const toAdd = Math.max(0, fullInterest - paidThisMonth);
+      if (toAdd > 0) balance = balance + toAdd;
       paidThisMonth = 0;
       paidCell.setValue(0);
       lastAppliedMonth = nextMonthKey_(lastAppliedMonth);
@@ -271,26 +278,26 @@ function syncBalance(username) {
 
     const mStart = startOfMonth_(now);
     const accruedToNow = computeInterestForPeriod(username, mStart, now);
-    const delta = Math.max(0, round2(accruedToNow - paidThisMonth));
+    const delta = Math.max(0, accruedToNow - paidThisMonth);
     if (delta > 0) {
-      balance = round2(balance + delta);
-      paidThisMonth = round2(paidThisMonth + delta);
-      paidCell.setValue(paidThisMonth);
+      balance = balance + delta;
+      paidThisMonth = paidThisMonth + delta;
+      paidCell.setValue(round2(paidThisMonth)); // Round only for display/storage
 
       // Distribute accrued interest to all investments
       const portfolio = getPortfolio(username);
       const investSheet = ensureInvestTransactionsSheet_();
       portfolio.forEach(inv => {
-        const share = round2((inv.amount / investedAmount) * delta);
+        const share = (inv.amount / investedAmount) * delta;
         const reqRow = findRequestRowById_(investSheet, inv.requestId);
         if (reqRow) {
           const currentAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
-          investSheet.getRange(reqRow, 11).setValue(round2(currentAccrued + share));
+          investSheet.getRange(reqRow, 11).setValue(round2(currentAccrued + share)); // Round for storage
         }
       });
     }
-    usersSheet.getRange(row, 2).setValue(investedAmount);
-    usersSheet.getRange(row, 3).setValue(balance);
+    usersSheet.getRange(row, 2).setValue(round2(investedAmount)); // Round for storage
+    usersSheet.getRange(row, 3).setValue(balance); // Keep full precision
     usersSheet.getRange(row, 4).setValue(new Date());
 
     // Calculate and update effective rate based on portfolio
@@ -301,7 +308,12 @@ function syncBalance(username) {
     const lockedAmount = getLockedAmount(username);
     const lockedAmountForWithdrawal = getLockedAmountForWithdrawal(username);
     console.log('syncBalance end:', new Date().toISOString());
-    return { balance, monthBase: investedAmount, lockedAmount, lockedAmountForWithdrawal };
+    return {
+        balance: round2(balance),
+        monthBase: round2(investedAmount),
+        lockedAmount: round2(lockedAmount),
+        lockedAmountForWithdrawal: round2(lockedAmountForWithdrawal)
+    };
   } finally {
     lock.releaseLock();
     console.log('syncBalance lock released:', new Date().toISOString());
@@ -387,8 +399,8 @@ function getBalance(username) {
   const balance = Number(usersSheet.getRange(row, 3).getValue() || 0);
   const rate = Number(usersSheet.getRange(row, 6).getValue() || 16);
   const monthBase = getInvestedAmount(username);
-  usersSheet.getRange(row, 2).setValue(monthBase);
-  return { username, balance, rate, monthBase };
+  usersSheet.getRange(row, 2).setValue(round2(monthBase)); // Round for storage
+  return { username, balance: round2(balance), rate, monthBase: round2(monthBase) };
 }
 
 function getHistory(username) {
@@ -470,7 +482,7 @@ function previewAccrual_(username) {
     const now = new Date();
     const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const accruedToday = computeInterestForPeriod(username, dayStart, now);
-    return { accruedToday };
+    return { accruedToday: round2(accruedToday) }; // Round for display
 }
 
 function computeInterestForPeriod(username, fromDate, toDate) {
@@ -497,7 +509,8 @@ function computeInterestForPeriod(username, fromDate, toDate) {
             totalInterest += interestForPeriod;
         }
     });
-    return round2(totalInterest);
+    // Return with high precision (8 decimal places) for internal calculations
+    return Math.round(totalInterest * 100000000) / 100000000;
 }
 
 function saveUserPrefs(username, prefsString) {
@@ -642,7 +655,7 @@ function reapplyMissedApproved_(username) {
   if (applied > 0 && sum !== 0) {
     const balanceCell = usersSheet.getRange(userRow, 3);
     const nowBal = Number(balanceCell.getValue() || 0);
-    balanceCell.setValue(round2(nowBal + sum));
+    balanceCell.setValue(nowBal + sum);
     usersSheet.getRange(userRow, 4).setValue(new Date()); // marking that balance have changed
   }
   return {applied, sum};
