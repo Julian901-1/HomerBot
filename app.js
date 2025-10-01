@@ -450,7 +450,11 @@ async function initializeApp() {
 
     // Initial data from backend
     const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
-    if (!data || !data.success) throw new Error(data?.error || 'Failed to get initial data');
+    if (!data || !data.success) {
+      const errorMsg = data?.error ? (typeof data.error === 'string' ? data.error : 'Server error') : 'Failed to get initial data';
+      console.error('Backend error:', errorMsg);
+      throw new Error('Failed to get initial data');
+    }
 
     // Apply settings/state
     userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
@@ -462,6 +466,15 @@ async function initializeApp() {
 
 
     serverState = { ...serverState, ...data };
+    // Ensure all required fields are present
+    if (!serverState.balance) serverState.balance = 0;
+    if (!serverState.rate) serverState.rate = 16;
+    if (!serverState.monthBase) serverState.monthBase = 0;
+    if (!serverState.lockedAmount) serverState.lockedAmount = 0;
+    if (!serverState.lockedAmountForWithdrawal) serverState.lockedAmountForWithdrawal = 0;
+    if (!serverState.availableBalance) serverState.availableBalance = serverState.balance - serverState.lockedAmountForWithdrawal;
+    if (!serverState.history) serverState.history = [];
+    if (!serverState.portfolio) serverState.portfolio = [];
     hasPendingDeposit = computeHasPendingDeposit();
 
     // Redraw main screens
@@ -481,9 +494,9 @@ async function initializeApp() {
     scheduleSync(2000); // start poller
     finishBootScreen(); // title "flies away", overlay disappears
   } catch (e) {
-    console.error('Initialization error:', e);
+    console.error('Initialization error:', e.message, e.stack);
     finishBootScreen();                 // even on error remove overlay
-    setStatus(`Error: ${e.message}`, 'error'); // popup only for errors
+    setStatus('Error: Failed to initialize app', 'error'); // popup only for errors
   }
 }
 

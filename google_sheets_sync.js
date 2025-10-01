@@ -227,7 +227,7 @@ function getInitialData(username) {
  * @returns {Object} Object containing balance, monthBase, and lockedAmount.
  */
 function syncBalance(username) {
-  console.log('syncBalance start for', username, new Date().toISOString());
+  console.log('syncBalance start for', username, new Date().toISOString(), 'v2.1');
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const usersSheet = ss.getSheetByName(SHEET_NAME);
   const reqSheet = ensureRequestsSheet_();
@@ -278,51 +278,38 @@ function syncBalance(username) {
 
     const investedAmount = getInvestedAmount(username);
 
-    // For 16% investments: accrue interest daily at midnight and make it immediately available for withdrawal
-    // For 17%/18% investments: accrue interest only when unfrozen (not in syncBalance)
+    // Accrue interest daily for all investments to show visual balance growth
     const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const accruedToday = computeInterestForPeriod(username, dayStart, now); // For all investments
+    const delta = Math.max(0, accruedToday - paidThisMonth);
+    if (delta > 0) {
+      balance = balance + delta;
+      paidThisMonth = paidThisMonth + delta;
+      paidCell.setValue(round2(paidThisMonth));
 
-    // Only accrue interest for 16% investments immediately
-    const currentPortfolio = getPortfolio(username);
-    const liquidInvestments = currentPortfolio.filter(inv => inv.rate === 16);
-    const liquidInvestedAmount = liquidInvestments.reduce((sum, inv) => sum + inv.amount, 0);
-
-    if (liquidInvestedAmount > 0) {
-      const liquidAccruedToday = computeInterestForPeriod(username, dayStart, now, 16); // Only for 16% investments
-      const delta = Math.max(0, liquidAccruedToday - paidThisMonth);
-      if (delta > 0) {
-        balance = balance + delta;
-        paidThisMonth = paidThisMonth + delta;
-        paidCell.setValue(round2(paidThisMonth));
-
-        // Update accrued interest for 16% investments
-        const investSheet = ensureInvestTransactionsSheet_();
-        liquidInvestments.forEach(inv => {
-          const share = (inv.amount / liquidInvestedAmount) * delta;
-          const reqRow = findRequestRowById_(investSheet, inv.requestId);
-          if (reqRow) {
-            const currentAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
-            investSheet.getRange(reqRow, 11).setValue(round2(currentAccrued + share));
-          }
-        });
-      }
+      // Update accrued interest for all investments
+      const portfolio = getPortfolio(username);
+      const investSheet = ensureInvestTransactionsSheet_();
+      portfolio.forEach(inv => {
+        const share = (inv.amount / investedAmount) * delta;
+        const reqRow = findRequestRowById_(investSheet, inv.requestId);
+        if (reqRow) {
+          const currentAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
+          investSheet.getRange(reqRow, 11).setValue(round2(currentAccrued + share));
+        }
+      });
     }
 
-    // Check for unfrozen 17%/18% investments and accrue their interest
-    const lockedInvestments = currentPortfolio.filter(inv => (inv.rate === 17 || inv.rate === 18) && inv.unfreezeDate && inv.unfreezeDate <= now);
+    // Mark unfrozen 17%/18% investments as available for withdrawal
+    const portfolio = getPortfolio(username);
+    const lockedInvestments = portfolio.filter(inv => (inv.rate === 17 || inv.rate === 18) && inv.unfreezeDate && inv.unfreezeDate <= now);
     if (lockedInvestments.length > 0) {
       const investSheet = ensureInvestTransactionsSheet_();
       lockedInvestments.forEach(inv => {
         const reqRow = findRequestRowById_(investSheet, inv.requestId);
         if (reqRow) {
-          const createdAt = new Date(investSheet.getRange(reqRow, 1).getValue());
-          // Calculate interest from creation to unfreeze date
-          const unfreezeInterest = computeInterestForPeriod(username, createdAt, inv.unfreezeDate, inv.rate);
-          if (unfreezeInterest > 0) {
-            balance = balance + unfreezeInterest;
-            // Mark as unfrozen by clearing unfreezeDate or setting delivered
-            investSheet.getRange(reqRow, 6).setValue(now); // delivered = now
-          }
+          // Mark as unfrozen - set delivered to indicate it's now available for withdrawal
+          investSheet.getRange(reqRow, 6).setValue(now); // delivered = now
         }
       });
     }
@@ -331,7 +318,7 @@ function syncBalance(username) {
     usersSheet.getRange(row, 4).setValue(new Date());
 
     // Calculate and update effective rate based on portfolio
-    const effectiveRate = currentPortfolio.length > 0 ? currentPortfolio.reduce((sum, inv) => sum + inv.amount * inv.rate, 0) / investedAmount : 16;
+    const effectiveRate = investedAmount > 0 ? portfolio.reduce((sum, inv) => sum + inv.amount * inv.rate, 0) / investedAmount : 16;
     usersSheet.getRange(row, 6).setValue(effectiveRate);
 
     const lockedAmount = getLockedAmount(username);
@@ -504,13 +491,13 @@ function getLockedAmount(username) {
 }
 
 function getLockedAmountForWithdrawal(username) {
-    // Only 17% and 18% investments are locked for withdrawal
+    // Only 17% and 18% investments are locked for withdrawal until unfrozen
     const now = new Date();
     return getPortfolio(username)
         .filter(item => {
             if (item.rate !== 17 && item.rate !== 18) return false;
             if (!item.unfreezeDate) return true; // If no date, assume locked
-            return item.unfreezeDate > now;
+            return item.unfreezeDate > now; // Still frozen
         })
         .reduce((sum, item) => sum + item.amount + item.accruedInterest, 0);
 }
@@ -518,7 +505,7 @@ function getLockedAmountForWithdrawal(username) {
 function previewAccrual_(username) {
     const now = new Date();
     const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const accruedToday = computeInterestForPeriod(username, dayStart, now, 16); // Only for 16% investments
+    const accruedToday = computeInterestForPeriod(username, dayStart, now); // For all investments
     return { accruedToday: round2(accruedToday) }; // Round for display
 }
 
