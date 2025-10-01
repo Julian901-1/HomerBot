@@ -3,7 +3,7 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cg
 // -------- STATE --------
 let username = null;
 let initData = '';
-let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, lockedAmountForWithdrawal: 0, history: [], portfolio: [] };
+let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, lockedAmountForWithdrawal: 0, availableBalance: 0, history: [], portfolio: [] };
 let userPrefs = { currency: 'RUB', sbpMethods: [] };
 let devMode = false;
 let lastChosenRate = null;
@@ -299,7 +299,7 @@ window.addEventListener('resize', fitStatText);
 // -------- RENDER --------
 function updateDashboard(data) {
   serverState = { ...serverState, ...data };
-  const { balance, monthBase, lockedAmount, lockedAmountForWithdrawal } = serverState;
+  const { balance, monthBase, lockedAmount, availableBalance } = serverState;
   const currency = userPrefs.currency;
   const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
 
@@ -307,7 +307,7 @@ function updateDashboard(data) {
   document.getElementById('freeBalance').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} <span class="cur-sym">${currencySymbol}</span>`;
   document.getElementById('investedBalance').innerHTML = `${fmtMoney(monthBase, currency)} <span class="cur-sym">${currencySymbol}</span>`;
   document.getElementById('profileUsername').textContent = username || 'User';
-  document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(balance - lockedAmountForWithdrawal, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+  document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(availableBalance || (balance - (serverState.lockedAmountForWithdrawal || 0)), currency)} <span class="cur-sym">${currencySymbol}</span>`;
   document.getElementById('investAvailable').innerHTML = `${fmtMoney(balance - lockedAmount, currency)} ${currencySymbol}`;
 
   // Today income — instant under selected currency
@@ -982,7 +982,7 @@ function updateWithdrawBtnState() {
   const amount = Math.round(parseAmount(amountEl.value) * 100) / 100; // round to 2 decimal places
   const idx = trigger ? parseInt(trigger.dataset.index) : -1;
   const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
-  const available = Math.round(((serverState.balance || 0) - (serverState.lockedAmountForWithdrawal || 0)) * 100) / 100;
+  const available = serverState.availableBalance || Math.round(((serverState.balance || 0) - (serverState.lockedAmountForWithdrawal || 0)) * 100) / 100;
   btn.disabled = amount <= 0 || amount > available || !recipient;
 }
 

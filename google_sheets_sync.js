@@ -208,12 +208,14 @@ function getInitialData(username) {
     const lockedAmount = getLockedAmount(username);
     const lockedAmountForWithdrawal = getLockedAmountForWithdrawal(username);
     const userPrefs = getUserPrefs(username);
+    const availableBalance = round2(balanceData.balance - lockedAmountForWithdrawal);
     return {
         ...balanceData,
         history,
         portfolio,
         lockedAmount: round2(lockedAmount),
         lockedAmountForWithdrawal: round2(lockedAmountForWithdrawal),
+        availableBalance,
         userPrefs
     };
 }
@@ -265,7 +267,7 @@ function syncBalance(username) {
       const [y, m] = lastAppliedMonth.split('-').map(Number);
       const mStart = new Date(y, m - 1, 1);
       const mEnd = endOfMonth_(mStart);
-      const fullInterest = computeInterestForPeriod(username, mStart, mEnd);
+      const fullInterest = computeInterestForPeriod(username, mStart, mEnd); // For all investments
       const toAdd = Math.max(0, fullInterest - paidThisMonth);
       if (toAdd > 0) balance = balance + toAdd;
       paidThisMonth = 0;
@@ -276,23 +278,51 @@ function syncBalance(username) {
 
     const investedAmount = getInvestedAmount(username);
 
-    const mStart = startOfMonth_(now);
-    const accruedToNow = computeInterestForPeriod(username, mStart, now);
-    const delta = Math.max(0, accruedToNow - paidThisMonth);
-    if (delta > 0) {
-      balance = balance + delta;
-      paidThisMonth = paidThisMonth + delta;
-      paidCell.setValue(round2(paidThisMonth)); // Round only for display/storage
+    // For 16% investments: accrue interest daily at midnight and make it immediately available for withdrawal
+    // For 17%/18% investments: accrue interest only when unfrozen (not in syncBalance)
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      // Distribute accrued interest to all investments
-      const portfolio = getPortfolio(username);
+    // Only accrue interest for 16% investments immediately
+    const currentPortfolio = getPortfolio(username);
+    const liquidInvestments = currentPortfolio.filter(inv => inv.rate === 16);
+    const liquidInvestedAmount = liquidInvestments.reduce((sum, inv) => sum + inv.amount, 0);
+
+    if (liquidInvestedAmount > 0) {
+      const liquidAccruedToday = computeInterestForPeriod(username, dayStart, now, 16); // Only for 16% investments
+      const delta = Math.max(0, liquidAccruedToday - paidThisMonth);
+      if (delta > 0) {
+        balance = balance + delta;
+        paidThisMonth = paidThisMonth + delta;
+        paidCell.setValue(round2(paidThisMonth));
+
+        // Update accrued interest for 16% investments
+        const investSheet = ensureInvestTransactionsSheet_();
+        liquidInvestments.forEach(inv => {
+          const share = (inv.amount / liquidInvestedAmount) * delta;
+          const reqRow = findRequestRowById_(investSheet, inv.requestId);
+          if (reqRow) {
+            const currentAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
+            investSheet.getRange(reqRow, 11).setValue(round2(currentAccrued + share));
+          }
+        });
+      }
+    }
+
+    // Check for unfrozen 17%/18% investments and accrue their interest
+    const lockedInvestments = currentPortfolio.filter(inv => (inv.rate === 17 || inv.rate === 18) && inv.unfreezeDate && inv.unfreezeDate <= now);
+    if (lockedInvestments.length > 0) {
       const investSheet = ensureInvestTransactionsSheet_();
-      portfolio.forEach(inv => {
-        const share = (inv.amount / investedAmount) * delta;
+      lockedInvestments.forEach(inv => {
         const reqRow = findRequestRowById_(investSheet, inv.requestId);
         if (reqRow) {
-          const currentAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
-          investSheet.getRange(reqRow, 11).setValue(round2(currentAccrued + share)); // Round for storage
+          const createdAt = new Date(investSheet.getRange(reqRow, 1).getValue());
+          // Calculate interest from creation to unfreeze date
+          const unfreezeInterest = computeInterestForPeriod(username, createdAt, inv.unfreezeDate, inv.rate);
+          if (unfreezeInterest > 0) {
+            balance = balance + unfreezeInterest;
+            // Mark as unfrozen by clearing unfreezeDate or setting delivered
+            investSheet.getRange(reqRow, 6).setValue(now); // delivered = now
+          }
         }
       });
     }
@@ -301,18 +331,19 @@ function syncBalance(username) {
     usersSheet.getRange(row, 4).setValue(new Date());
 
     // Calculate and update effective rate based on portfolio
-    const portfolio = getPortfolio(username);
-    const effectiveRate = portfolio.length > 0 ? portfolio.reduce((sum, inv) => sum + inv.amount * inv.rate, 0) / investedAmount : 16;
+    const effectiveRate = currentPortfolio.length > 0 ? currentPortfolio.reduce((sum, inv) => sum + inv.amount * inv.rate, 0) / investedAmount : 16;
     usersSheet.getRange(row, 6).setValue(effectiveRate);
 
     const lockedAmount = getLockedAmount(username);
     const lockedAmountForWithdrawal = getLockedAmountForWithdrawal(username);
+    const availableBalance = round2(balance - lockedAmountForWithdrawal);
     console.log('syncBalance end:', new Date().toISOString());
     return {
         balance: round2(balance),
         monthBase: round2(investedAmount),
         lockedAmount: round2(lockedAmount),
-        lockedAmountForWithdrawal: round2(lockedAmountForWithdrawal)
+        lockedAmountForWithdrawal: round2(lockedAmountForWithdrawal),
+        availableBalance
     };
   } finally {
     lock.releaseLock();
@@ -461,8 +492,14 @@ function getInvestedAmount(username) {
 }
 
 function getLockedAmount(username) {
-    // All invested amounts are locked (not available for re-investment)
+    // Only 17%/18% investments are locked for re-investment until unfrozen
+    const now = new Date();
     return getPortfolio(username)
+        .filter(item => {
+            if (item.rate !== 17 && item.rate !== 18) return false;
+            if (!item.unfreezeDate) return true; // If no date, assume locked
+            return item.unfreezeDate > now;
+        })
         .reduce((sum, item) => sum + item.amount + item.accruedInterest, 0);
 }
 
@@ -481,11 +518,11 @@ function getLockedAmountForWithdrawal(username) {
 function previewAccrual_(username) {
     const now = new Date();
     const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const accruedToday = computeInterestForPeriod(username, dayStart, now);
+    const accruedToday = computeInterestForPeriod(username, dayStart, now, 16); // Only for 16% investments
     return { accruedToday: round2(accruedToday) }; // Round for display
 }
 
-function computeInterestForPeriod(username, fromDate, toDate) {
+function computeInterestForPeriod(username, fromDate, toDate, rateFilter = null) {
     const portfolio = getPortfolio(username);
     if (portfolio.length === 0) return 0;
     let totalInterest = 0;
@@ -493,7 +530,9 @@ function computeInterestForPeriod(username, fromDate, toDate) {
     const fromDateMs = fromDate.getTime();
     if (toDateMs <= fromDateMs) return 0;
 
-    portfolio.forEach(investment => {
+    const filteredPortfolio = rateFilter ? portfolio.filter(inv => inv.rate === rateFilter) : portfolio;
+
+    filteredPortfolio.forEach(investment => {
         // Get creation date for this investment
         const investSheet = ensureInvestTransactionsSheet_();
         const reqRow = findRequestRowById_(investSheet, investment.requestId);
@@ -585,7 +624,7 @@ function ensureEventJournalSheet_() {
     let sh = ss.getSheetByName(EVENT_JOURNAL);
     if (!sh) {
         sh = ss.insertSheet(EVENT_JOURNAL);
-        sh.getRange(1,1,1,9).setValues([['Дата создания','Пользователь','Request ID','Статус','Дата решения','Доставлено','Тип','Сумма','Ставка']]);
+        sh.getRange(1,1,1,10).setValues([['Дата создания','Пользователь','Request ID','Статус','Message ID','Дата решения','Доставлено','Тип','Сумма','Ставка']]);
     }
     return sh;
 }
@@ -594,7 +633,7 @@ function logToEventJournal(createdAt, username, requestId, status, messageId, de
     const sheet = ensureEventJournalSheet_();
     // For DEPOSIT and WITHDRAW operations, set status to "-"
     const finalStatus = (type === 'DEPOSIT' || type === 'WITHDRAW') ? '-' : status;
-    sheet.appendRow([createdAt, username, requestId, finalStatus, decidedAt, null, type, amount, rate]);
+    sheet.appendRow([createdAt, username, requestId, finalStatus, messageId, decidedAt, null, type, amount, rate]);
 }
 
 function ensurePrefsSheet_() {
