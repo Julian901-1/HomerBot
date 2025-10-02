@@ -202,8 +202,7 @@ function doPost(e) {
  * @returns {Object} Object containing balance, history, portfolio, lockedAmount, and userPrefs.
  */
 function getInitialData(username) {
-    syncBalance(username); // Ensure data is fresh before sending
-    const balanceData = getBalance(username);
+     const balanceData = getBalance(username);
     const history = getHistory(username);
     const portfolio = getPortfolio(username);
     const lockedAmount = getLockedAmount(username);
@@ -243,7 +242,7 @@ function getInitialData(username) {
  * @returns {Object} Object containing balance, monthBase, and lockedAmount.
  */
 function syncBalance(username) {
-  console.log('syncBalance start for', username, new Date().toISOString(), 'v3.5');
+  console.log('syncBalance start for', username, new Date().toISOString(), 'v3.8');
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const usersSheet = ss.getSheetByName(SHEET_NAME);
   const reqSheet = ensureRequestsSheet_();
@@ -341,23 +340,18 @@ function syncBalance(username) {
       usersSheet.getRange(row, 20).setValue(currentTotalEarnings);
     }
 
-    // 17%/18% interest goes to pending interest (becomes available at midnight)
+    // 17%/18% interest goes to totalEarnings daily for visibility, but actual funds become available only at maturity
     const accrued1718Today = computeInterestForPeriod(username, dayStart, now, [17, 18]);
-    const delta = Math.max(0, accrued1718Today - paidThisMonth);
-    if (delta > 0) {
-      pendingInterest = round2(pendingInterest + delta);
-      currentTotalEarnings = round2(currentTotalEarnings + delta);
-      paidThisMonth = paidThisMonth + delta;
-      paidCell.setValue(round2(paidThisMonth));
-      usersSheet.getRange(row, 17).setValue(pendingInterest);
+    if (accrued1718Today > 0) {
+      currentTotalEarnings = round2(currentTotalEarnings + accrued1718Today);
       usersSheet.getRange(row, 20).setValue(currentTotalEarnings);
 
-      // Update accrued interest for 17%/18% investments
+      // Update accrued interest for 17%/18% investments (for tracking)
       const portfolio = getPortfolio(username).filter(inv => inv.rate === 17 || inv.rate === 18);
       const investSheet = ensureInvestTransactionsSheet_();
       const lockedInvestedAmount = portfolio.reduce((sum, inv) => sum + inv.amount, 0);
       portfolio.forEach(inv => {
-        const share = lockedInvestedAmount > 0 ? (inv.amount / lockedInvestedAmount) * delta : 0;
+        const share = lockedInvestedAmount > 0 ? (inv.amount / lockedInvestedAmount) * accrued1718Today : 0;
         const reqRow = findRequestRowById_(investSheet, inv.requestId);
         if (reqRow) {
           const currentAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
@@ -581,10 +575,12 @@ function getLockedAmountForWithdrawal(username) {
 }
 
 function previewAccrual_(username) {
+    const usersSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
+    const { row } = findOrCreateUserRow_(usersSheet, username);
+    const lastAvailableUpdate = new Date(usersSheet.getRange(row, 18).getValue() || new Date());
     const now = new Date();
-    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const accruedToday = computeInterestForPeriod(username, dayStart, now); // For all investments
-    return { accruedToday: round2(accruedToday) }; // Round for display
+    const accruedSinceLastUpdate = computeInterestForPeriod(username, lastAvailableUpdate, now); // For all investments
+    return { accruedToday: round2(accruedSinceLastUpdate) }; // Round for display
 }
 
 function computeInterestForPeriod(username, fromDate, toDate, rateFilter = null) {

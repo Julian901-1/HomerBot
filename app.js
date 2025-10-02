@@ -83,7 +83,7 @@ function scheduleSync(delay = syncBackoffMs) {
   clearTimeout(syncTimer);
   const jitter = Math.floor(Math.random() * 3000);
   const next = Math.min(Math.max(delay, 5000), SYNC_BACKOFF_MAX); // 5s..60s
-  syncTimer = setTimeout(() => syncBalance(true), next + jitter);
+  syncTimer = setTimeout(() => syncBalance(), next + jitter);
 }
 document.addEventListener('visibilitychange', () => {
   // return to tab — fast ping
@@ -500,16 +500,23 @@ async function initializeApp() {
     if (!serverState.portfolio) serverState.portfolio = [];
     hasPendingDeposit = computeHasPendingDeposit();
 
-    // Redraw main screens
+    // Today income first
     setBootProgress(60);
+    await refreshTodayIncome();
+
+    // Sync balance to get fresh data
+    setBootProgress(70);
+    await syncBalance();
+
+    // Redraw main screens
+    setBootProgress(80);
     updateDashboard(serverState);
     recomputeFilteredHistory();
     renderHistoryPage(false);
     renderPortfolio(serverState.portfolio);
 
-    // Today income + withdrawal UI
-    setBootProgress(80);
-    await refreshTodayIncome();
+    // Withdrawal UI
+    setBootProgress(90);
     updateWithdrawUI();
 
     // Finalization
