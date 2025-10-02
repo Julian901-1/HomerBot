@@ -265,20 +265,29 @@ function syncBalance(username) {
     let totalEarnings = Number(usersSheet.getRange(row, 20).getValue() || 0);
     let available16Interest = Number(usersSheet.getRange(row, 21).getValue() || 0);
     let pendingInterest = Number(usersSheet.getRange(row, 17).getValue() || 0);
-    let lastDayProcessed = usersSheet.getRange(row, 18).getValue();
+    let lastSyncTime = usersSheet.getRange(row, 18).getValue();
     
-    // Initialize lastDayProcessed if missing
-    if (!lastDayProcessed || !(lastDayProcessed instanceof Date)) {
-      lastDayProcessed = new Date();
-      lastDayProcessed.setHours(0, 0, 0, 0);
+    // Initialize lastSyncTime if missing
+    if (!lastSyncTime || !(lastSyncTime instanceof Date)) {
+      lastSyncTime = new Date();
+      lastSyncTime.setHours(0, 0, 0, 0);
     }
 
     const now = new Date();
     const currentDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const lastDayStart = new Date(lastDayProcessed.getFullYear(), lastDayProcessed.getMonth(), lastDayProcessed.getDate(), 0, 0, 0, 0);
+    const lastSyncDayStart = new Date(lastSyncTime.getFullYear(), lastSyncTime.getMonth(), lastSyncTime.getDate(), 0, 0, 0, 0);
+
+    // CRITICAL FIX: Remove today's partial interest from previous sync before processing
+    // This prevents double-counting of 17%/18% interest
+    if (lastSyncDayStart.getTime() === currentDayStart.getTime()) {
+      // Last sync was today - remove partial interest from previous sync
+      const previousInterest16 = computeInterestForPeriod(username, currentDayStart, lastSyncTime, 16);
+      const previousInterest1718 = computeInterestForPeriod(username, currentDayStart, lastSyncTime, [17, 18]);
+      totalEarnings = round2(totalEarnings - previousInterest16 - previousInterest1718);
+    }
 
     // Process missed days (if user didn't log in for days/weeks)
-    let processingDay = new Date(lastDayStart);
+    let processingDay = new Date(lastSyncDayStart);
     while (processingDay < currentDayStart) {
       const dayEnd = new Date(processingDay);
       dayEnd.setHours(23, 59, 59, 999);
@@ -304,9 +313,8 @@ function syncBalance(username) {
     const interest16Today = computeInterestForPeriod(username, currentDayStart, now, 16);
     const interest1718Today = computeInterestForPeriod(username, currentDayStart, now, [17, 18]);
     
-    // Update totalEarnings with today's interest (for visual display)
-    // Note: We subtract old pendingInterest to avoid double-counting
-    totalEarnings = round2(totalEarnings - pendingInterest + interest16Today + interest1718Today);
+    // Add today's interest to totalEarnings (already removed previous partial interest above)
+    totalEarnings = round2(totalEarnings + interest16Today + interest1718Today);
     
     // Today's 16% interest stays in pendingInterest (will unlock at midnight)
     pendingInterest = round2(interest16Today);
@@ -349,7 +357,7 @@ function syncBalance(username) {
 
     // Save updated values
     usersSheet.getRange(row, 17).setValue(pendingInterest);
-    usersSheet.getRange(row, 18).setValue(now); // lastDayProcessed = now
+    usersSheet.getRange(row, 18).setValue(now); // lastSyncTime = now
     usersSheet.getRange(row, 19).setValue(userDeposits);
     usersSheet.getRange(row, 20).setValue(totalEarnings);
     usersSheet.getRange(row, 21).setValue(available16Interest);

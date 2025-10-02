@@ -83,7 +83,7 @@ function scheduleSync(delay = syncBackoffMs) {
   clearTimeout(syncTimer);
   const jitter = Math.floor(Math.random() * 3000);
   const next = Math.min(Math.max(delay, 5000), SYNC_BACKOFF_MAX); // 5s..60s
-  syncTimer = setTimeout(() => syncBalance(), next + jitter);
+  syncTimer = setTimeout(() => syncBalance(true), next + jitter);
 }
 document.addEventListener('visibilitychange', () => {
   // return to tab — fast ping
