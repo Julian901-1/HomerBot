@@ -299,42 +299,44 @@ window.addEventListener('resize', fitStatText);
 // -------- RENDER --------
 function updateDashboard(data) {
   serverState = { ...serverState, ...data };
-  const { balance, monthBase, lockedAmount, availableBalance } = serverState;
   const currency = userPrefs.currency;
   const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
 
-  // Use balance from data directly for main balance display
-  document.getElementById('balanceValue').textContent = `${fmtMoney(balance || 0, currency)} ${currencySymbol}`;
+  // Extract data from server response
+  const balance = data.balance || 0;
+  const userDeposits = data.userDeposits || 0;
+  const totalEarnings = data.totalEarnings || 0;
+  const investedAmount = data.investedAmount || data.monthBase || 0;
+  const availableForWithdrawal = data.availableForWithdrawal || 0;
+  const availableForInvest = data.availableForInvest || 0;
+  const accruedToday = data.accruedToday || 0;
 
-  // New formulas based on user requirements
-  const userDeposits = serverState.userDeposits || 0;
-  const totalEarnings = serverState.totalEarnings || 0;
-  const accruedToday = serverState.accruedToday || 0;
-  const investedAmount = monthBase; // investedAmount
-  const lockedAmountForWithdrawal = serverState.lockedAmountForWithdrawal || 0;
+  // Main balance: userDeposits + totalEarnings
+  document.getElementById('balanceValue').textContent =
+    `${fmtMoney(balance, currency)} ${currencySymbol}`;
 
-  // "Свободный баланс" = userDeposits - investedAmount
-  const freeBalance = userDeposits - investedAmount;
-  document.getElementById('freeBalance').innerHTML = `${fmtMoney(freeBalance, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+  // Free balance = available for investing
+  document.getElementById('freeBalance').innerHTML =
+    `${fmtMoney(availableForInvest, currency)} <span class="cur-sym">${currencySymbol}</span>`;
 
-  // "Инвестировано" = investedAmount
-  document.getElementById('investedBalance').innerHTML = `${fmtMoney(investedAmount, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+  // Invested amount
+  document.getElementById('investedBalance').innerHTML =
+    `${fmtMoney(investedAmount, currency)} <span class="cur-sym">${currencySymbol}</span>`;
 
+  // Username
   document.getElementById('profileUsername').textContent = username || 'User';
 
-  // "Доступно для вывода" = userDeposits - lockedAmountForWithdrawal
-  const withdrawAvailable = userDeposits - lockedAmountForWithdrawal;
-  document.getElementById('withdrawAvailable').innerHTML = `${fmtMoney(withdrawAvailable, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+  // Available for withdrawal
+  document.getElementById('withdrawAvailable').innerHTML =
+    `${fmtMoney(availableForWithdrawal, currency)} <span class="cur-sym">${currencySymbol}</span>`;
 
-  // "Доступно для инвестирования" = userDeposits - investedAmount (same as freeBalance)
-  document.getElementById('investAvailable').innerHTML = `${fmtMoney(freeBalance, currency)} ${currencySymbol}`;
+  // Available for investing
+  document.getElementById('investAvailable').innerHTML =
+    `${fmtMoney(availableForInvest, currency)} ${currencySymbol}`;
 
-  // "Доход сегодня" = accruedToday
-  renderTodayIncome(accruedToday);
-
-  // Today income — instant under selected currency
+  // Today's income
+  latestTodayIncomeRub = accruedToday;
   renderTodayIncome();
-
 
   fitBalanceText();
   fitStatText();
@@ -533,71 +535,96 @@ async function initializeApp() {
 // Updates balance + "Today income"; additionally tracks completion of PENDING deposit
 async function syncBalance(fromScheduler = false) {
   console.log('Frontend syncBalance start', new Date().toISOString());
-  // do not launch parallel cycles
-  if (syncInFlight) { if (fromScheduler) scheduleSync(); return; }
+  
+  // Prevent parallel sync cycles
+  if (syncInFlight) {
+    console.log('Sync already in flight, skipping');
+    if (fromScheduler) scheduleSync();
+    return;
+  }
+  
   syncInFlight = true;
+  const syncStartTime = Date.now();
+  const SYNC_TIMEOUT = 30000; // 30 seconds timeout
 
   try {
-    // if PENDING deposit exists — pull full slice (including history), otherwise — light requests
-    let data = null;
-    if (hasPendingDeposit) {
-      // one request returns balance, history, prefs
-      const full = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
-      if (full && full.success) {
-        data = full;
-        serverState = { ...serverState, ...full };
-        updateDashboard(serverState);
-        recomputeFilteredHistory();
-        renderHistoryPage(false);
-        renderPortfolio(serverState.portfolio);
+    // Create timeout promise
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Sync timeout after 30s')), SYNC_TIMEOUT)
+    );
+
+    // Create sync promise
+    const syncPromise = (async () => {
+      let data = null;
+      
+      if (hasPendingDeposit) {
+        // Full data for pending deposits
+        const full = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+        if (full && full.success) {
+          data = full;
+          serverState = { ...serverState, ...full };
+          updateDashboard(serverState);
+          recomputeFilteredHistory();
+          renderHistoryPage(false);
+          renderPortfolio(serverState.portfolio);
+        }
+      } else {
+        // Fast path: balance + income preview
+        const [balRes, accrRes] = await Promise.allSettled([
+          apiGet(`?action=syncBalance&username=${encodeURIComponent(username)}`),
+          apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`)
+        ]);
+        
+        if (balRes.status === 'fulfilled' && balRes.value?.success) {
+          data = balRes.value;
+          serverState = { ...serverState, ...balRes.value };
+          updateDashboard(serverState);
+        }
+        
+        if (accrRes.status === 'fulfilled' && accrRes.value?.success) {
+          latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
+        }
+        
+        renderTodayIncome();
       }
-    } else {
-      // fast path: balance + income
-      const [balRes, accrRes] = await Promise.allSettled([
-        apiGet(`?action=syncBalance&username=${encodeURIComponent(username)}`),
-        apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`)
-      ]);
-      if (balRes.status === 'fulfilled' && balRes.value && balRes.value.success) {
-        data = balRes.value;
-        serverState = { ...serverState, ...balRes.value };
-        updateDashboard(serverState);
+
+      // Check deposit status transition
+      const before = hasPendingDeposit;
+      const now = computeHasPendingDeposit();
+      hasPendingDeposit = now;
+
+      if (before && !now) {
+        const last = (serverState.history || [])
+          .filter(x => x.type === 'DEPOSIT')
+          .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+        if (last && (last.status === 'APPROVED' || last.status === 'REJECTED' || last.status === 'CANCELED')) {
+          const msg = last.status === 'APPROVED' ?
+            'Средства зачислены на счёт' : 'Депозит не удался';
+          closeDepositFlowWithPopup(msg);
+        }
       }
-      if (accrRes.status === 'fulfilled' && accrRes.value && accrRes.value.success) {
-        latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
-      }
-  renderTodayIncome();
-     }
 
-     // === AFTER updating data: check deposit status transition ===
-     const before = hasPendingDeposit;
-     const now = computeHasPendingDeposit();
-     hasPendingDeposit = now; // synchronize flag
+      syncBackoffMs = 20000; // Reset backoff on success
+      console.log('Frontend syncBalance success', new Date().toISOString());
+      return data;
+    })();
 
-     // Only show completion message for deposits with final status (APPROVED/REJECTED/CANCELED)
-     if (before && !now) {
-       const last = (serverState.history || [])
-         .filter(x => x.type === 'DEPOSIT')
-         .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-
-       if (last && (last.status === 'APPROVED' || last.status === 'REJECTED' || last.status === 'CANCELED')) {
-         const msg = last.status === 'APPROVED'
-           ? 'Средства зачислены на счёт'
-           : 'Депозит не удался';
-         closeDepositFlowWithPopup(msg);
-       }
-       // Don't show "Операция завершена" for PENDING deposits that disappeared from history
-     }
-
-     // successful cycle — soft interval
-     syncBackoffMs = 20000;
-     console.log('Frontend syncBalance response', data, new Date().toISOString());
+    // Race between sync and timeout
+    await Promise.race([syncPromise, timeoutPromise]);
 
   } catch (e) {
-    // network/error — increase interval, but not more than 60s
+    console.error('Sync error:', e.message);
+    // Increase backoff on error, max 60s
     syncBackoffMs = Math.min((syncBackoffMs || 20000) * 2, 60000);
   } finally {
     syncInFlight = false;
-    if (fromScheduler) scheduleSync(); // plan next entry
+    const syncDuration = Date.now() - syncStartTime;
+    console.log(`Sync completed in ${syncDuration}ms`);
+    
+    if (fromScheduler) {
+      scheduleSync();
+    }
   }
 }
 
@@ -1013,8 +1040,8 @@ function openNewInvestment(rate) {
 function updateInvestButtonState() {
   const amountEl = document.getElementById('niAmount');
   const btn = document.getElementById('niConfirmBtn');
-  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100; // round to 2 decimal places
-  const available = Math.round(((serverState.balance || 0) - (serverState.lockedAmount || 0)) * 100) / 100;
+  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100;
+  const available = serverState.availableForInvest || 0;
   btn.disabled = amount <= 0 || amount > available;
 }
 
@@ -1022,10 +1049,10 @@ function updateWithdrawBtnState() {
   const amountEl = document.getElementById('withdrawAmount');
   const trigger = document.getElementById('select-trigger');
   const btn = document.getElementById('withdrawConfirmBtn');
-  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100; // round to 2 decimal places
+  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100;
   const idx = trigger ? parseInt(trigger.dataset.index) : -1;
   const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
-  const available = serverState.availableBalance || Math.round(((serverState.balance || 0) - (serverState.lockedAmountForWithdrawal || 0)) * 100) / 100;
+  const available = serverState.availableForWithdrawal || 0;
   btn.disabled = amount <= 0 || amount > available || !recipient;
 }
 
