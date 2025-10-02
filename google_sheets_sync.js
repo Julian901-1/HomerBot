@@ -243,7 +243,7 @@ function getInitialData(username) {
  * @returns {Object} Object containing balance, monthBase, and lockedAmount.
  */
 function syncBalance(username) {
-  console.log('syncBalance start for', username, new Date().toISOString(), 'v3.2');
+  console.log('syncBalance start for', username, new Date().toISOString(), 'v3.5');
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const usersSheet = ss.getSheetByName(SHEET_NAME);
   const reqSheet = ensureRequestsSheet_();
@@ -314,9 +314,9 @@ function syncBalance(username) {
       if (toAdd > 0) {
         // Move monthly interest to available balance immediately (since it's end of month)
         availableBalance = round2(availableBalance + toAdd);
-        totalEarnings = round2(totalEarnings + toAdd);
+        currentTotalEarnings = round2(currentTotalEarnings + toAdd);
         usersSheet.getRange(row, 16).setValue(availableBalance);
-        usersSheet.getRange(row, 20).setValue(totalEarnings);
+        usersSheet.getRange(row, 20).setValue(currentTotalEarnings);
       }
       paidThisMonth = 0;
       paidCell.setValue(0);
@@ -330,15 +330,15 @@ function syncBalance(username) {
     const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     // Get current totalEarnings
-    let totalEarnings = Number(usersSheet.getRange(row, 20).getValue() || 0);
+    let currentTotalEarnings = Number(usersSheet.getRange(row, 20).getValue() || 0);
 
     // 16% interest goes to available balance immediately (can withdraw but not reinvest)
     const accrued16Today = computeInterestForPeriod(username, dayStart, now, 16);
     if (accrued16Today > 0) {
       availableBalance = round2(availableBalance + accrued16Today);
-      totalEarnings = round2(totalEarnings + accrued16Today);
+      currentTotalEarnings = round2(currentTotalEarnings + accrued16Today);
       usersSheet.getRange(row, 16).setValue(availableBalance);
-      usersSheet.getRange(row, 20).setValue(totalEarnings);
+      usersSheet.getRange(row, 20).setValue(currentTotalEarnings);
     }
 
     // 17%/18% interest goes to pending interest (becomes available at midnight)
@@ -346,11 +346,11 @@ function syncBalance(username) {
     const delta = Math.max(0, accrued1718Today - paidThisMonth);
     if (delta > 0) {
       pendingInterest = round2(pendingInterest + delta);
-      totalEarnings = round2(totalEarnings + delta);
+      currentTotalEarnings = round2(currentTotalEarnings + delta);
       paidThisMonth = paidThisMonth + delta;
       paidCell.setValue(round2(paidThisMonth));
       usersSheet.getRange(row, 17).setValue(pendingInterest);
-      usersSheet.getRange(row, 20).setValue(totalEarnings);
+      usersSheet.getRange(row, 20).setValue(currentTotalEarnings);
 
       // Update accrued interest for 17%/18% investments
       const portfolio = getPortfolio(username).filter(inv => inv.rate === 17 || inv.rate === 18);
@@ -397,9 +397,12 @@ function syncBalance(username) {
     usersSheet.getRange(row, 6).setValue(effectiveRate);
 
     const lockedAmount = getLockedAmount(username);
+    const userDeposits = Number(usersSheet.getRange(row, 19).getValue() || 0);
+    const totalEarnings = Number(usersSheet.getRange(row, 20).getValue() || 0);
+    const correctBalance = round2(userDeposits + totalEarnings);
     console.log('syncBalance end:', new Date().toISOString());
     return {
-        balance: round2(balance),
+        balance: correctBalance,
         monthBase: round2(investedAmount),
         lockedAmount: round2(lockedAmount),
         lockedAmountForWithdrawal: round2(lockedAmountForWithdrawal),
@@ -574,7 +577,7 @@ function getLockedAmountForWithdrawal(username) {
             if (!item.unfreezeDate) return true; // If no date, assume locked
             return item.unfreezeDate > now; // Still frozen
         })
-        .reduce((sum, item) => sum + item.amount + item.accruedInterest, 0);
+        .reduce((sum, item) => sum + item.amount, 0); // Don't include accruedInterest in locked amount
 }
 
 function previewAccrual_(username) {

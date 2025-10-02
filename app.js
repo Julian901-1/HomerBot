@@ -303,16 +303,15 @@ function updateDashboard(data) {
   const currency = userPrefs.currency;
   const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
 
+  // Use balance from data directly for main balance display
+  document.getElementById('balanceValue').textContent = `${fmtMoney(balance || 0, currency)} ${currencySymbol}`;
+
   // New formulas based on user requirements
   const userDeposits = serverState.userDeposits || 0;
   const totalEarnings = serverState.totalEarnings || 0;
   const accruedToday = serverState.accruedToday || 0;
   const investedAmount = monthBase; // investedAmount
   const lockedAmountForWithdrawal = serverState.lockedAmountForWithdrawal || 0;
-
-  // "Баланс" = userDeposits + totalEarnings
-  const totalBalance = userDeposits + totalEarnings;
-  document.getElementById('balanceValue').textContent = `${fmtMoney(totalBalance, currency)} ${currencySymbol}`;
 
   // "Свободный баланс" = userDeposits - investedAmount
   const freeBalance = userDeposits - investedAmount;
