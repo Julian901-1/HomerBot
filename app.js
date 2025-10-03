@@ -1190,7 +1190,10 @@ function updateWithdrawWarning() {
     const currentAmount = inv.amount;
     const accruedInterest = inv.accruedInterest || 0;
 
-    // Считаем pending income (сегодняшний незаблокированный доход)
+    // Считаем сколько будет закрыто
+    const amountToClose = Math.min(remaining, currentAmount);
+
+    // Считаем pending income (сегодняшний незаблокированный доход) ТОЛЬКО для закрываемой суммы
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const createdAt = new Date(inv.createdAt);
@@ -1198,17 +1201,19 @@ function updateWithdrawWarning() {
     const effectiveStart = createdAt > todayStart ? createdAt : todayStart;
     const msElapsedToday = Math.max(0, now.getTime() - effectiveStart.getTime());
     const daysElapsedToday = msElapsedToday / (24 * 60 * 60 * 1000);
-    const pendingToday = currentAmount * dailyRate * daysElapsedToday;
+
+    // ИСПРАВЛЕНИЕ: Считаем pending доход только для закрываемой суммы
+    const pendingTodayForClosedAmount = amountToClose * dailyRate * daysElapsedToday;
 
     if (remaining >= currentAmount) {
       // Полное закрытие
       toClose.push({ ...inv, closureType: 'full', closedAmount: currentAmount });
-      totalPendingInterestLost += pendingToday;
+      totalPendingInterestLost += pendingTodayForClosedAmount;
       remaining -= currentAmount;
     } else {
       // Частичное закрытие
       toClose.push({ ...inv, closureType: 'partial', closedAmount: remaining });
-      totalPendingInterestLost += (pendingToday * (remaining / currentAmount));
+      totalPendingInterestLost += pendingTodayForClosedAmount;
       remaining = 0;
     }
   }
