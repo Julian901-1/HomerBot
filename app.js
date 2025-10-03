@@ -610,6 +610,25 @@ async function syncBalance(fromScheduler = false) {
         }
       }
 
+      // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Если модалка депозита открыта, но нет PENDING депозитов - закрыть её
+      const depositModal = document.getElementById('modalDeposit');
+      if (depositModal && depositModal.classList.contains('active') && !now) {
+        // Проверяем последний депозит
+        const lastDeposit = (serverState.history || [])
+          .filter(x => x.type === 'DEPOSIT')
+          .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+        if (lastDeposit && lastDeposit.status === 'APPROVED') {
+          lastDepositAmount = 0;
+          lastDepositShortId = null;
+          closeDepositFlowWithPopup('Средства зачислены на счёт');
+        } else if (lastDeposit && (lastDeposit.status === 'REJECTED' || lastDeposit.status === 'CANCELED')) {
+          lastDepositAmount = 0;
+          lastDepositShortId = null;
+          closeDepositFlowWithPopup('Депозит не удался');
+        }
+      }
+
       syncBackoffMs = 20000; // Reset backoff on success
       console.log('=== FRONTEND syncBalance SUCCESS ===');
       return data;

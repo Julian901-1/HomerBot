@@ -259,13 +259,14 @@ function getInitialData(username) {
     const portfolio = getPortfolio(username);
     const userPrefs = getUserPrefs(username);
 
-    // accruedToday уже входит в balanceData как todayIncome
+    // ВАЖНО: accruedToday = todayIncome (для обратной совместимости)
+    // todayIncome теперь считается правильно с учетом времени создания инвестиций
 
     return {
         ...balanceData,
         history,
         portfolio,
-        accruedToday: balanceData.todayIncome, // Для обратной совместимости
+        accruedToday: balanceData.todayIncome,
         userPrefs
     };
 }
@@ -647,6 +648,7 @@ function calculateBalances(username) {
   let availableForWithdrawal = userDeposits; // Начинаем с депозитов
   let investedAmount = 0;
   let todayIncome = 0;
+  let locked1718Principal = 0; // Заблокированная основная сумма 17%/18%
 
   // 3. Для каждой инвестиции считаем текущие проценты из accruedInterest
   const investSheet = ensureInvestTransactionsSheet_();
@@ -690,13 +692,19 @@ function calculateBalances(username) {
                      inv.unfreezeDate > now &&
                      !inv.delivered;
 
-    if (!isFrozen) {
-      // КРИТИЧЕСКИ ВАЖНО: Доступны для вывода ТОЛЬКО проценты до сегодня!
+    if (isFrozen) {
+      // ЗАБЛОКИРОВАННАЯ инвестиция 17%/18%: основная сумма НЕ доступна для вывода!
+      locked1718Principal += inv.amount;
+    } else {
+      // РАЗБЛОКИРОВАННАЯ инвестиция (16% или разморозившаяся 17%/18%):
+      // Доступны для вывода ТОЛЬКО проценты до сегодня!
       // Сегодняшние проценты станут доступны только после 00:00
       availableForWithdrawal += accruedUntilToday;
     }
-    // Если заблокирована - ничего не добавляем к availableForWithdrawal
   }
+
+  // КРИТИЧЕСКИ ВАЖНО: Вычитаем заблокированную основную сумму 17%/18%
+  availableForWithdrawal -= locked1718Principal;
 
   console.log('totalEarnedFromInvestments:', totalEarnedFromInvestments);
   console.log('availableForWithdrawal:', availableForWithdrawal);
