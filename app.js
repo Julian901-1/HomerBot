@@ -712,47 +712,55 @@ function setupEventListeners() {
 });
 
 
-  // Deposit — create request
-  onIf($id('depositConfirmBtn'), 'click', async function () {
-    const amountEl = $id('depositAmount');
-    const amount = amountEl ? Math.round(parseAmount(amountEl.value) * 100) / 100 : 0;
+// Deposit – create request
+onIf($id('depositConfirmBtn'), 'click', async function () {
+  const amountEl = $id('depositAmount');
+  const amount = amountEl ? Math.round(parseAmount(amountEl.value) * 100) / 100 : 0;
 
-    if (amount < 100) {
-      showPopup('Минимальная сумма депозита: 100 ₽');
-      return;
-    }
-    if (amount > 10000000) {
-      showPopup('Максимальная сумма депозита: 10 000 000 ₽');
-      return;
-    }
+  if (amount < 100) {
+    showPopup('Минимальная сумма депозита: 100 ₽');
+    return;
+  }
+  if (amount > 10000000) {
+    showPopup('Максимальная сумма депозита: 10 000 000 ₽');
+    return;
+  }
 
-    this.disabled = true;
+  this.disabled = true;
 
-    try {
-      const resp = await apiGet(
-        `?action=requestDeposit&username=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}`
-      );
+  try {
+    const resp = await apiGet(
+      `?action=requestDeposit&username=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}`
+    );
 
-      if (resp && resp.success) {
-        showPopup('Запрос на депозит отправлен!');
-        hasPendingDeposit = true;
-        lastDepositAmount = amount;
-  lastDepositShortId = resp && (resp.shortId || resp.requestShortId) || null;
-// Clean amount for display value, but keep for copy
-const cleanAmount = lastDepositAmount.toString().replace(/[^\d]/g, '');
-amountEl.value = cleanAmount; // Set clean number to value for copying, but display formatted elsewhere if needed
-hydrateDepositStep2(lastDepositAmount, lastDepositShortId);
-showDepositStep(2); // lock instructions screen
-initializeApp();    // pull history/balance
-      } else {
-        showPopup('Error: ' + ((resp && resp.error) || 'unknown'));
+    if (resp && resp.success) {
+      showPopup('Запрос на депозит отправлен!');
+      hasPendingDeposit = true;
+      lastDepositAmount = amount;
+      lastDepositShortId = resp && (resp.shortId || resp.requestShortId) || null;
+      const cleanAmount = lastDepositAmount.toString().replace(/[^\d]/g, '');
+      amountEl.value = cleanAmount;
+      hydrateDepositStep2(lastDepositAmount, lastDepositShortId);
+      showDepositStep(2);
+      
+      // Обновляем данные без полной переинициализации
+      const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+      if (data && data.success) {
+        serverState = { ...serverState, ...data };
+        updateDashboard(serverState);
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+        renderPortfolio(serverState.portfolio);
       }
-    } catch (e) {
-      showPopup('Ошибка сети.');
-    } finally {
-      this.disabled = false;
+    } else {
+      showPopup('Error: ' + ((resp && resp.error) || 'unknown'));
     }
-  });
+  } catch (e) {
+    showPopup('Ошибка сети.');
+  } finally {
+    this.disabled = false;
+  }
+});
 
   // Withdraw — bank selection (icons)
   document.querySelectorAll('.bank-icon').forEach((icon) => {
@@ -795,36 +803,45 @@ initializeApp();    // pull history/balance
 
   // Close custom select on outside click (already handled in general click listener)
 
-  // Withdraw — create request
-  onIf($id('withdrawConfirmBtn'), 'click', async function () {
-    const amountEl = $id('withdrawAmount');
-    const trigger = $id('select-trigger');
-    const amount = amountEl ? Math.round(parseAmount(amountEl.value) * 100) / 100 : 0;
-    const idx = trigger ? parseInt(trigger.dataset.index) : -1;
-    const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
-    const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
+  // Withdraw – create request
+onIf($id('withdrawConfirmBtn'), 'click', async function () {
+  const amountEl = $id('withdrawAmount');
+  const trigger = $id('select-trigger');
+  const amount = amountEl ? Math.round(parseAmount(amountEl.value) * 100) / 100 : 0;
+  const idx = trigger ? parseInt(trigger.dataset.index) : -1;
+  const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
+  const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
 
-    if (amount <= 0) { showPopup('Введите сумму.'); return; }
-    if (amount > available) { showPopup('Недостаточно свободных средств.'); return; }
-    if (!recipient) { showPopup('Выберите реквизиты для вывода.'); return; }
+  if (amount <= 0) { showPopup('Введите сумму.'); return; }
+  if (amount > available) { showPopup('Недостаточно свободных средств.'); return; }
+  if (!recipient) { showPopup('Выберите реквизиты для вывода.'); return; }
 
-    this.disabled = true;
-    try {
-      const details = JSON.stringify({ method: 'sbp', phone: recipient.phone, bank: recipient.bank });
-      const resp = await apiGet(`?action=requestWithdraw&username=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}&details=${encodeURIComponent(details)}`);
-      if (resp && resp.success) {
-        showPopup('Запрос на вывод отправлен!');
-        closeModal('withdraw');
-        initializeApp();
-      } else {
-        showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестна'));
+  this.disabled = true;
+  try {
+    const details = JSON.stringify({ method: 'sbp', phone: recipient.phone, bank: recipient.bank });
+    const resp = await apiGet(`?action=requestWithdraw&username=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}&details=${encodeURIComponent(details)}`);
+    if (resp && resp.success) {
+      showPopup('Запрос на вывод отправлен!');
+      closeModal('withdraw');
+      
+      // Обновляем данные без полной переинициализации
+      const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+      if (data && data.success) {
+        serverState = { ...serverState, ...data };
+        updateDashboard(serverState);
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+        renderPortfolio(serverState.portfolio);
       }
-    } catch (e) {
-      showPopup('Ошибка сети.');
-    } finally {
-      this.disabled = false;
+    } else {
+      showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестна'));
     }
-  });
+  } catch (e) {
+    showPopup('Ошибка сети.');
+  } finally {
+    this.disabled = false;
+  }
+});
 
   // New Investment — confirm
   onIf($id('niConfirmBtn'), 'click', async function () {
@@ -838,11 +855,21 @@ initializeApp();    // pull history/balance
     this.disabled = true;
     try {
       const resp = await apiGet(`?action=logStrategyInvestment&username=${encodeURIComponent(username)}&rate=${encodeURIComponent(rate)}&amount=${encodeURIComponent(amount)}`);
-      if (resp && resp.success) {
-        showPopup('Инвестиция создана!');
-        closeModal('newInvestment');
-        initializeApp();
-      } else {
+// После создания инвестиции
+if (resp && resp.success) {
+  showPopup('Инвестиция создана!');
+  closeModal('newInvestment');
+  
+  // Обновляем данные без полной переинициализации
+  const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+  if (data && data.success) {
+    serverState = { ...serverState, ...data };
+    updateDashboard(serverState);
+    recomputeFilteredHistory();
+    renderHistoryPage(false);
+    renderPortfolio(serverState.portfolio);
+  }
+} else {
         showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестна'));
       }
     } catch (e) {
