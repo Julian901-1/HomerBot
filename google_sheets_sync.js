@@ -203,6 +203,12 @@ function doPost(e) {
                 // Дублируем в column 19 для обратной совместимости
                 usersSheet.getRange(userRow, 19).setValue(newDeposits);
 
+                // КРИТИЧЕСКИ ВАЖНО: При выводе закрываем инвестиции пропорционально
+                if (type === 'WITHDRAW') {
+                  const withdrawAmount = Math.abs(amount);
+                  closeInvestmentsProportionally_(username, withdrawAmount);
+                }
+
                 // Пометить как примененное к балансу (column 9)
                 reqSheet.getRange(reqRow, 9).setValue(true);
 
@@ -871,6 +877,77 @@ function ensurePrefsSheet_() {
         sh.getRange(1, 1, 1, 5).setValues([['username', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency']]);
     }
     return sh;
+}
+
+/**
+ * Закрывает инвестиции пропорционально при выводе средств.
+ * Приоритет: сначала 16% (ликвидные), потом разблокированные 17%/18%, потом заблокированные.
+ *
+ * @param {string} username - Имя пользователя
+ * @param {number} withdrawAmount - Сумма вывода
+ */
+function closeInvestmentsProportionally_(username, withdrawAmount) {
+  console.log(`=== closeInvestmentsProportionally START: ${username}, amount=${withdrawAmount} ===`);
+
+  const investSheet = ensureInvestTransactionsSheet_();
+  const portfolio = getPortfolio(username);
+
+  if (portfolio.length === 0) {
+    console.log('No investments to close');
+    return;
+  }
+
+  const now = new Date();
+
+  // Сортируем инвестиции по приоритету: 16% -> разблокированные 17%/18% -> заблокированные 17%/18%
+  const sorted = portfolio.sort((a, b) => {
+    const aFrozen = (a.rate === 17 || a.rate === 18) && a.unfreezeDate && a.unfreezeDate > now && !a.delivered;
+    const bFrozen = (b.rate === 17 || b.rate === 18) && b.unfreezeDate && b.unfreezeDate > now && !b.delivered;
+
+    if (a.rate === 16 && b.rate !== 16) return -1; // 16% в приоритете
+    if (a.rate !== 16 && b.rate === 16) return 1;
+    if (!aFrozen && bFrozen) return -1; // Разблокированные в приоритете
+    if (aFrozen && !bFrozen) return 1;
+    return 0;
+  });
+
+  let remaining = withdrawAmount;
+
+  for (const inv of sorted) {
+    if (remaining <= 0) break;
+
+    const reqRow = findRequestRowById_(investSheet, inv.requestId);
+    if (!reqRow) continue;
+
+    const currentAmount = Number(investSheet.getRange(reqRow, 8).getValue() || 0);
+
+    if (currentAmount <= 0) continue;
+
+    if (remaining >= currentAmount) {
+      // Закрываем инвестицию полностью - удаляем строку
+      console.log(`Closing investment ${inv.shortId} completely: ${currentAmount}`);
+      investSheet.deleteRow(reqRow);
+      remaining -= currentAmount;
+    } else {
+      // Частичное закрытие - уменьшаем сумму
+      const newAmount = round2(currentAmount - remaining);
+      console.log(`Partially closing investment ${inv.shortId}: ${currentAmount} -> ${newAmount}`);
+      investSheet.getRange(reqRow, 8).setValue(newAmount);
+
+      // Пересчитываем accruedInterest пропорционально
+      const oldAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
+      const newAccrued = round2(oldAccrued * (newAmount / currentAmount));
+      investSheet.getRange(reqRow, 11).setValue(newAccrued);
+
+      remaining = 0;
+    }
+  }
+
+  if (remaining > 0) {
+    console.warn(`WARNING: Could not close all investments, remaining=${remaining}`);
+  }
+
+  console.log('=== closeInvestmentsProportionally END ===');
 }
 
 /**
