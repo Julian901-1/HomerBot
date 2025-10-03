@@ -275,7 +275,20 @@
             <div class="select-trigger" id="select-trigger">Выберите реквизиты</div>
             <div class="select-options" id="select-options"></div>
           </div>
-          <input type="text" class="amount-input" id="withdrawAmount" placeholder="0" oninput="formatAmountInput(this); updateWithdrawBtnState();" inputmode="decimal">
+          <input type="text" class="amount-input" id="withdrawAmount" placeholder="0" oninput="formatAmountInput(this); updateWithdrawBtnState(); updateWithdrawWarning();" inputmode="decimal">
+
+          <div id="withdraw-warning" style="display:none; margin: 16px 0; padding: 12px; border: 1px solid rgba(220, 38, 38, 0.5); border-radius: 8px; background: rgba(220, 38, 38, 0.05);">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+              <span style="color: #dc2626; font-weight: 600;">Предупреждение</span>
+            </div>
+            <div id="withdraw-warning-content" style="color: var(--text-secondary); font-size: 14px; line-height: 1.5;"></div>
+          </div>
+
           <button class="btn btn-primary" id="withdrawConfirmBtn" style="width:100%">Создать запрос</button>
         </div>
 

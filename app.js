@@ -578,6 +578,10 @@ async function syncBalance(fromScheduler = false) {
           data = balRes.value;
           serverState = { ...serverState, ...balRes.value };
           updateDashboard(serverState);
+          // ВАЖНО: Обновляем портфель если он пришел в ответе
+          if (balRes.value.portfolio) {
+            renderPortfolio(balRes.value.portfolio);
+          }
         }
         
         if (accrRes.status === 'fulfilled' && accrRes.value?.success) {
@@ -1105,6 +1109,105 @@ function updateWithdrawBtnState() {
   const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
   const available = serverState.availableForWithdrawal || 0;
   btn.disabled = amount <= 0 || amount > available || !recipient;
+}
+
+function updateWithdrawWarning() {
+  const amountEl = document.getElementById('withdrawAmount');
+  const warningDiv = document.getElementById('withdraw-warning');
+  const warningContent = document.getElementById('withdraw-warning-content');
+
+  if (!amountEl || !warningDiv || !warningContent) return;
+
+  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100;
+
+  if (amount <= 0) {
+    warningDiv.style.display = 'none';
+    return;
+  }
+
+  const portfolio = serverState.portfolio || [];
+  const userDeposits = serverState.userDeposits || 0;
+  const availableForWithdrawal = serverState.availableForWithdrawal || 0;
+
+  // Если amount <= availableForWithdrawal, то инвестиции закрываться не будут
+  if (amount <= availableForWithdrawal) {
+    warningDiv.style.display = 'none';
+    return;
+  }
+
+  // Если amount > availableForWithdrawal, нужно закрыть инвестиции
+  const shortfall = amount - availableForWithdrawal;
+
+  // Сортируем инвестиции по приоритету: 16% → разморожено 17%/18% → заморожено
+  const now = new Date();
+  const sorted = portfolio.slice().sort((a, b) => {
+    const aFrozen = (a.rate === 17 || a.rate === 18) && a.unfreezeDate && new Date(a.unfreezeDate) > now && !a.delivered;
+    const bFrozen = (b.rate === 17 || b.rate === 18) && b.unfreezeDate && new Date(b.unfreezeDate) > now && !b.delivered;
+
+    if (a.rate === 16 && b.rate !== 16) return -1;
+    if (a.rate !== 16 && b.rate === 16) return 1;
+    if (!aFrozen && bFrozen) return -1;
+    if (aFrozen && !bFrozen) return 1;
+    return 0;
+  });
+
+  // Найдем, какие инвестиции будут закрыты
+  let remaining = shortfall;
+  const toClose = [];
+  let totalPendingInterestLost = 0;
+
+  for (const inv of sorted) {
+    if (remaining <= 0) break;
+
+    const currentAmount = inv.amount;
+    const accruedInterest = inv.accruedInterest || 0;
+
+    // Считаем pending income (сегодняшний незаблокированный доход)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const createdAt = new Date(inv.createdAt);
+    const dailyRate = (inv.rate / 100) / 365.25;
+    const effectiveStart = createdAt > todayStart ? createdAt : todayStart;
+    const msElapsedToday = Math.max(0, now.getTime() - effectiveStart.getTime());
+    const daysElapsedToday = msElapsedToday / (24 * 60 * 60 * 1000);
+    const pendingToday = currentAmount * dailyRate * daysElapsedToday;
+
+    if (remaining >= currentAmount) {
+      // Полное закрытие
+      toClose.push({ ...inv, closureType: 'full', closedAmount: currentAmount });
+      totalPendingInterestLost += pendingToday;
+      remaining -= currentAmount;
+    } else {
+      // Частичное закрытие
+      toClose.push({ ...inv, closureType: 'partial', closedAmount: remaining });
+      totalPendingInterestLost += (pendingToday * (remaining / currentAmount));
+      remaining = 0;
+    }
+  }
+
+  // Формируем предупреждение
+  if (toClose.length === 0) {
+    warningDiv.style.display = 'none';
+    return;
+  }
+
+  const currencySymbol = getCurrencySymbol();
+  let html = '<p style="margin: 0 0 8px 0;"><b>Будут закрыты инвестиции:</b></p><ul style="margin: 0; padding-left: 20px;">';
+
+  toClose.forEach(inv => {
+    const typeText = inv.closureType === 'full' ? 'полностью' : 'частично';
+    const strategyName = inv.rate === 16 ? 'Ликвидный' : inv.rate === 17 ? 'Стабильный' : 'Агрессивный';
+    html += `<li>${strategyName} (${inv.rate}%): ${formatMoney(inv.closedAmount)} ${currencySymbol} (${typeText})</li>`;
+  });
+
+  html += '</ul>';
+
+  if (totalPendingInterestLost > 0.01) {
+    html += `<p style="margin: 8px 0 0 0; color: #dc2626;"><b>⚠ Будет потерян незаблокированный доход за сегодня: ~${formatMoney(totalPendingInterestLost)} ${currencySymbol}</b></p>`;
+  }
+
+  warningContent.innerHTML = html;
+  warningDiv.style.display = 'block';
 }
 
 
