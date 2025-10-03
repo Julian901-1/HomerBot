@@ -237,7 +237,7 @@ function getInitialData(username) {
  * @returns {Object} Object containing balance, monthBase, and lockedAmount.
  */
 function syncBalance(username) {
-  console.log('syncBalance start for', username, new Date().toISOString(), 'v5.0-FIXED');
+  console.log('syncBalance start for', username, new Date().toISOString(), 'v6.0-FIXED-MISSED-DAYS');
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const usersSheet = ss.getSheetByName(SHEET_NAME);
   const lock = LockService.getScriptLock();
@@ -277,64 +277,78 @@ function syncBalance(username) {
     const currentDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const lastSyncDayStart = new Date(lastSyncTime.getFullYear(), lastSyncTime.getMonth(), lastSyncTime.getDate(), 0, 0, 0, 0);
 
-    // CRITICAL FIX: Remove today's partial interest from previous sync before processing
-    // This prevents double-counting of 17%/18% interest
-// Вместо пересчёта с начала дня, добавляйте только НОВЫЕ проценты
-if (lastSyncDayStart.getTime() === currentDayStart.getTime()) {
-  // Считаем только новые проценты с lastSyncTime до now
-  const newInterest16 = computeInterestForPeriod(username, lastSyncTime, now, 16);
-  const newInterest1718 = computeInterestForPeriod(username, lastSyncTime, now, [17, 18]);
-  totalEarnings = round2(totalEarnings + newInterest16 + newInterest1718);
-} else {
-  // Новый день - считаем с начала дня
-  const interest16Today = computeInterestForPeriod(username, currentDayStart, now, 16);
-  const interest1718Today = computeInterestForPeriod(username, currentDayStart, now, [17, 18]);
-  totalEarnings = round2(totalEarnings + interest16Today + interest1718Today);
-}
-    // Process missed days (if user didn't log in for days/weeks)
+    // --- STEP 1: Process remainder of last sync day (if lastSyncTime wasn't at midnight) ---
+    if (lastSyncTime > lastSyncDayStart) {
+      const lastDayEnd = new Date(lastSyncDayStart);
+      lastDayEnd.setHours(23, 59, 59, 999);
+      
+      // Calculate interest from lastSyncTime to end of that day
+      const interest16Remainder = computeInterestForPeriod(username, lastSyncTime, lastDayEnd, 16);
+      const interest1718Remainder = computeInterestForPeriod(username, lastSyncTime, lastDayEnd, [17, 18]);
+      
+      totalEarnings = round2(totalEarnings + interest16Remainder + interest1718Remainder);
+      updateInvestmentAccrued_(username, interest16Remainder, interest1718Remainder);
+      
+      // This 16% interest will be unlocked at midnight (already passed)
+      available16Interest = round2(available16Interest + interest16Remainder);
+    }
+
+    // --- STEP 2: Process complete missed days (if any) ---
     let processingDay = new Date(lastSyncDayStart);
+    processingDay.setDate(processingDay.getDate() + 1); // Start from the day AFTER lastSyncDay
+    
     while (processingDay < currentDayStart) {
+      const dayStart = new Date(processingDay);
+      dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(processingDay);
       dayEnd.setHours(23, 59, 59, 999);
       
       // Calculate interest for this complete day
-      const interest16Day = computeInterestForPeriod(username, processingDay, dayEnd, 16);
-      const interest1718Day = computeInterestForPeriod(username, processingDay, dayEnd, [17, 18]);
+      const interest16Day = computeInterestForPeriod(username, dayStart, dayEnd, 16);
+      const interest1718Day = computeInterestForPeriod(username, dayStart, dayEnd, [17, 18]);
       
-      // Add to totalEarnings (visual total)
       totalEarnings = round2(totalEarnings + interest16Day + interest1718Day);
-      
-      // 16% interest becomes available for withdrawal immediately (day already passed)
-      available16Interest = round2(available16Interest + interest16Day);
-      
-      // Update accrued interest for each investment
       updateInvestmentAccrued_(username, interest16Day, interest1718Day);
+      
+      // 16% interest becomes available immediately (day already passed)
+      available16Interest = round2(available16Interest + interest16Day);
       
       // Move to next day
       processingDay.setDate(processingDay.getDate() + 1);
     }
 
-    // Process today's interest (current day, incomplete)
-    const interest16Today = computeInterestForPeriod(username, currentDayStart, now, 16);
-    const interest1718Today = computeInterestForPeriod(username, currentDayStart, now, [17, 18]);
+    // --- STEP 3: Process today (current day) ---
+    // Special case: if lastSyncTime was today, only add NEW interest
+    if (lastSyncDayStart.getTime() === currentDayStart.getTime()) {
+      // Same day - add only new interest since lastSyncTime
+      const newInterest16 = computeInterestForPeriod(username, lastSyncTime, now, 16);
+      const newInterest1718 = computeInterestForPeriod(username, lastSyncTime, now, [17, 18]);
+      
+      totalEarnings = round2(totalEarnings + newInterest16 + newInterest1718);
+      updateInvestmentAccrued_(username, newInterest16, newInterest1718);
+    } else {
+      // First sync today - add interest from start of day
+      const interest16Today = computeInterestForPeriod(username, currentDayStart, now, 16);
+      const interest1718Today = computeInterestForPeriod(username, currentDayStart, now, [17, 18]);
+      
+      totalEarnings = round2(totalEarnings + interest16Today + interest1718Today);
+      updateInvestmentAccrued_(username, interest16Today, interest1718Today);
+    }
     
-    // Add today's interest to totalEarnings (already removed previous partial interest above)
-    totalEarnings = round2(totalEarnings + interest16Today + interest1718Today);
-    
-    // Today's 16% interest stays in pendingInterest (will unlock at midnight)
-    pendingInterest = round2(interest16Today);
+    // Today's pending 16% interest (will unlock at midnight)
+    const todayInterest16 = computeInterestForPeriod(username, currentDayStart, now, 16);
+    pendingInterest = round2(todayInterest16);
 
     // Check for unfrozen 17%/18% investments
     const portfolio = getPortfolio(username);
     const unfrozenInvestments = portfolio.filter(inv => {
       if (inv.rate !== 17 && inv.rate !== 18) return false;
       if (!inv.unfreezeDate) return false;
-      // Check if already marked as unfrozen (delivered field is set)
       const investSheet = ensureInvestTransactionsSheet_();
       const reqRow = findRequestRowById_(investSheet, inv.requestId);
       if (!reqRow) return false;
       const delivered = investSheet.getRange(reqRow, 6).getValue();
-      if (delivered) return false; // Already processed
+      if (delivered) return false;
       return inv.unfreezeDate <= now;
     });
 
@@ -344,9 +358,7 @@ if (lastSyncDayStart.getTime() === currentDayStart.getTime()) {
       unfrozenInvestments.forEach(inv => {
         const reqRow = findRequestRowById_(investSheet, inv.requestId);
         if (reqRow) {
-          // Mark as unfrozen
           investSheet.getRange(reqRow, 6).setValue(now);
-          // Principal + accrued interest become available
           unfrozenAmount += inv.amount + inv.accruedInterest;
         }
       });
@@ -362,7 +374,7 @@ if (lastSyncDayStart.getTime() === currentDayStart.getTime()) {
 
     // Save updated values
     usersSheet.getRange(row, 17).setValue(pendingInterest);
-    usersSheet.getRange(row, 18).setValue(now); // lastSyncTime = now
+    usersSheet.getRange(row, 18).setValue(now);
     usersSheet.getRange(row, 19).setValue(userDeposits);
     usersSheet.getRange(row, 20).setValue(totalEarnings);
     usersSheet.getRange(row, 21).setValue(available16Interest);
