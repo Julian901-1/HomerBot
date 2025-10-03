@@ -608,9 +608,9 @@ async function syncBalance(fromScheduler = false) {
           .filter(x => x.type === 'DEPOSIT')
           .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
 
-        if (last && (last.status === 'APPROVED' || last.status === 'REJECTED' || last.status === 'CANCELED')) {
+        if (last && (last.status === 'APPROVED' || last.status === 'REJECTED')) {
           const msg = last.status === 'APPROVED' ?
-            'Средства зачислены на счёт' : 'Депозит не удался';
+            'Средства зачислены на счёт' : 'Депозит отклонён';
 
           // Очищаем старые данные депозита
           lastDepositAmount = 0;
@@ -618,6 +618,7 @@ async function syncBalance(fromScheduler = false) {
 
           closeDepositFlowWithPopup(msg);
         }
+        // CANCELED не обрабатывается здесь - обрабатывается только в cancelDeposit()
       }
 
       // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Если модалка депозита открыта, но нет PENDING депозитов - закрыть её
@@ -632,11 +633,13 @@ async function syncBalance(fromScheduler = false) {
           lastDepositAmount = 0;
           lastDepositShortId = null;
           closeDepositFlowWithPopup('Средства зачислены на счёт');
-        } else if (lastDeposit && (lastDeposit.status === 'REJECTED' || lastDeposit.status === 'CANCELED')) {
+        } else if (lastDeposit && lastDeposit.status === 'REJECTED') {
+          // ТОЛЬКО для REJECTED (отклонено админом), не для CANCELED (отменено пользователем)
           lastDepositAmount = 0;
           lastDepositShortId = null;
-          closeDepositFlowWithPopup('Депозит не удался');
+          closeDepositFlowWithPopup('Депозит отклонён');
         }
+        // CANCELED не обрабатывается здесь - обрабатывается только в cancelDeposit()
       }
 
       syncBackoffMs = 20000; // Reset backoff on success
@@ -771,8 +774,17 @@ function setupEventListeners() {
 // Deposit – create request
 onIf($id('depositConfirmBtn'), 'click', async function () {
   const amountEl = $id('depositAmount');
+  const agreeEl = $id('depositAgree');
   const amount = amountEl ? Math.round(parseAmount(amountEl.value) * 100) / 100 : 0;
+  const agreed = agreeEl ? agreeEl.checked : false;
 
+  // ВАЛИДАЦИЯ: тумблер согласия
+  if (!agreed) {
+    showPopup('Необходимо согласиться с условиями');
+    return;
+  }
+
+  // ВАЛИДАЦИЯ: минимальная и максимальная сумма
   if (amount < 100) {
     showPopup('Минимальная сумма депозита: 100 ₽');
     return;

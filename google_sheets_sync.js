@@ -393,6 +393,21 @@ function syncBalance(username) {
  */
 function requestAmount(username, amount, type, details) {
     try {
+        // SERVER-SIDE VALIDATION для DEPOSIT
+        if (type === 'DEPOSIT') {
+            const depositAmount = Math.abs(Number(amount));
+
+            console.log(`Deposit validation: amount=${depositAmount}`);
+
+            if (depositAmount < 100) {
+                return { success: false, error: 'Минимальная сумма депозита: 100 ₽' };
+            }
+
+            if (depositAmount > 10000000) {
+                return { success: false, error: 'Максимальная сумма депозита: 10 000 000 ₽' };
+            }
+        }
+
         // SERVER-SIDE VALIDATION для WITHDRAW
         if (type === 'WITHDRAW') {
             const withdrawAmount = Math.abs(Number(amount));
