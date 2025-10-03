@@ -464,37 +464,43 @@ function getBalance(username) {
 
 function getHistory(username) {
     const sheets = [
-        ensureInvestTransactionsSheet_(),
-        ensureDepositWithdrawTransactionsSheet_()
+        { sheet: ensureInvestTransactionsSheet_(), type: 'INVEST' },
+        { sheet: ensureDepositWithdrawTransactionsSheet_(), type: 'DEPOSIT_WITHDRAW' }
     ];
     let allData = [];
-    sheets.forEach(sheet => {
+
+    sheets.forEach(({ sheet, type }) => {
         const lastRow = sheet.getLastRow();
         if (lastRow < 2) return;
         const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
         const filteredData = data.filter(row => String(row[1]).trim() === username);
-        // Map columns based on sheet structure
+
         const mappedData = filteredData.map(row => {
-            const numCols = row.length;
-            let typeCol, amountCol, rateCol = 8;
-            if (numCols === 11) { // INVEST_TRANSACTIONS
-                typeCol = 6; amountCol = 7; rateCol = 8;
-            } else if (numCols === 8) { // DEPOSIT_WITHDRAW_TRANSACTIONS
-                typeCol = 6; amountCol = 7; rateCol = -1; // no rate column
+            if (type === 'INVEST') {
+                // INVEST_TRANSACTIONS: columns [0:createdAt, 1:username, 2:requestId, 3:status, 4:decidedAt, 5:delivered, 6:type, 7:amount, 8:rate]
+                return {
+                    date: new Date(row[0]).getTime(),
+                    shortId: shortIdFromUuid(String(row[2])),
+                    status: String(row[3]).trim(),
+                    type: String(row[6]).trim(),
+                    amount: Number(row[7]),
+                    rate: Number(row[8] || 0)
+                };
             } else {
-                return null; // unknown format
+                // DEPOSIT_WITHDRAW_TRANSACTIONS: columns [0:createdAt, 1:username, 2:requestId, 3:status, 4:decidedAt, 5:delivered, 6:type, 7:amount]
+                return {
+                    date: new Date(row[0]).getTime(),
+                    shortId: shortIdFromUuid(String(row[2])),
+                    status: String(row[3]).trim(),
+                    type: String(row[6]).trim(),
+                    amount: Number(row[7]),
+                    rate: 0
+                };
             }
-            return {
-                date: new Date(row[0]).getTime(),
-                shortId: shortIdFromUuid(String(row[2])),
-                status: String(row[3]).trim(),
-                type: typeCol >= 0 ? String(row[typeCol]).trim() : '',
-                amount: amountCol >= 0 ? Number(row[amountCol]) : 0,
-                rate: rateCol >= 0 ? Number(row[rateCol] || 0) : 0
-            };
-        }).filter(item => item !== null);
+        });
         allData = allData.concat(mappedData);
     });
+
     return allData.sort((a, b) => b.date - a.date);
 }
 
@@ -711,8 +717,10 @@ function calculateBalances(username) {
   console.log('todayIncome:', todayIncome);
 
   // 4. Рассчитываем итоговые балансы
+  // ИСПРАВЛЕНИЕ: Используем round2() для todayIncome чтобы избежать расхождений с totalEarnings
   const totalBalance = round2(userDeposits + totalEarnedFromInvestments);
   const availableForInvest = round2(userDeposits - investedAmount);
+  const roundedTodayIncome = round2(todayIncome);
 
   // Важно: проценты НЕ доступны для реинвестирования!
   if (availableForInvest < 0) {
@@ -728,7 +736,7 @@ function calculateBalances(username) {
     availableForWithdrawal: round2(availableForWithdrawal),
     availableForInvest: Math.max(0, availableForInvest),
     investedAmount: round2(investedAmount),
-    todayIncome: round2(todayIncome),
+    todayIncome: roundedTodayIncome,
     userDeposits: round2(userDeposits),
     totalEarnings: round2(totalEarnedFromInvestments)
   };
