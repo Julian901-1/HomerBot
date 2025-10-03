@@ -12,6 +12,41 @@ const BOT_TOKEN  = '7631840452:AAH4O93qQ6J914x5FhPTQX7YhJC3bTiJ_XA';
 const ADMIN_CHAT_ID = '487525838';
 
 /****************************
+ * INVESTMENT RATES CONFIG
+ * Централизованная конфигурация процентных ставок
+ * При изменении ставок здесь они автоматически применятся и в UI
+ ****************************/
+const INVESTMENT_RATES = {
+  LIQUID: {
+    rate: 16,
+    name: 'Ликвидный',
+    nameEn: 'Liquid',
+    freezeDays: 0,
+    description: 'Начисление ежедневно, вывод без штрафов'
+  },
+  STABLE: {
+    rate: 17,
+    name: 'Стабильный',
+    nameEn: 'Stable',
+    freezeDays: 30,
+    description: 'Заморозка на 30 дней'
+  },
+  AGGRESSIVE: {
+    rate: 18,
+    name: 'Агрессивный',
+    nameEn: 'Aggressive',
+    freezeDays: 90,
+    description: 'Заморозка на 90 дней'
+  }
+};
+
+// Вспомогательная функция для получения конфига по ставке
+function getRateConfig(rate) {
+  const configs = Object.values(INVESTMENT_RATES);
+  return configs.find(c => c.rate === rate) || INVESTMENT_RATES.LIQUID;
+}
+
+/****************************
  * UTILS
  ****************************/
 function shortIdFromUuid(uuid) { const p = String(uuid || '').split('-'); return p.length >= 3 ? p[1] : String(uuid || '').slice(0, 4); }
@@ -89,6 +124,10 @@ function doGet(e) {
         return jsonOk({ cancelled: ok });
       }
 
+      // >>> добавлено: получение конфигурации ставок
+      case 'getRatesConfig':
+        return jsonOk({ rates: INVESTMENT_RATES });
+
       default:
         return jsonErr('Unknown action');
     }
@@ -152,18 +191,22 @@ function doPost(e) {
               if (type === 'DEPOSIT' || type === 'WITHDRAW') {
                 const usersSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
                 const { row: userRow } = findOrCreateUserRow_(usersSheet, username);
-                
-                // CRITICAL: Only update userDeposits (NO INTEREST!)
-                const currentDeposits = Number(usersSheet.getRange(userRow, 19).getValue() || 0);
+
+                // НОВАЯ СТРУКТУРА: обновляем column 2 (userDeposits)
+                const currentDeposits = Number(usersSheet.getRange(userRow, 2).getValue() || 0);
                 const newDeposits = type === 'DEPOSIT' ?
                   currentDeposits + amount :
                   currentDeposits - Math.abs(amount);
-                console.log('doPost updating userDeposits from', currentDeposits, 'to', newDeposits);
+                console.log('doPost updating userDeposits (column 2) from', currentDeposits, 'to', newDeposits);
+                usersSheet.getRange(userRow, 2).setValue(newDeposits);
+
+                // Дублируем в column 19 для обратной совместимости
                 usersSheet.getRange(userRow, 19).setValue(newDeposits);
-                
-                // Recalculate visual balance: userDeposits + totalEarnings
-                const totalEarnings = Number(usersSheet.getRange(userRow, 20).getValue() || 0);
-                usersSheet.getRange(userRow, 3).setValue(newDeposits + totalEarnings);
+
+                // Пометить как примененное к балансу (column 9)
+                reqSheet.getRange(reqRow, 9).setValue(true);
+
+                // Обновляем lastAppliedAt (column 4)
                 usersSheet.getRange(userRow, 4).setValue(new Date());
               }
             }
@@ -210,201 +253,126 @@ function doPost(e) {
  * @returns {Object} Object containing balance, history, portfolio, lockedAmount, and userPrefs.
  */
 function getInitialData(username) {
-    // Sync balance first to get fresh data
+    // syncBalance() теперь возвращает результаты из calculateBalances()
     const balanceData = syncBalance(username);
     const history = getHistory(username);
     const portfolio = getPortfolio(username);
     const userPrefs = getUserPrefs(username);
 
-    // Calculate accrued today
-    const now = new Date();
-    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const accruedToday = computeInterestForPeriod(username, dayStart, now);
+    // accruedToday уже входит в balanceData как todayIncome
 
     return {
         ...balanceData,
         history,
         portfolio,
-        accruedToday: round2(accruedToday),
+        accruedToday: balanceData.todayIncome, // Для обратной совместимости
         userPrefs
     };
 }
 
 /**
- * Syncs the balance for a user by applying accrued interest and reapplying missed approved transactions.
- * Uses locking to prevent concurrent modifications.
+ * ======================================================
+ * НОВАЯ ВЕРСИЯ syncBalance() - v8.0-ON-DEMAND
+ * ======================================================
+ * Упрощенная логика:
+ * 1. Обновляет accruedInterest для каждой инвестиции в INVEST_TRANSACTIONS
+ * 2. Проверяет разморозку 17%/18%
+ * 3. Обновляет lastSync
+ * 4. Возвращает результаты из calculateBalances()
+ *
  * @param {string} username - The username of the user.
- * @returns {Object} Object containing balance, monthBase, and lockedAmount.
+ * @returns {Object} Object containing all calculated balances.
  */
 function syncBalance(username) {
-  console.log('syncBalance start for', username, new Date().toISOString(), 'v6.0-FIXED-MISSED-DAYS');
+  console.log('=== syncBalance START v8.0-ON-DEMAND ===', username, new Date().toISOString());
+
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const usersSheet = ss.getSheetByName(SHEET_NAME);
   const lock = LockService.getScriptLock();
-  console.log('syncBalance trying lock:', new Date().toISOString());
+
+  console.log('Trying to acquire lock...');
   if (!lock.tryLock(10000)) {
-    console.log('syncBalance failed to acquire lock:', new Date().toISOString());
+    console.log('Failed to acquire lock, returning getBalance()');
     return getBalance(username);
   }
-  console.log('syncBalance lock acquired:', new Date().toISOString());
+
+  console.log('Lock acquired');
 
   try {
-    let { row } = findOrCreateUserRow_(usersSheet, username);
+    const { row } = findOrCreateUserRow_(usersSheet, username);
 
-    // Reapply missed APPROVED deposit/withdraw requests
+    // 1. Reapply missed APPROVED deposit/withdraw requests
+    console.log('Reapplying missed transactions...');
     reapplyMissedApproved_(username);
 
-    // Ensure column 21 exists for available16Interest
-    ensureColO_(usersSheet);
-    if (usersSheet.getMaxColumns() < 21) {
-      usersSheet.insertColumnsAfter(20, 1);
-    }
-
-    // Get current state
-    let userDeposits = Number(usersSheet.getRange(row, 19).getValue() || 0);
-    let totalEarnings = Number(usersSheet.getRange(row, 20).getValue() || 0);
-    let available16Interest = Number(usersSheet.getRange(row, 21).getValue() || 0);
-    let pendingInterest = Number(usersSheet.getRange(row, 17).getValue() || 0);
-    let lastSyncTime = usersSheet.getRange(row, 18).getValue();
-    
-    // Initialize lastSyncTime if missing
-    if (!lastSyncTime || !(lastSyncTime instanceof Date)) {
-      lastSyncTime = new Date();
-      lastSyncTime.setHours(0, 0, 0, 0);
+    // 2. Get lastSync время
+    let lastSync = usersSheet.getRange(row, 3).getValue(); // Column 3: lastSync
+    if (!lastSync || !(lastSync instanceof Date)) {
+      lastSync = new Date();
+      lastSync.setHours(0, 0, 0, 0);
     }
 
     const now = new Date();
-    const currentDayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const lastSyncDayStart = new Date(lastSyncTime.getFullYear(), lastSyncTime.getMonth(), lastSyncTime.getDate(), 0, 0, 0, 0);
+    console.log('lastSync:', lastSync.toISOString(), 'now:', now.toISOString());
 
-    // --- STEP 1: Process remainder of last sync day (if lastSyncTime wasn't at midnight) ---
-    if (lastSyncTime > lastSyncDayStart) {
-      const lastDayEnd = new Date(lastSyncDayStart);
-      lastDayEnd.setHours(23, 59, 59, 999);
-      
-      // Calculate interest from lastSyncTime to end of that day
-      const interest16Remainder = computeInterestForPeriod(username, lastSyncTime, lastDayEnd, 16);
-      const interest1718Remainder = computeInterestForPeriod(username, lastSyncTime, lastDayEnd, [17, 18]);
-      
-      totalEarnings = round2(totalEarnings + interest16Remainder + interest1718Remainder);
-      updateInvestmentAccrued_(username, interest16Remainder, interest1718Remainder);
-      
-      // This 16% interest will be unlocked at midnight (already passed)
-      available16Interest = round2(available16Interest + interest16Remainder);
+    // 3. Обновить accruedInterest для КАЖДОЙ инвестиции
+    console.log('Updating accruedInterest for each investment...');
+    const investments = getPortfolio(username);
+    const investSheet = ensureInvestTransactionsSheet_();
+
+    for (const inv of investments) {
+      const reqRow = findRequestRowById_(investSheet, inv.requestId);
+      if (!reqRow) continue;
+
+      const createdAt = new Date(investSheet.getRange(reqRow, 1).getValue());
+      const amount = Number(investSheet.getRange(reqRow, 8).getValue());
+      const rate = Number(investSheet.getRange(reqRow, 9).getValue());
+
+      // Считаем проценты с момента создания до СЕЙЧАС
+      const dailyRate = (rate / 100) / 365.25;
+      const msElapsed = now.getTime() - createdAt.getTime();
+      const daysElapsed = msElapsed / (24 * 60 * 60 * 1000);
+      const accrued = amount * dailyRate * daysElapsed;
+
+      // Сохраняем в колонку K (column 11)
+      investSheet.getRange(reqRow, 11).setValue(round2(accrued));
+
+      console.log(`Updated investment ${inv.shortId}: accrued=${round2(accrued)}`);
     }
 
-    // --- STEP 2: Process complete missed days (if any) ---
-    let processingDay = new Date(lastSyncDayStart);
-    processingDay.setDate(processingDay.getDate() + 1); // Start from the day AFTER lastSyncDay
-    
-    while (processingDay < currentDayStart) {
-      const dayStart = new Date(processingDay);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(processingDay);
-      dayEnd.setHours(23, 59, 59, 999);
-      
-      // Calculate interest for this complete day
-      const interest16Day = computeInterestForPeriod(username, dayStart, dayEnd, 16);
-      const interest1718Day = computeInterestForPeriod(username, dayStart, dayEnd, [17, 18]);
-      
-      totalEarnings = round2(totalEarnings + interest16Day + interest1718Day);
-      updateInvestmentAccrued_(username, interest16Day, interest1718Day);
-      
-      // 16% interest becomes available immediately (day already passed)
-      available16Interest = round2(available16Interest + interest16Day);
-      
-      // Move to next day
-      processingDay.setDate(processingDay.getDate() + 1);
-    }
-
-    // --- STEP 3: Process today (current day) ---
-    // Special case: if lastSyncTime was today, only add NEW interest
-    if (lastSyncDayStart.getTime() === currentDayStart.getTime()) {
-      // Same day - add only new interest since lastSyncTime
-      const newInterest16 = computeInterestForPeriod(username, lastSyncTime, now, 16);
-      const newInterest1718 = computeInterestForPeriod(username, lastSyncTime, now, [17, 18]);
-      
-      totalEarnings = round2(totalEarnings + newInterest16 + newInterest1718);
-      updateInvestmentAccrued_(username, newInterest16, newInterest1718);
-    } else {
-      // First sync today - add interest from start of day
-      const interest16Today = computeInterestForPeriod(username, currentDayStart, now, 16);
-      const interest1718Today = computeInterestForPeriod(username, currentDayStart, now, [17, 18]);
-      
-      totalEarnings = round2(totalEarnings + interest16Today + interest1718Today);
-      updateInvestmentAccrued_(username, interest16Today, interest1718Today);
-    }
-    
-    // Today's pending 16% interest (will unlock at midnight)
-    const todayInterest16 = computeInterestForPeriod(username, currentDayStart, now, 16);
-    pendingInterest = round2(todayInterest16);
-
-    // Check for unfrozen 17%/18% investments
-    const portfolio = getPortfolio(username);
-    const unfrozenInvestments = portfolio.filter(inv => {
+    // 4. Проверяем разморозку 17%/18%
+    console.log('Checking for unfrozen investments...');
+    const unfrozenInvestments = investments.filter(inv => {
       if (inv.rate !== 17 && inv.rate !== 18) return false;
       if (!inv.unfreezeDate) return false;
-      const investSheet = ensureInvestTransactionsSheet_();
-      const reqRow = findRequestRowById_(investSheet, inv.requestId);
-      if (!reqRow) return false;
-      const delivered = investSheet.getRange(reqRow, 6).getValue();
-      if (delivered) return false;
+      if (inv.delivered) return false; // Уже разморожена
       return inv.unfreezeDate <= now;
     });
 
-    let unfrozenAmount = 0;
     if (unfrozenInvestments.length > 0) {
-      const investSheet = ensureInvestTransactionsSheet_();
+      console.log(`Unfreezing ${unfrozenInvestments.length} investments...`);
       unfrozenInvestments.forEach(inv => {
         const reqRow = findRequestRowById_(investSheet, inv.requestId);
         if (reqRow) {
-          investSheet.getRange(reqRow, 6).setValue(now);
-          unfrozenAmount += inv.amount + inv.accruedInterest;
+          investSheet.getRange(reqRow, 6).setValue(now); // Помечаем как delivered
+          console.log(`Unfrozen investment ${inv.shortId}`);
         }
       });
-      available16Interest = round2(available16Interest + unfrozenAmount);
     }
 
-    // Calculate balances
-    const investedAmount = getInvestedAmount(username);
-    const lockedPrincipal1718 = getLockedPrincipal1718(username);
-    const availableForWithdrawal = round2(userDeposits + available16Interest - lockedPrincipal1718);
-    const availableForInvest = round2(userDeposits - investedAmount);
-    const balance = round2(userDeposits + totalEarnings);
+    // 5. Обновляем lastSync
+    usersSheet.getRange(row, 3).setValue(now);
 
-    // Save updated values
-    usersSheet.getRange(row, 17).setValue(pendingInterest);
-    usersSheet.getRange(row, 18).setValue(now);
-    usersSheet.getRange(row, 19).setValue(userDeposits);
-    usersSheet.getRange(row, 20).setValue(totalEarnings);
-    usersSheet.getRange(row, 21).setValue(available16Interest);
-    usersSheet.getRange(row, 2).setValue(investedAmount);
-    usersSheet.getRange(row, 3).setValue(balance);
-    usersSheet.getRange(row, 4).setValue(now);
+    // 6. Возвращаем рассчитанные балансы из calculateBalances()
+    console.log('Calculating balances...');
+    const balances = calculateBalances(username);
 
-    // Calculate effective rate
-    const effectiveRate = investedAmount > 0 ?
-      portfolio.reduce((sum, inv) => sum + inv.amount * inv.rate, 0) / investedAmount : 16;
-    usersSheet.getRange(row, 6).setValue(effectiveRate);
+    console.log('=== syncBalance END ===');
+    return balances;
 
-    const lockedAmount = getLockedAmount(username);
-    
-    console.log('syncBalance end:', new Date().toISOString());
-    return {
-      balance: balance,
-      monthBase: round2(investedAmount),
-      lockedAmount: round2(lockedAmount),
-      lockedAmountForWithdrawal: round2(lockedPrincipal1718),
-      availableBalance: round2(availableForWithdrawal),
-      userDeposits: round2(userDeposits),
-      totalEarnings: round2(totalEarnings),
-      availableForWithdrawal: round2(availableForWithdrawal),
-      availableForInvest: round2(availableForInvest),
-      investedAmount: round2(investedAmount)
-    };
   } finally {
     lock.releaseLock();
-    console.log('syncBalance lock released:', new Date().toISOString());
+    console.log('Lock released');
   }
 }
 
@@ -470,51 +438,27 @@ function logStrategyInvestment(username, amount, rate) {
     const requestId = Utilities.getUuid();
     const shortId = shortIdFromUuid(requestId);
     const now = new Date();
-    const freezeDays = (rate === 17) ? 30 : (rate === 18) ? 90 : 0;
+
+    // Используем централизованный конфиг для получения freezeDays
+    const rateConfig = getRateConfig(rate);
+    const freezeDays = rateConfig.freezeDays;
+
     const unfreezeDate = new Date(now);
     unfreezeDate.setDate(unfreezeDate.getDate() + freezeDays);
+
     reqSheet.appendRow([now, username, requestId, 'APPROVED', now, null, 'INVEST', Number(amount), Number(rate), unfreezeDate, 0]);
     logToEventJournal(now, username, requestId, 'APPROVED', null, now, null, null, null, 'INVEST', Number(amount), Number(rate), unfreezeDate);
-    const usersSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
-    const { row } = findOrCreateUserRow_(usersSheet, username);
-    usersSheet.getRange(row, 6).setValue(rate);
+
     return { success: true, requestId, requestShortId: shortId };
 }
 
+/**
+ * Быстрая версия getBalance() без лока.
+ * Просто вызывает calculateBalances() для получения актуальных данных.
+ */
 function getBalance(username) {
-  const usersSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
-  const { row } = findOrCreateUserRow_(usersSheet, username);
-  
-  const userDeposits = Number(usersSheet.getRange(row, 19).getValue() || 0);
-  const totalEarnings = Number(usersSheet.getRange(row, 20).getValue() || 0);
-  const balance = round2(userDeposits + totalEarnings);
-  const rate = Number(usersSheet.getRange(row, 6).getValue() || 16);
-  const investedAmount = getInvestedAmount(username);
-  
-  // Ensure column 21 exists
-  ensureColO_(usersSheet);
-  if (usersSheet.getMaxColumns() < 21) {
-    usersSheet.insertColumnsAfter(20, 1);
-  }
-  
-  const available16Interest = Number(usersSheet.getRange(row, 21).getValue() || 0);
-  const lockedPrincipal1718 = getLockedPrincipal1718(username);
-  const availableForWithdrawal = round2(userDeposits + available16Interest - lockedPrincipal1718);
-  const availableForInvest = round2(userDeposits - investedAmount);
-  
-  usersSheet.getRange(row, 2).setValue(round2(investedAmount));
-  
-  return {
-    username,
-    balance: round2(balance),
-    rate,
-    monthBase: round2(investedAmount),
-    userDeposits: round2(userDeposits),
-    totalEarnings: round2(totalEarnings),
-    availableForWithdrawal: round2(availableForWithdrawal),
-    availableForInvest: round2(availableForInvest),
-    investedAmount: round2(investedAmount)
-  };
+  console.log('getBalance() called for', username);
+  return calculateBalances(username);
 }
 
 function getHistory(username) {
@@ -662,6 +606,112 @@ function getLockedPrincipal1718(username) {
     .reduce((sum, inv) => sum + inv.amount, 0);
 }
 
+/**
+ * ======================================================
+ * НОВАЯ АРХИТЕКТУРА: ON-DEMAND РАСЧЕТ ВСЕХ БАЛАНСОВ
+ * ======================================================
+ * Вместо хранения агрегированных данных считаем их при каждом запросе.
+ * Источник истины: INVEST_TRANSACTIONS (column 11 - accruedInterest для каждой инвестиции)
+ *
+ * @param {string} username - Имя пользователя
+ * @returns {Object} Все рассчитанные балансы
+ */
+function calculateBalances(username) {
+  console.log('=== calculateBalances START ===', username);
+
+  // 1. Получаем userDeposits из HomerBot (только депозиты/выводы, БЕЗ процентов)
+  // НОВАЯ СТРУКТУРА: userDeposits хранится в column 2
+  const usersSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
+  const { row } = findOrCreateUserRow_(usersSheet, username);
+
+  // Пробуем сначала column 2 (новая структура), потом column 19 (старая)
+  let userDeposits = Number(usersSheet.getRange(row, 2).getValue() || 0);
+  if (userDeposits === 0) {
+    userDeposits = Number(usersSheet.getRange(row, 19).getValue() || 0);
+    // Если нашли в column 19, копируем в column 2
+    if (userDeposits !== 0) {
+      usersSheet.getRange(row, 2).setValue(userDeposits);
+    }
+  }
+
+  console.log('userDeposits (column 2):', userDeposits);
+
+  // 2. Получаем все активные инвестиции
+  const investments = getPortfolio(username);
+  console.log('Active investments:', investments.length);
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
+  let totalEarnedFromInvestments = 0;  // Все заработанное со ВСЕХ инвестиций
+  let availableForWithdrawal = userDeposits; // Начинаем с депозитов
+  let investedAmount = 0;
+  let todayIncome = 0;
+
+  // 3. Для каждой инвестиции считаем текущие проценты из accruedInterest
+  const investSheet = ensureInvestTransactionsSheet_();
+
+  for (const inv of investments) {
+    investedAmount += inv.amount;
+
+    // Получаем сохраненный accruedInterest из колонки K
+    const reqRow = findRequestRowById_(investSheet, inv.requestId);
+    if (!reqRow) continue;
+
+    const accruedInterest = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
+    console.log(`Investment ${inv.shortId} (${inv.rate}%): amount=${inv.amount}, accrued=${accruedInterest}`);
+
+    totalEarnedFromInvestments += accruedInterest;
+
+    // Проверяем доступность для вывода
+    const createdAt = new Date(investSheet.getRange(reqRow, 1).getValue());
+    const isFrozen = (inv.rate === 17 || inv.rate === 18) &&
+                     inv.unfreezeDate &&
+                     inv.unfreezeDate > now &&
+                     !inv.delivered;
+
+    if (!isFrozen) {
+      // Разблокированная инвестиция: основа + проценты доступны для вывода
+      availableForWithdrawal += inv.amount + accruedInterest;
+    }
+    // Если заблокирована - ничего не добавляем к availableForWithdrawal
+
+    // Считаем доход за сегодня для этой конкретной инвестиции
+    const dailyRate = (inv.rate / 100) / 365.25;
+    const msElapsedToday = now.getTime() - todayStart.getTime();
+    const daysElapsedToday = msElapsedToday / (24 * 60 * 60 * 1000);
+    const earnedToday = inv.amount * dailyRate * daysElapsedToday;
+    todayIncome += earnedToday;
+  }
+
+  console.log('totalEarnedFromInvestments:', totalEarnedFromInvestments);
+  console.log('availableForWithdrawal:', availableForWithdrawal);
+  console.log('todayIncome:', todayIncome);
+
+  // 4. Рассчитываем итоговые балансы
+  const totalBalance = round2(userDeposits + totalEarnedFromInvestments);
+  const availableForInvest = round2(userDeposits - investedAmount);
+
+  // Важно: проценты НЕ доступны для реинвестирования!
+  if (availableForInvest < 0) {
+    console.warn('WARNING: availableForInvest < 0, this should not happen!');
+  }
+
+  console.log('=== calculateBalances END ===');
+  console.log('totalBalance:', totalBalance);
+  console.log('availableForInvest:', availableForInvest);
+
+  return {
+    balance: totalBalance,
+    availableForWithdrawal: round2(availableForWithdrawal),
+    availableForInvest: Math.max(0, availableForInvest),
+    investedAmount: round2(investedAmount),
+    todayIncome: round2(todayIncome),
+    userDeposits: round2(userDeposits),
+    totalEarnings: round2(totalEarnedFromInvestments)
+  };
+}
+
 function computeInterestForPeriod(username, fromDate, toDate, rateFilter = null) {
     const portfolio = getPortfolio(username);
     if (portfolio.length === 0) return 0;
@@ -761,7 +811,7 @@ function ensureDepositWithdrawTransactionsSheet_() {
     let sh = ss.getSheetByName(DEPOSIT_WITHDRAW_TRANSACTIONS);
     if (!sh) {
         sh = ss.insertSheet(DEPOSIT_WITHDRAW_TRANSACTIONS);
-        sh.getRange(1,1,1,8).setValues([['Дата создания','Пользователь','Request ID','Статус','Дата решения','Доставлено','Тип','Сумма']]);
+        sh.getRange(1,1,1,9).setValues([['Дата создания','Пользователь','Request ID','Статус','Дата решения','Доставлено','Тип','Сумма','Применено к балансу']]);
     }
     return sh;
 }
@@ -817,53 +867,85 @@ function reapplyMissedApproved_(username) {
   sheets.forEach(sheet => {
     const lastRow = sheet.getLastRow();
     if (lastRow < 2) return;
+    
+    // Ensure column 9 exists
+    if (sheet.getMaxColumns() < 9) {
+      sheet.insertColumnAfter(8);
+      sheet.getRange(1, 9).setValue('Применено к балансу');
+    }
+    
     const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
 
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       const user   = String(row[1]||'').trim();
       const status = String(row[3]||'').trim();
-      const procAt = row[4] ? new Date(row[4]).getTime() : 0; // decidedAt column 5 (0-indexed 4)
-      const type   = String(row[6]||'').trim(); // column 7 (0-indexed 6)
-      const amount = Number(row[7]||0); // column 8
+      const decidedAt = row[4] ? new Date(row[4]).getTime() : 0;
+      const type   = String(row[6]||'').trim();
+      const amount = Number(row[7]||0);
+      const appliedToBalance = row[8]; // column 9 (0-indexed 8)
 
       if (user !== username) continue;
       if (status !== 'APPROVED') continue;
       if (type !== 'DEPOSIT' && type !== 'WITHDRAW') continue;
-      if (!procAt || procAt <= lastAppliedTs) continue;
+      if (!decidedAt || decidedAt <= lastAppliedTs) continue;
+      
+      // Skip if already applied to balance
+      if (appliedToBalance) continue;
 
-      sum += amount; // DEPOSIT >0; WITHDRAW <0
-      if (procAt > maxProcessed) maxProcessed = procAt;
+      sum += amount;
+      if (decidedAt > maxProcessed) maxProcessed = decidedAt;
       applied++;
+      
+      // Mark as applied to balance (column 9)
+      sheet.getRange(i + 2, 9).setValue(true);
     }
   });
 
   if (applied > 0 && sum !== 0) {
-    // CRITICAL: Update only userDeposits (column 19), NOT interest!
-    const userDepositsCell = usersSheet.getRange(userRow, 19);
+    // НОВАЯ СТРУКТУРА: обновляем column 2 (userDeposits)
+    const userDepositsCell = usersSheet.getRange(userRow, 2);
     const currentDeposits = Number(userDepositsCell.getValue() || 0);
     userDepositsCell.setValue(currentDeposits + sum);
-    
-    // Recalculate visual balance
-    const totalEarnings = Number(usersSheet.getRange(userRow, 20).getValue() || 0);
-    usersSheet.getRange(userRow, 3).setValue(currentDeposits + sum + totalEarnings);
+
+    // Дублируем в column 19 для обратной совместимости
+    usersSheet.getRange(userRow, 19).setValue(currentDeposits + sum);
+
+    // Обновляем lastAppliedAt (column 4)
     usersSheet.getRange(userRow, 4).setValue(new Date());
   }
   return {applied, sum};
 }
 
+/**
+ * ======================================================
+ * НОВАЯ СТРУКТУРА HomerBot (упрощенная)
+ * ======================================================
+ * Column 1: username
+ * Column 2: userDeposits (только депозиты/выводы, БЕЗ процентов)
+ * Column 3: lastSync
+ * Column 4: lastAppliedAt (для reapplyMissedApproved_)
+ *
+ * Все остальные колонки (19-21) оставлены для обратной совместимости,
+ * но новая логика использует только columns 1-4.
+ */
 function findOrCreateUserRow_(sheet, username) {
     const { row, existed } = findUserRowInSheet_(sheet, username, true);
     if (!existed) {
         const now = new Date();
-        const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        // Ensure column 21 exists
-        ensureColO_(sheet);
-        if (sheet.getMaxColumns() < 21) {
-          sheet.insertColumnsAfter(20, 1);
+        // Инициализируем минимальные необходимые колонки
+        // Column 1: username
+        // Column 2: userDeposits
+        // Column 3: lastSync
+        // Column 4: lastAppliedAt (для reapplyMissedApproved_)
+        sheet.getRange(row, 1, 1, 4).setValues([[username, 0, now, now]]);
+
+        // Дополнительно инициализируем column 19 для обратной совместимости
+        if (sheet.getMaxColumns() < 19) {
+          const colsToAdd = 19 - sheet.getMaxColumns();
+          sheet.insertColumnsAfter(sheet.getMaxColumns(), colsToAdd);
         }
-        // Initialize: [username, investedAmount, balance, lastSync, '', rate, '', '', '', '', '', '', '', lastMonth, paidMonth, availableForWithdraw, pendingInterest, lastDayProcessed, userDeposits, totalEarnings, available16Interest]
-        sheet.getRange(row, 1, 1, 21).setValues([[username, 0, 0, now, '', 16, '', '', '', '', '', '', '', monthKey_(now), 0, 0, 0, dayStart, 0, 0, 0]]);
+        sheet.getRange(row, 19).setValue(0); // userDeposits дублируется в column 19 для старого кода
     }
     return { row, existed };
 }

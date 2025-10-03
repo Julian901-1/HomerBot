@@ -1,3 +1,4 @@
 *.log
 google_sheets_sync.js
 google_sheets_sync.js
+*.md
