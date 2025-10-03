@@ -201,6 +201,7 @@ function openModal(modalId) {
        trigger.dataset.index = 0;
      }
      setTimeout(updateWithdrawBtnState, 0);
+     setTimeout(updateWithdrawWarning, 0);
    } else {
      if (methodChoice) methodChoice.style.display = 'block';
      if (addForm)      addForm.style.display      = 'none';
@@ -660,10 +661,26 @@ async function cancelDeposit() {
   try {
     const r = await apiGet(`?action=cancelPendingDeposit&username=${username}`);
     if (r && r.success) {
+      // Очищаем локальные данные о pending депозите
       hasPendingDeposit = false;
-      showPopup('Депозит отменён');
+      lastDepositAmount = 0;
+      lastDepositShortId = null;
+
+      // Обновляем историю чтобы отменённый депозит не показывался как PENDING
+      const historyData = await apiGet(`?action=getHistory&username=${encodeURIComponent(username)}`);
+      if (historyData && historyData.success) {
+        serverState.history = historyData.history;
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+      }
+
+      // Возвращаемся к шагу 1
       showDepositStep(1);
-      initializeApp();
+      document.getElementById('depositAmount').value = '';
+      document.getElementById('depositAgree').checked = false;
+      updateDepositBtnState();
+
+      showPopup('Депозит отменён');
     } else {
       showPopup('Не удалось отменить депозит');
     }
