@@ -31,6 +31,11 @@ let currentHistoryFilterType = 'all';
 let filteredHistory = [];
 
 // -------- HELPERS --------
+function getCurrencySymbol() {
+  const currency = userPrefs.currency || 'RUB';
+  return currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+}
+
 const fmtMoney = (val, currency) => {
   const rate = exchangeRates[currency];
   const num = (Number(val) || 0) * rate;
