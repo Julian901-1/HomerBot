@@ -231,6 +231,12 @@ function openModal(modalId) {
            const amt = pending ? Math.abs(Number(pending.amount||0)) : lastDepositAmount;
            const sid = pending ? pending.shortId : lastDepositShortId;
            hydrateDepositStep2(amt || 0, sid || null);
+         } else {
+           // Нет PENDING депозита - очищаем старые данные и показываем шаг 1
+           lastDepositAmount = 0;
+           lastDepositShortId = null;
+           document.getElementById('depositAmount').value = '';
+           document.getElementById('depositAgree').checked = false;
          }
          showDepositStep(hasPendingDeposit ? 2 : 1);
        }
@@ -595,6 +601,11 @@ async function syncBalance(fromScheduler = false) {
         if (last && (last.status === 'APPROVED' || last.status === 'REJECTED' || last.status === 'CANCELED')) {
           const msg = last.status === 'APPROVED' ?
             'Средства зачислены на счёт' : 'Депозит не удался';
+
+          // Очищаем старые данные депозита
+          lastDepositAmount = 0;
+          lastDepositShortId = null;
+
           closeDepositFlowWithPopup(msg);
         }
       }

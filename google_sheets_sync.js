@@ -658,30 +658,44 @@ function calculateBalances(username) {
     const reqRow = findRequestRowById_(investSheet, inv.requestId);
     if (!reqRow) continue;
 
-    const accruedInterest = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
-    console.log(`Investment ${inv.shortId} (${inv.rate}%): amount=${inv.amount}, accrued=${accruedInterest}`);
+    const accruedInterestTotal = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
+    console.log(`Investment ${inv.shortId} (${inv.rate}%): amount=${inv.amount}, accrued=${accruedInterestTotal}`);
 
-    totalEarnedFromInvestments += accruedInterest;
+    totalEarnedFromInvestments += accruedInterestTotal;
+
+    // Получаем дату создания инвестиции
+    const createdAt = new Date(investSheet.getRange(reqRow, 1).getValue());
+
+    // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Разделяем accruedInterest на "до сегодня" и "сегодня"
+    const dailyRate = (inv.rate / 100) / 365.25;
+
+    // Считаем проценты с создания до начала сегодняшнего дня
+    const msUntilToday = Math.max(0, todayStart.getTime() - createdAt.getTime());
+    const daysUntilToday = msUntilToday / (24 * 60 * 60 * 1000);
+    const accruedUntilToday = inv.amount * dailyRate * daysUntilToday;
+
+    // Считаем проценты за сегодня (с начала дня или с момента создания, если создано сегодня)
+    const effectiveStart = createdAt > todayStart ? createdAt : todayStart;
+    const msElapsedToday = Math.max(0, now.getTime() - effectiveStart.getTime());
+    const daysElapsedToday = msElapsedToday / (24 * 60 * 60 * 1000);
+    const earnedToday = inv.amount * dailyRate * daysElapsedToday;
+
+    todayIncome += earnedToday;
+
+    console.log(`  accruedUntilToday=${round2(accruedUntilToday)}, earnedToday=${round2(earnedToday)}`);
 
     // Проверяем доступность для вывода
-    const createdAt = new Date(investSheet.getRange(reqRow, 1).getValue());
     const isFrozen = (inv.rate === 17 || inv.rate === 18) &&
                      inv.unfreezeDate &&
                      inv.unfreezeDate > now &&
                      !inv.delivered;
 
     if (!isFrozen) {
-      // Разблокированная инвестиция: основа + проценты доступны для вывода
-      availableForWithdrawal += inv.amount + accruedInterest;
+      // КРИТИЧЕСКИ ВАЖНО: Доступны для вывода ТОЛЬКО проценты до сегодня!
+      // Сегодняшние проценты станут доступны только после 00:00
+      availableForWithdrawal += accruedUntilToday;
     }
     // Если заблокирована - ничего не добавляем к availableForWithdrawal
-
-    // Считаем доход за сегодня для этой конкретной инвестиции
-    const dailyRate = (inv.rate / 100) / 365.25;
-    const msElapsedToday = now.getTime() - todayStart.getTime();
-    const daysElapsedToday = msElapsedToday / (24 * 60 * 60 * 1000);
-    const earnedToday = inv.amount * dailyRate * daysElapsedToday;
-    todayIncome += earnedToday;
   }
 
   console.log('totalEarnedFromInvestments:', totalEarnedFromInvestments);
