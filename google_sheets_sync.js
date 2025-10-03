@@ -393,6 +393,27 @@ function syncBalance(username) {
  */
 function requestAmount(username, amount, type, details) {
     try {
+        // SERVER-SIDE VALIDATION для WITHDRAW
+        if (type === 'WITHDRAW') {
+            const withdrawAmount = Math.abs(Number(amount));
+            const balances = calculateBalances(username);
+            const availableForWithdrawal = balances.availableForWithdrawal || 0;
+
+            console.log(`Withdraw validation: amount=${withdrawAmount}, available=${availableForWithdrawal}`);
+
+            if (withdrawAmount <= 0) {
+                return { success: false, error: 'Сумма вывода должна быть больше 0' };
+            }
+
+            if (withdrawAmount > availableForWithdrawal) {
+                return { success: false, error: `Недостаточно средств для вывода. Доступно: ${round2(availableForWithdrawal)} ₽` };
+            }
+
+            if (availableForWithdrawal <= 0) {
+                return { success: false, error: 'Недостаточно средств для вывода. Доступная сумма: 0 ₽' };
+            }
+        }
+
         let reqSheet;
         if (type === 'DEPOSIT' || type === 'WITHDRAW') {
             reqSheet = ensureDepositWithdrawTransactionsSheet_();

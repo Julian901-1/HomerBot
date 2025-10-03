@@ -1144,16 +1144,22 @@ function updateWithdrawWarning() {
 
   const portfolio = serverState.portfolio || [];
   const userDeposits = serverState.userDeposits || 0;
+  const investedAmount = serverState.investedAmount || 0;
   const availableForWithdrawal = serverState.availableForWithdrawal || 0;
 
-  // Если amount <= availableForWithdrawal, то инвестиции закрываться не будут
-  if (amount <= availableForWithdrawal) {
+  // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Инвестиции закрываются если вывод затрагивает userDeposits
+  // availableForWithdrawal может включать проценты, но если amount > (userDeposits - investedAmount),
+  // то придётся закрывать инвестиции
+  const freeUserDeposits = userDeposits - investedAmount; // Свободные депозиты (не инвестированные)
+
+  // Если выводимая сумма НЕ превышает свободные депозиты, инвестиции не закрываются
+  if (amount <= freeUserDeposits) {
     warningDiv.style.display = 'none';
     return;
   }
 
-  // Если amount > availableForWithdrawal, нужно закрыть инвестиции
-  const shortfall = amount - availableForWithdrawal;
+  // Нужно закрыть инвестиции на сумму shortfall
+  const shortfall = amount - freeUserDeposits;
 
   // Сортируем инвестиции по приоритету: 16% → разморожено 17%/18% → заморожено
   const now = new Date();
