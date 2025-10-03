@@ -467,11 +467,9 @@ async function apiGet(path) {
 
 async function initializeApp() {
   try {
-    // Fullscreen loader and start progress
     startBootScreen();
     setBootProgress(10);
 
-    // Telegram init + username
     const tg = window.Telegram?.WebApp;
     tg?.expand?.();
     username = (tg?.initDataUnsafe?.user?.username) || 'marulin';
@@ -479,8 +477,10 @@ async function initializeApp() {
 
     setBootProgress(25);
 
-    // Initial data from backend
+    console.log('=== CALLING getInitialData from initializeApp ===');
     const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+    console.log('=== RECEIVED from getInitialData ===', data);
+    
     if (!data || !data.success) {
       const errorMsg = data?.error ? (typeof data.error === 'string' ? data.error : 'Server error') : 'Failed to get initial data';
       console.error('Backend error:', errorMsg);
@@ -540,9 +540,8 @@ async function initializeApp() {
 
 // Updates balance + "Today income"; additionally tracks completion of PENDING deposit
 async function syncBalance(fromScheduler = false) {
-  console.log('Frontend syncBalance start', new Date().toISOString());
+  console.log('=== FRONTEND syncBalance START ===', new Date().toISOString());
   
-  // Prevent parallel sync cycles
   if (syncInFlight) {
     console.log('Sync already in flight, skipping');
     if (fromScheduler) scheduleSync();
@@ -551,21 +550,20 @@ async function syncBalance(fromScheduler = false) {
   
   syncInFlight = true;
   const syncStartTime = Date.now();
-  const SYNC_TIMEOUT = 30000; // 30 seconds timeout
+  const SYNC_TIMEOUT = 30000;
 
   try {
-    // Create timeout promise
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Sync timeout after 30s')), SYNC_TIMEOUT)
     );
 
-    // Create sync promise
     const syncPromise = (async () => {
       let data = null;
       
       if (hasPendingDeposit) {
-        // Full data for pending deposits
+        console.log('=== CALLING getInitialData (hasPendingDeposit) ===');
         const full = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+        console.log('=== RECEIVED from getInitialData ===', full);
         if (full && full.success) {
           data = full;
           serverState = { ...serverState, ...full };
@@ -575,11 +573,14 @@ async function syncBalance(fromScheduler = false) {
           renderPortfolio(serverState.portfolio);
         }
       } else {
-        // Fast path: balance + income preview
+        console.log('=== CALLING syncBalance + previewAccrual ===');
         const [balRes, accrRes] = await Promise.allSettled([
           apiGet(`?action=syncBalance&username=${encodeURIComponent(username)}`),
           apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`)
         ]);
+        
+        console.log('=== RECEIVED from syncBalance ===', balRes);
+        console.log('=== RECEIVED from previewAccrual ===', accrRes);
         
         if (balRes.status === 'fulfilled' && balRes.value?.success) {
           data = balRes.value;
@@ -593,6 +594,7 @@ async function syncBalance(fromScheduler = false) {
         
         renderTodayIncome();
       }
+
 
       // Check deposit status transition
       const before = hasPendingDeposit;
@@ -612,7 +614,7 @@ async function syncBalance(fromScheduler = false) {
       }
 
       syncBackoffMs = 20000; // Reset backoff on success
-      console.log('Frontend syncBalance success', new Date().toISOString());
+      console.log('=== FRONTEND syncBalance SUCCESS ===');
       return data;
     })();
 
@@ -626,7 +628,7 @@ async function syncBalance(fromScheduler = false) {
   } finally {
     syncInFlight = false;
     const syncDuration = Date.now() - syncStartTime;
-    console.log(`Sync completed in ${syncDuration}ms`);
+    console.log(`=== FRONTEND syncBalance END === Duration: ${syncDuration}ms`);
     
     if (fromScheduler) {
       scheduleSync();
