@@ -539,12 +539,14 @@ function getPortfolio(username) {
     return data
         .filter(row => String(row[1]).trim() === username && String(row[6]).trim() === 'INVEST' && String(row[3]).trim() === 'APPROVED')
         .map(row => ({
+            createdAt: row[0] ? new Date(row[0]) : null,  // ДОБАВЛЕНО: timestamp создания
             requestId: String(row[2]),
             shortId: shortIdFromUuid(String(row[2])),
             amount: Number(row[7]),
             rate: Number(row[8]),
             unfreezeDate: row[9] ? new Date(row[9]) : null,
-            accruedInterest: Number(row[10] || 0)
+            accruedInterest: Number(row[10] || 0),
+            delivered: row[5] ? new Date(row[5]) : null  // ДОБАВЛЕНО: для проверки разморозки
         }));
 }
 

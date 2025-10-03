@@ -1202,6 +1202,19 @@ function updateWithdrawWarning() {
     const msElapsedToday = Math.max(0, now.getTime() - effectiveStart.getTime());
     const daysElapsedToday = msElapsedToday / (24 * 60 * 60 * 1000);
 
+    console.log(`[DEBUG] Investment ${inv.shortId}:`, {
+      createdAt: inv.createdAt,
+      createdAtParsed: createdAt.toISOString(),
+      todayStart: todayStart.toISOString(),
+      effectiveStart: effectiveStart.toISOString(),
+      now: now.toISOString(),
+      msElapsedToday,
+      daysElapsedToday,
+      dailyRate,
+      amountToClose,
+      pendingIncome: amountToClose * dailyRate * daysElapsedToday
+    });
+
     // ИСПРАВЛЕНИЕ: Считаем pending доход только для закрываемой суммы
     const pendingTodayForClosedAmount = amountToClose * dailyRate * daysElapsedToday;
 
