@@ -279,13 +279,18 @@ function syncBalance(username) {
 
     // CRITICAL FIX: Remove today's partial interest from previous sync before processing
     // This prevents double-counting of 17%/18% interest
-    if (lastSyncDayStart.getTime() === currentDayStart.getTime()) {
-      // Last sync was today - remove partial interest from previous sync
-      const previousInterest16 = computeInterestForPeriod(username, currentDayStart, lastSyncTime, 16);
-      const previousInterest1718 = computeInterestForPeriod(username, currentDayStart, lastSyncTime, [17, 18]);
-      totalEarnings = round2(totalEarnings - previousInterest16 - previousInterest1718);
-    }
-
+// Вместо пересчёта с начала дня, добавляйте только НОВЫЕ проценты
+if (lastSyncDayStart.getTime() === currentDayStart.getTime()) {
+  // Считаем только новые проценты с lastSyncTime до now
+  const newInterest16 = computeInterestForPeriod(username, lastSyncTime, now, 16);
+  const newInterest1718 = computeInterestForPeriod(username, lastSyncTime, now, [17, 18]);
+  totalEarnings = round2(totalEarnings + newInterest16 + newInterest1718);
+} else {
+  // Новый день - считаем с начала дня
+  const interest16Today = computeInterestForPeriod(username, currentDayStart, now, 16);
+  const interest1718Today = computeInterestForPeriod(username, currentDayStart, now, [17, 18]);
+  totalEarnings = round2(totalEarnings + interest16Today + interest1718Today);
+}
     // Process missed days (if user didn't log in for days/weeks)
     let processingDay = new Date(lastSyncDayStart);
     while (processingDay < currentDayStart) {
