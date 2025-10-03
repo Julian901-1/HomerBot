@@ -298,6 +298,9 @@ window.addEventListener('resize', fitStatText);
 
 // -------- RENDER --------
 function updateDashboard(data) {
+console.log('=== UPDATE DASHBOARD ===');
+  console.log('Received data:', data);
+
   serverState = { ...serverState, ...data };
   const currency = userPrefs.currency;
   const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
@@ -306,6 +309,9 @@ function updateDashboard(data) {
   const balance = data.balance || 0;
   const userDeposits = data.userDeposits || 0;
   const totalEarnings = data.totalEarnings || 0;
+  console.log('balance:', balance);
+  console.log('userDeposits:', userDeposits);
+  console.log('totalEarnings:', totalEarnings);
   const investedAmount = data.investedAmount || data.monthBase || 0;
   const availableForWithdrawal = data.availableForWithdrawal || 0;
   const availableForInvest = data.availableForInvest || 0;
