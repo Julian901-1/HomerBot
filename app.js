@@ -1219,19 +1219,20 @@ function updateWithdrawWarning() {
     return;
   }
 
+  const currency = userPrefs.currency || 'RUB';
   const currencySymbol = getCurrencySymbol();
   let html = '<p style="margin: 0 0 8px 0;"><b>Будут закрыты инвестиции:</b></p><ul style="margin: 0; padding-left: 20px;">';
 
   toClose.forEach(inv => {
     const typeText = inv.closureType === 'full' ? 'полностью' : 'частично';
     const strategyName = inv.rate === 16 ? 'Ликвидный' : inv.rate === 17 ? 'Стабильный' : 'Агрессивный';
-    html += `<li>${strategyName} (${inv.rate}%): ${formatMoney(inv.closedAmount)} ${currencySymbol} (${typeText})</li>`;
+    html += `<li>${strategyName} (${inv.rate}%): ${fmtMoney(inv.closedAmount, currency)} ${currencySymbol} (${typeText})</li>`;
   });
 
   html += '</ul>';
 
   if (totalPendingInterestLost > 0.01) {
-    html += `<p style="margin: 8px 0 0 0; color: #dc2626;"><b>⚠ Будет потерян незаблокированный доход за сегодня: ~${formatMoney(totalPendingInterestLost)} ${currencySymbol}</b></p>`;
+    html += `<p style="margin: 8px 0 0 0; color: #dc2626;"><b>⚠ Будет потерян незаблокированный доход за сегодня: ~${fmtMoney(totalPendingInterestLost, currency)} ${currencySymbol}</b></p>`;
   }
 
   warningContent.innerHTML = html;
