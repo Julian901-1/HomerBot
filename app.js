@@ -487,17 +487,14 @@ async function initializeApp() {
       throw new Error('Failed to get initial data');
     }
 
-    // Apply settings/state
     userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
     devMode = localStorage.getItem('devMode') === 'true';
     const devToggle = document.getElementById('devModeToggle');
     if (devToggle) devToggle.checked = devMode;
     const dv = document.getElementById('devVersion');
-  if (dv) dv.style.display = devMode ? 'block' : 'none';
-
+    if (dv) dv.style.display = devMode ? 'block' : 'none';
 
     serverState = { ...serverState, ...data };
-    // Ensure all required fields are present
     if (!serverState.balance) serverState.balance = 0;
     if (!serverState.rate) serverState.rate = 16;
     if (!serverState.monthBase) serverState.monthBase = 0;
@@ -508,33 +505,22 @@ async function initializeApp() {
     if (!serverState.portfolio) serverState.portfolio = [];
     hasPendingDeposit = computeHasPendingDeposit();
 
-    // Today income first
-    setBootProgress(60);
-    await refreshTodayIncome();
-
-    // Sync balance to get fresh data
-    setBootProgress(70);
-    await syncBalance();
-
-    // Redraw main screens
     setBootProgress(80);
     updateDashboard(serverState);
     recomputeFilteredHistory();
     renderHistoryPage(false);
     renderPortfolio(serverState.portfolio);
 
-    // Withdrawal UI
     setBootProgress(90);
     updateWithdrawUI();
 
-    // Finalization
     setBootProgress(95);
-    scheduleSync(2000); // start poller
-    finishBootScreen(); // title "flies away", overlay disappears
+    scheduleSync(2000);
+    finishBootScreen();
   } catch (e) {
     console.error('Initialization error:', e.message, e.stack);
-    finishBootScreen();                 // even on error remove overlay
-    setStatus('Error: Failed to initialize app', 'error'); // popup only for errors
+    finishBootScreen();
+    setStatus('Error: Failed to initialize app', 'error');
   }
 }
 
