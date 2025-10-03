@@ -1166,17 +1166,16 @@ function updateWithdrawWarning() {
   // Нужно закрыть инвестиции на сумму shortfall
   const shortfall = amount - freeUserDeposits;
 
-  // Сортируем инвестиции по приоритету: 16% → разморожено 17%/18% → заморожено
+  // ТОЛЬКО 16% инвестиции могут быть закрыты досрочно
+  // 17%/18% заблокированы до unfreezeDate и не учитываются в availableForWithdrawal
   const now = new Date();
-  const sorted = portfolio.slice().sort((a, b) => {
-    const aFrozen = (a.rate === 17 || a.rate === 18) && a.unfreezeDate && new Date(a.unfreezeDate) > now && !a.delivered;
-    const bFrozen = (b.rate === 17 || b.rate === 18) && b.unfreezeDate && new Date(b.unfreezeDate) > now && !b.delivered;
+  const liquidInvestments = portfolio.filter(inv => inv.rate === 16);
 
-    if (a.rate === 16 && b.rate !== 16) return -1;
-    if (a.rate !== 16 && b.rate === 16) return 1;
-    if (!aFrozen && bFrozen) return -1;
-    if (aFrozen && !bFrozen) return 1;
-    return 0;
+  // Сортируем 16% инвестиции по дате создания (старые первыми)
+  const sorted = liquidInvestments.slice().sort((a, b) => {
+    const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return aDate - bDate;
   });
 
   // Найдем, какие инвестиции будут закрыты
@@ -1201,19 +1200,6 @@ function updateWithdrawWarning() {
     const effectiveStart = createdAt > todayStart ? createdAt : todayStart;
     const msElapsedToday = Math.max(0, now.getTime() - effectiveStart.getTime());
     const daysElapsedToday = msElapsedToday / (24 * 60 * 60 * 1000);
-
-    console.log(`[DEBUG] Investment ${inv.shortId}:`, {
-      createdAt: inv.createdAt,
-      createdAtParsed: createdAt.toISOString(),
-      todayStart: todayStart.toISOString(),
-      effectiveStart: effectiveStart.toISOString(),
-      now: now.toISOString(),
-      msElapsedToday,
-      daysElapsedToday,
-      dailyRate,
-      amountToClose,
-      pendingIncome: amountToClose * dailyRate * daysElapsedToday
-    });
 
     // ИСПРАВЛЕНИЕ: Считаем pending доход только для закрываемой суммы
     const pendingTodayForClosedAmount = amountToClose * dailyRate * daysElapsedToday;
