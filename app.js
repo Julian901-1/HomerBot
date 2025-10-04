@@ -49,6 +49,42 @@ function parseAmount(str) {
   return isNaN(n) ? 0 : n;
 }
 
+function formatPhoneInput(input) {
+  // Извлекаем только цифры
+  let digits = input.value.replace(/\D/g, '');
+
+  // Если первая цифра не 7, добавляем 7
+  if (digits.length > 0 && digits[0] !== '7') {
+    digits = '7' + digits;
+  }
+
+  // Ограничиваем до 11 цифр (7 + 10 цифр номера)
+  digits = digits.slice(0, 11);
+
+  // Форматируем: +7 (XXX) XXX-XX-XX
+  let formatted = '';
+  if (digits.length > 0) {
+    formatted = '+7';
+    if (digits.length > 1) {
+      formatted += ' (' + digits.slice(1, 4);
+      if (digits.length > 4) {
+        formatted += ') ' + digits.slice(4, 7);
+        if (digits.length > 7) {
+          formatted += '-' + digits.slice(7, 9);
+          if (digits.length > 9) {
+            formatted += '-' + digits.slice(9, 11);
+          }
+        }
+      }
+    }
+  }
+
+  input.value = formatted;
+
+  // Сохраняем чистый номер в data-атрибут для последующего использования
+  input.dataset.phone = digits;
+}
+
 // Suppress only this specific noise, not affecting other errors
 window.addEventListener('unhandledrejection', (e) => {
   const msg = String((e.reason && e.reason.message) || e.reason || '');
@@ -862,9 +898,21 @@ onIf($id('depositConfirmBtn'), 'click', async function () {
   // Withdraw — save SBP credentials
   onIf($id('save-sbp-btn'), 'click', async function () {
     const phoneEl = $id('withdraw-sbp-phone');
-    const phone = phoneEl ? phoneEl.value : '';
+    // Используем чистый номер из data-атрибута или парсим из value
+    const phone = phoneEl ? (phoneEl.dataset.phone || phoneEl.value.replace(/\D/g, '')) : '';
     const selectedBankEl = document.querySelector('.bank-icon.selected');
-    if (!phone || !selectedBankEl) { showPopup('Please enter phone and select bank.'); return; }
+
+    // Валидация: проверяем что номер начинается с 7 и имеет 11 цифр
+    if (!phone || phone.length !== 11 || phone[0] !== '7') {
+      showPopup('Введите корректный номер телефона (11 цифр, начинается с 7)');
+      return;
+    }
+
+    if (!selectedBankEl) {
+      showPopup('Выберите банк');
+      return;
+    }
+
     const bank = selectedBankEl.dataset.bank;
     userPrefs.sbpMethods = userPrefs.sbpMethods || [];
     userPrefs.sbpMethods.unshift({ phone, bank });
@@ -1142,7 +1190,7 @@ async function selectCurrency(currency, event) {
 
 function openNewInvestment(rate) {
   lastChosenRate = rate;
-  const names = { 16: 'Liquid', 17: 'Stable', 18: 'Aggressive' };
+  const names = { 16: 'Ликвидный', 17: 'Стабильный', 18: 'Агрессивный' };
   const name = names[rate] || `Strategy ${rate}%`;
   document.getElementById('niStrategyReadonly').textContent = name;
   document.getElementById('niAmount').value = '';
