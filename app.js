@@ -241,8 +241,15 @@ function openModal(modalId) {
            // Нет PENDING депозита - очищаем старые данные и показываем шаг 1
            lastDepositAmount = 0;
            lastDepositShortId = null;
-           document.getElementById('depositAmount').value = '';
-           document.getElementById('depositAgree').checked = false;
+           // Очищаем поле только если оно пустое (не переписываем значение от быстрой кнопки)
+           const amountInput = document.getElementById('depositAmount');
+           if (amountInput && !amountInput.value) {
+             amountInput.value = '';
+           }
+           const agreeCheckbox = document.getElementById('depositAgree');
+           if (agreeCheckbox) {
+             agreeCheckbox.checked = false;
+           }
          }
          showDepositStep(hasPendingDeposit ? 2 : 1);
        }
