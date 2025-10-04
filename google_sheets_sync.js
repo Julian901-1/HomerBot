@@ -782,7 +782,9 @@ function calculateBalances(username) {
     investedAmount: round2(investedAmount),
     todayIncome: roundedTodayIncome,
     userDeposits: round2(userDeposits),
-    totalEarnings: round2(totalEarnedFromInvestments)
+    totalEarnings: round2(totalEarnedFromInvestments),
+    portfolio: investments,  // ДОБАВЛЕНО: возвращаем актуальный портфель
+    success: true
   };
 }
 

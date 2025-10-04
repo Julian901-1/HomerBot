@@ -571,15 +571,17 @@ async function syncBalance(fromScheduler = false) {
           renderPortfolio(serverState.portfolio);
         }
       } else {
-        console.log('=== CALLING syncBalance + previewAccrual ===');
-        const [balRes, accrRes] = await Promise.allSettled([
+        console.log('=== CALLING syncBalance + previewAccrual + getHistory ===');
+        const [balRes, accrRes, histRes] = await Promise.allSettled([
           apiGet(`?action=syncBalance&username=${encodeURIComponent(username)}`),
-          apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`)
+          apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`),
+          apiGet(`?action=getHistory&username=${encodeURIComponent(username)}`)
         ]);
-        
+
         console.log('=== RECEIVED from syncBalance ===', balRes);
         console.log('=== RECEIVED from previewAccrual ===', accrRes);
-        
+        console.log('=== RECEIVED from getHistory ===', histRes);
+
         if (balRes.status === 'fulfilled' && balRes.value?.success) {
           data = balRes.value;
           serverState = { ...serverState, ...balRes.value };
@@ -588,12 +590,24 @@ async function syncBalance(fromScheduler = false) {
           if (balRes.value.portfolio) {
             renderPortfolio(balRes.value.portfolio);
           }
+          // ВАЖНО: Обновляем предупреждение о выводе если модальное окно открыто
+          const withdrawModal = document.getElementById('modalWithdraw');
+          if (withdrawModal && withdrawModal.classList.contains('active')) {
+            updateWithdrawWarning();
+          }
         }
-        
+
         if (accrRes.status === 'fulfilled' && accrRes.value?.success) {
           latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
         }
-        
+
+        // ВАЖНО: Обновляем историю если пришла в ответе
+        if (histRes.status === 'fulfilled' && histRes.value?.success && histRes.value?.history) {
+          serverState.history = histRes.value.history;
+          recomputeFilteredHistory();
+          renderHistoryPage(false);
+        }
+
         renderTodayIncome();
       }
 
