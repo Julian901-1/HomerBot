@@ -1069,6 +1069,11 @@ function setDepositAmount(amount) {
   input.value = amount;
   formatAmountInput(input);
   updateDepositBtnState();
+
+  // Снимаем фокус с кнопки чтобы она не оставалась "нажатой" (серой)
+  if (document.activeElement && document.activeElement.classList.contains('quick-amount-btn')) {
+    document.activeElement.blur();
+  }
 }
 function hydrateDepositStep2(amountRub, shortId) {
   const currency = userPrefs.currency;
