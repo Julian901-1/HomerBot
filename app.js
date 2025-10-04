@@ -238,7 +238,7 @@ function openModal(modalId) {
      const trigger = document.getElementById('select-trigger');
      if (trigger && userPrefs.sbpMethods && userPrefs.sbpMethods.length > 0) {
        const first = userPrefs.sbpMethods[0];
-       trigger.textContent = `SBP: ${first.phone} (${first.bank})`;
+       trigger.textContent = `СБП: ${first.phone} (${first.bank})`;
        trigger.dataset.index = 0;
      }
      setTimeout(updateWithdrawBtnState, 0);
@@ -1359,7 +1359,7 @@ function updateWithdrawUI() {
     const addNewOption = document.createElement('div');
     addNewOption.className = 'select-option add-new';
     addNewOption.dataset.value = 'add_new';
-    addNewOption.textContent = '+ Add new credentials';
+    addNewOption.textContent = '+ Добавить реквизиты';
     addNewOption.onclick = () => selectCustomOption(addNewOption);
     optionsContainer.appendChild(addNewOption);
 
