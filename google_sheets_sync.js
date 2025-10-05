@@ -217,7 +217,20 @@ function doGet(e) {
 
       // >>> добавлено: настройка вечернего процента
       case 'setEveningPercent':
-        return jsonOk(setEveningPercent(hashedUsername, p.startTime, p.endTime, p.agreed));
+        return jsonOk(setEveningPercent(hashedUsername, p.startTime, p.endTime, p.agreed, p.sessionId));
+
+      // >>> T-Bank integration actions
+      case 'tbankLogin':
+        return jsonOk(tbankLogin(hashedUsername, p.phone, p.password));
+
+      case 'tbankVerify2FA':
+        return jsonOk(tbankVerify2FA(hashedUsername, p.sessionId, p.code));
+
+      case 'tbankGetAccounts':
+        return jsonOk(tbankGetAccounts(hashedUsername, p.sessionId));
+
+      case 'tbankLogout':
+        return jsonOk(tbankLogout(hashedUsername, p.sessionId));
 
       default:
         return jsonErr('Unknown action');
@@ -1068,11 +1081,16 @@ function setUserPref(hashedUsername, key, value) {
  * @param {string|boolean} agreed - Согласие с условиями
  * @returns {Object} Результат операции
  */
-function setEveningPercent(hashedUsername, startTime, endTime, agreed) {
+function setEveningPercent(hashedUsername, startTime, endTime, agreed, sessionId) {
     // Backend validation: проверка согласия
     const isAgreed = agreed === 'true' || agreed === true;
     if (!isAgreed) {
         return { success: false, error: 'Необходимо согласиться с условиями' };
+    }
+
+    // Проверка наличия sessionId (означает что T-Bank подключен)
+    if (!sessionId) {
+        return { success: false, error: 'Необходимо подключить Т-Банк' };
     }
 
     const start = parseInt(startTime);
@@ -1090,14 +1108,16 @@ function setEveningPercent(hashedUsername, startTime, endTime, agreed) {
     let eveningStartCol = headers.indexOf('eveningPercentStart') + 1;
     let eveningEndCol = headers.indexOf('eveningPercentEnd') + 1;
     let eveningEnabledCol = headers.indexOf('eveningPercentEnabled') + 1;
+    let tbankSessionCol = headers.indexOf('tbankSessionId') + 1;
 
     // Если колонок нет, создаем их
     if (!eveningStartCol) {
         const lastCol = prefsSheet.getLastColumn();
-        prefsSheet.getRange(1, lastCol + 1, 1, 3).setValues([['eveningPercentStart', 'eveningPercentEnd', 'eveningPercentEnabled']]);
+        prefsSheet.getRange(1, lastCol + 1, 1, 4).setValues([['eveningPercentStart', 'eveningPercentEnd', 'eveningPercentEnabled', 'tbankSessionId']]);
         eveningStartCol = lastCol + 1;
         eveningEndCol = lastCol + 2;
         eveningEnabledCol = lastCol + 3;
+        tbankSessionCol = lastCol + 4;
     }
 
     const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
@@ -1106,9 +1126,10 @@ function setEveningPercent(hashedUsername, startTime, endTime, agreed) {
     prefsSheet.getRange(row, eveningStartCol).setValue(start);
     prefsSheet.getRange(row, eveningEndCol).setValue(end);
     prefsSheet.getRange(row, eveningEnabledCol).setValue(true);
+    prefsSheet.getRange(row, tbankSessionCol).setValue(sessionId);
 
     // Логируем операцию
-    console.log(`Evening percent configured for user ${hashedUsername}: ${start}:00 - ${end}:00`);
+    console.log(`Evening percent configured for user ${hashedUsername}: ${start}:00 - ${end}:00, sessionId: ${sessionId}`);
 
     return {
         success: true,
@@ -1116,6 +1137,119 @@ function setEveningPercent(hashedUsername, startTime, endTime, agreed) {
         endTime: end,
         enabled: true
     };
+}
+
+// ============================================================================
+// T-BANK INTEGRATION (Proxy to Node.js Puppeteer Service)
+// ============================================================================
+
+// URL сервиса Puppeteer (нужно заменить на реальный URL после деплоя)
+var TBANK_SERVICE_URL = 'http://localhost:3000/api';
+
+/**
+ * Прокси-функция для авторизации в T-Bank через Puppeteer сервис
+ */
+function tbankLogin(hashedUsername, phone, password) {
+  try {
+    var payload = JSON.stringify({
+      username: hashedUsername,
+      phone: phone,
+      password: password
+    });
+
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: payload,
+      muteHttpExceptions: true
+    };
+
+    var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/login', options);
+    var result = JSON.parse(response.getContentText());
+
+    return result;
+  } catch (e) {
+    console.error('tbankLogin error:', e);
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Прокси-функция для подтверждения 2FA кода
+ */
+function tbankVerify2FA(hashedUsername, sessionId, code) {
+  try {
+    var payload = JSON.stringify({
+      username: hashedUsername,
+      sessionId: sessionId,
+      code: code
+    });
+
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: payload,
+      muteHttpExceptions: true
+    };
+
+    var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/verify-2fa', options);
+    var result = JSON.parse(response.getContentText());
+
+    return result;
+  } catch (e) {
+    console.error('tbankVerify2FA error:', e);
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Прокси-функция для получения списка счетов T-Bank
+ */
+function tbankGetAccounts(hashedUsername, sessionId) {
+  try {
+    var url = TBANK_SERVICE_URL + '/accounts?username=' + encodeURIComponent(hashedUsername) +
+              '&sessionId=' + encodeURIComponent(sessionId);
+
+    var options = {
+      method: 'get',
+      muteHttpExceptions: true
+    };
+
+    var response = UrlFetchApp.fetch(url, options);
+    var result = JSON.parse(response.getContentText());
+
+    return result;
+  } catch (e) {
+    console.error('tbankGetAccounts error:', e);
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Прокси-функция для отключения T-Bank (закрытие браузера)
+ */
+function tbankLogout(hashedUsername, sessionId) {
+  try {
+    var payload = JSON.stringify({
+      username: hashedUsername,
+      sessionId: sessionId
+    });
+
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: payload,
+      muteHttpExceptions: true
+    };
+
+    var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/logout', options);
+    var result = JSON.parse(response.getContentText());
+
+    return result;
+  } catch (e) {
+    console.error('tbankLogout error:', e);
+    return { success: false, error: String(e) };
+  }
 }
 
 function ensureRequestsSheet_() {
