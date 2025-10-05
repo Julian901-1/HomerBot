@@ -183,15 +183,14 @@ function doPost(e) {
     const data = String(cq.data || '');
     const parts = data.split(':');
     const act = (parts[0] || '').toLowerCase();
-    const hashedUsername = (parts[1] || '').trim(); // Теперь это хешированный никнейм
-    const requestId = (parts[2] || '').trim();
+    const requestId = (parts[1] || '').trim(); // Теперь только requestId
     const chatId = cq.message.chat.id;
     const messageId = cq.message.message_id;
 
-    console.log('doPost data:', data, 'hashedUsername:', hashedUsername, 'requestId:', requestId);
+    console.log('doPost data:', data, 'requestId:', requestId);
 
     const action = act === 'approve' ? 'APPROVED' : act === 'reject' ? 'REJECTED' : '';
-    if (!hashedUsername || !requestId || !action) {
+    if (!requestId || !action) {
       safeAnswerCallbackQuery(cq.id, 'Ошибка: неверные данные.', true);
       return ContentService.createTextOutput('OK');
     }
@@ -208,7 +207,12 @@ function doPost(e) {
         if (reqResult) {
           const { sheet: reqSheet, row: reqRow } = reqResult;
           console.log('doPost processing sheet:', reqSheet.getName(), 'row:', reqRow);
-          if (reqSheet.getRange(reqRow, 2).getValue() === hashedUsername && reqSheet.getRange(reqRow, 4).getValue() === 'PENDING') {
+
+          // Получаем hashedUsername из таблицы по requestId
+          const hashedUsername = reqSheet.getRange(reqRow, 2).getValue();
+          console.log('doPost hashedUsername from sheet:', hashedUsername);
+
+          if (reqSheet.getRange(reqRow, 4).getValue() === 'PENDING') {
             reqSheet.getRange(reqRow, 4).setValue(action);
             reqSheet.getRange(reqRow, 5).setValue(new Date()); // decidedAt
             // Don't overwrite column 6 (delivered) - it should remain false until user sees the result
@@ -492,8 +496,9 @@ function requestAmount(hashedUsername, displayName, amount, type, details) {
     console.log('Telegram message text:', text);
     console.log('Sending to chat:', ADMIN_CHAT_ID);
 
-    // ВАЖНО: В callback_data передаем hashedUsername, а не оригинальный никнейм
-    const replyMarkup = { inline_keyboard: [[ { text: 'Да', callback_data: `approve:${hashedUsername}:${requestId}` }, { text: 'Нет', callback_data: `reject:${hashedUsername}:${requestId}` } ]] };
+    // ВАЖНО: В callback_data НЕ передаем hashedUsername (превышает лимит 64 байта)
+    // Вместо этого используем только requestId, username найдем по requestId в doPost
+    const replyMarkup = { inline_keyboard: [[ { text: 'Да', callback_data: `approve:${requestId}` }, { text: 'Нет', callback_data: `reject:${requestId}` } ]] };
 
     let messageId = null;
     try {
@@ -1297,6 +1302,76 @@ function verifyTelegramSignature(initData) {
     console.error('Signature verification error:', e);
     return false;
   }
+}
+
+/**
+ * ТЕСТОВАЯ ФУНКЦИЯ: Проверяет отправку Telegram уведомления администратору
+ * Запустить вручную из Google Apps Script Editor для проверки
+ */
+function testTelegramNotification() {
+  Logger.log('=== ТЕСТ TELEGRAM УВЕДОМЛЕНИЯ ===');
+  Logger.log('BOT_TOKEN: ' + BOT_TOKEN);
+  Logger.log('ADMIN_CHAT_ID: ' + ADMIN_CHAT_ID);
+
+  const testUsername = 'test_user';
+  const testHashedUsername = hashUsername(testUsername);
+  const testRequestId = Utilities.getUuid();
+  const testShortId = shortIdFromUuid(testRequestId);
+  const testAmount = 1000;
+
+  Logger.log('Хешированный никнейм: ' + testHashedUsername);
+  Logger.log('Request ID: ' + testRequestId);
+  Logger.log('Short ID: ' + testShortId);
+
+  const text = `[#${testShortId}] ТЕСТ: Пользователь ${testUsername} запросил депозит на ${testAmount} ₽.`;
+  Logger.log('Текст сообщения: ' + text);
+
+  const replyMarkup = {
+    inline_keyboard: [[
+      { text: 'Да', callback_data: `approve:${testRequestId}` },
+      { text: 'Нет', callback_data: `reject:${testRequestId}` }
+    ]]
+  };
+
+  Logger.log('Reply markup: ' + JSON.stringify(replyMarkup));
+
+  try {
+    Logger.log('Отправка запроса в Telegram API...');
+    const response = UrlFetchApp.fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        chat_id: ADMIN_CHAT_ID,
+        text: text,
+        reply_markup: replyMarkup
+      }),
+      muteHttpExceptions: true
+    });
+
+    const responseCode = response.getResponseCode();
+    const responseText = response.getContentText();
+
+    Logger.log('HTTP Response Code: ' + responseCode);
+    Logger.log('HTTP Response Body: ' + responseText);
+
+    const jsonResponse = JSON.parse(responseText);
+
+    if (jsonResponse.ok) {
+      Logger.log('✅ УСПЕХ! Сообщение отправлено.');
+      Logger.log('Message ID: ' + jsonResponse.result.message_id);
+    } else {
+      Logger.log('❌ ОШИБКА от Telegram API:');
+      Logger.log('Error code: ' + jsonResponse.error_code);
+      Logger.log('Description: ' + jsonResponse.description);
+    }
+
+  } catch (e) {
+    Logger.log('❌ ИСКЛЮЧЕНИЕ при отправке:');
+    Logger.log('Error: ' + e.toString());
+    Logger.log('Stack: ' + e.stack);
+  }
+
+  Logger.log('=== КОНЕЦ ТЕСТА ===');
 }
 
 /**
