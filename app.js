@@ -1638,7 +1638,13 @@ async function connectTBank() {
     return;
   }
 
-  if (btn) btn.disabled = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Подключение...';
+  }
+
+  // Показываем предупреждение при первом подключении (cold start на Render)
+  showPopup('Подключение к Т-Банку... Может занять до 60 сек при первом запуске', 5000);
 
   try {
     const resp = await apiGet(
@@ -1660,7 +1666,10 @@ async function connectTBank() {
   } catch (e) {
     showPopup('Ошибка сети');
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Подключить Т-Банк';
+    }
   }
 }
 

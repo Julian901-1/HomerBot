@@ -1143,8 +1143,10 @@ function setEveningPercent(hashedUsername, startTime, endTime, agreed, sessionId
 // T-BANK INTEGRATION (Proxy to Node.js Puppeteer Service)
 // ============================================================================
 
-// URL сервиса Puppeteer (нужно заменить на реальный URL после деплоя)
-var TBANK_SERVICE_URL = 'http://localhost:3000/api';
+// URL сервиса Puppeteer на Render
+var TBANK_SERVICE_URL = 'https://homerbot.onrender.com/api';
+// Таймаут для запросов к Puppeteer (увеличен из-за cold start на Render)
+var TBANK_REQUEST_TIMEOUT = 65000; // 65 секунд
 
 /**
  * Прокси-функция для авторизации в T-Bank через Puppeteer сервис
@@ -1161,7 +1163,8 @@ function tbankLogin(hashedUsername, phone, password) {
       method: 'post',
       contentType: 'application/json',
       payload: payload,
-      muteHttpExceptions: true
+      muteHttpExceptions: true,
+      timeout: TBANK_REQUEST_TIMEOUT
     };
 
     var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/login', options);
@@ -1170,6 +1173,10 @@ function tbankLogin(hashedUsername, phone, password) {
     return result;
   } catch (e) {
     console.error('tbankLogin error:', e);
+    // Если таймаут из-за cold start, вернуть понятную ошибку
+    if (String(e).includes('timeout') || String(e).includes('Timeout')) {
+      return { success: false, error: 'Сервер запускается, попробуйте через 10 секунд' };
+    }
     return { success: false, error: String(e) };
   }
 }
@@ -1189,7 +1196,8 @@ function tbankVerify2FA(hashedUsername, sessionId, code) {
       method: 'post',
       contentType: 'application/json',
       payload: payload,
-      muteHttpExceptions: true
+      muteHttpExceptions: true,
+      timeout: TBANK_REQUEST_TIMEOUT
     };
 
     var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/verify-2fa', options);
@@ -1212,7 +1220,8 @@ function tbankGetAccounts(hashedUsername, sessionId) {
 
     var options = {
       method: 'get',
-      muteHttpExceptions: true
+      muteHttpExceptions: true,
+      timeout: TBANK_REQUEST_TIMEOUT
     };
 
     var response = UrlFetchApp.fetch(url, options);
@@ -1239,7 +1248,8 @@ function tbankLogout(hashedUsername, sessionId) {
       method: 'post',
       contentType: 'application/json',
       payload: payload,
-      muteHttpExceptions: true
+      muteHttpExceptions: true,
+      timeout: TBANK_REQUEST_TIMEOUT
     };
 
     var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/logout', options);
