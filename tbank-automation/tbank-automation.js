@@ -31,13 +31,19 @@ export class TBankAutomation {
 
     console.log(`[TBANK] Initializing browser for user ${this.username}`);
 
+    // Detect if running on Render (or other cloud providers)
+    const isCloud = process.env.RENDER || process.env.RAILWAY || process.env.FLY;
+
     this.browser = await puppeteer.launch({
       headless: process.env.PUPPETEER_HEADLESS === 'true',
+      executablePath: isCloud ? '/usr/bin/chromium' : undefined,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
         '--disable-blink-features=AutomationControlled',
         '--disable-features=IsolateOrigins,site-per-process',
+        '--disable-gpu',
         '--window-size=1920,1080'
       ],
       defaultViewport: {
