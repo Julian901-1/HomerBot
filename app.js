@@ -530,25 +530,51 @@ async function initializeApp() {
     username = (tg?.initDataUnsafe?.user?.username) || 'marulin';
     initData = tg?.initData || '';
 
-    setBootProgress(25);
-
-    console.log('=== CALLING getInitialData from initializeApp ===');
-    const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
-    console.log('=== RECEIVED from getInitialData ===', data);
-    
-    if (!data || !data.success) {
-      const errorMsg = data?.error ? (typeof data.error === 'string' ? data.error : 'Server error') : 'Failed to get initial data';
-      console.error('Backend error:', errorMsg);
-      throw new Error('Failed to get initial data');
-    }
-
-    userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
+    // ОПТИМИЗАЦИЯ: Показываем UI с заглушками немедленно
     devMode = localStorage.getItem('devMode') === 'true';
     const devToggle = document.getElementById('devModeToggle');
     if (devToggle) devToggle.checked = devMode;
     const dv = document.getElementById('devVersion');
     if (dv) dv.style.display = devMode ? 'block' : 'none';
 
+    // ОПТИМИЗАЦИЯ: Показываем закэшированные данные мгновенно (если есть)
+    const cachedData = localStorage.getItem(`cachedData_${username}`);
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        serverState = { ...serverState, ...parsed };
+        userPrefs = parsed.userPrefs || { currency: 'RUB', sbpMethods: [] };
+        hasPendingDeposit = computeHasPendingDeposit();
+
+        // Мгновенно показываем закэшированные данные
+        updateDashboard(serverState);
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+        renderPortfolio(serverState.portfolio);
+        updateWithdrawUI();
+
+        setBootProgress(50);
+        console.log('Loaded cached data, fetching fresh data in background...');
+      } catch (e) {
+        console.warn('Failed to parse cached data:', e);
+      }
+    }
+
+    setBootProgress(cachedData ? 50 : 30);
+
+    console.log('=== CALLING getInitialData from initializeApp ===');
+    const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+    console.log('=== RECEIVED from getInitialData ===', data);
+
+    if (!data || !data.success) {
+      const errorMsg = data?.error ? (typeof data.error === 'string' ? data.error : 'Server error') : 'Failed to get initial data';
+      console.error('Backend error:', errorMsg);
+      throw new Error('Failed to get initial data');
+    }
+
+    setBootProgress(60);
+
+    userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
     serverState = { ...serverState, ...data };
     if (!serverState.balance) serverState.balance = 0;
     if (!serverState.rate) serverState.rate = 16;
@@ -560,18 +586,31 @@ async function initializeApp() {
     if (!serverState.portfolio) serverState.portfolio = [];
     hasPendingDeposit = computeHasPendingDeposit();
 
-    setBootProgress(80);
-    updateDashboard(serverState);
-    recomputeFilteredHistory();
-    renderHistoryPage(false);
-    renderPortfolio(serverState.portfolio);
+    setBootProgress(75);
 
-    setBootProgress(90);
-    updateWithdrawUI();
+    // ОПТИМИЗАЦИЯ: Сохраняем данные в кэш для следующей загрузки
+    try {
+      localStorage.setItem(`cachedData_${username}`, JSON.stringify(data));
+    } catch (e) {
+      console.warn('Failed to cache data:', e);
+    }
 
-    setBootProgress(95);
-    scheduleSync(2000);
-    finishBootScreen();
+    // ОПТИМИЗАЦИЯ: Используем requestAnimationFrame для отложенного рендера
+    requestAnimationFrame(() => {
+      updateDashboard(serverState);
+      setBootProgress(85);
+
+      requestAnimationFrame(() => {
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+        renderPortfolio(serverState.portfolio);
+        updateWithdrawUI();
+
+        setBootProgress(95);
+        scheduleSync(2000);
+        finishBootScreen();
+      });
+    });
   } catch (e) {
     console.error('Initialization error:', e.message, e.stack);
     finishBootScreen();

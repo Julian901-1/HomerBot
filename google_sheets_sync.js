@@ -259,8 +259,9 @@ function doPost(e) {
  * @returns {Object} Object containing balance, history, portfolio, lockedAmount, and userPrefs.
  */
 function getInitialData(username) {
-    // syncBalance() теперь возвращает результаты из calculateBalances()
-    const balanceData = syncBalance(username);
+    // ОПТИМИЗАЦИЯ: Для первой загрузки используем быстрый getBalance() вместо syncBalance()
+    // syncBalance() будет вызван позже через scheduleSync()
+    const balanceData = getBalance(username);
     const history = getHistory(username);
     const portfolio = getPortfolio(username);
     const userPrefs = getUserPrefs(username);
