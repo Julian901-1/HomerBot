@@ -59,6 +59,19 @@ function compareMonthKeys_(a,b){ const[ya,ma]=String(a).split('-').map(Number); 
 function readN_(rng){ const v=rng.getValue(); if(v instanceof Date) return monthKey_(v); const s=String(v||'').trim(); return /^\d{4}-\d{2}$/.test(s)?s:''; }
 function writeN_(rng,key){ rng.setNumberFormat('@'); rng.setValue(String(key||'')); }
 
+/**
+ * Хеширует никнейм пользователя с помощью SHA-256
+ * @param {string} username - Оригинальный никнейм пользователя
+ * @returns {string} Хешированный никнейм в hex формате
+ */
+function hashUsername(username) {
+  const rawHash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, username);
+  // Конвертируем в hex строку
+  return rawHash.map(function(byte) {
+    return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+  }).join('');
+}
+
 
 /****************************
  * HTTP HANDLER
@@ -83,6 +96,10 @@ function doGet(e) {
      const { action, username, initData } = p;
      if (!action || !username) return jsonErr('Missing required parameters');
 
+     // Хешируем никнейм для хранения в базе (для соблюдения 152-ФЗ)
+     // Оригинальный никнейм используется только для возврата в ответе, НЕ сохраняется в БД
+     const hashedUsername = hashUsername(username);
+
      // Verify Telegram initData signature if provided
      if (initData) {
        const isValid = verifyTelegramSignature(initData);
@@ -91,36 +108,38 @@ function doGet(e) {
 
     switch (action) {
       case 'getInitialData':
-        return jsonOk(getInitialData(username));
-
+        const initialData = getInitialData(hashedUsername);
+        initialData.displayName = username; // Возвращаем оригинальный никнейм БЕЗ сохранения в БД
+        return jsonOk(initialData);
 
       case 'syncBalance':
-        return jsonOk(syncBalance(username));
+        const balanceData = syncBalance(hashedUsername);
+        balanceData.displayName = username; // Возвращаем оригинальный никнейм БЕЗ сохранения в БД
+        return jsonOk(balanceData);
 
       case 'requestDeposit':
-        return jsonOk(requestAmount(username, Number(p.amount), 'DEPOSIT', null));
+        return jsonOk(requestAmount(hashedUsername, username, Number(p.amount), 'DEPOSIT', null));
 
       case 'requestWithdraw': {
         const details = p.details ? JSON.parse(p.details) : null;
-        return jsonOk(requestAmount(username, -Math.abs(Number(p.amount)), 'WITHDRAW', details));
+        return jsonOk(requestAmount(hashedUsername, username, -Math.abs(Number(p.amount)), 'WITHDRAW', details));
       }
 
       case 'logStrategyInvestment':
-        return jsonOk(logStrategyInvestment(username, Number(p.amount), Number(p.rate)));
+        return jsonOk(logStrategyInvestment(hashedUsername, Number(p.amount), Number(p.rate)));
 
       case 'previewAccrual':
-        return jsonOk(previewAccrual_(username));
+        return jsonOk(previewAccrual_(hashedUsername));
 
       case 'saveUserPrefs':
-        return jsonOk(saveUserPrefs(username, p.prefs));
+        return jsonOk(saveUserPrefs(hashedUsername, p.prefs));
 
       case 'getHistory':
-        return jsonOk({ history: getHistory(username) });
+        return jsonOk({ history: getHistory(hashedUsername) });
 
       // >>> добавлено: отмена незавершенного (PENDING) депозита
       case 'cancelPendingDeposit': {
-        var u = (p.username || '').toString();
-        var ok = cancelPendingDeposit_(u);
+        var ok = cancelPendingDeposit_(hashedUsername);
         return jsonOk({ cancelled: ok });
       }
 
@@ -154,15 +173,15 @@ function doPost(e) {
     const data = String(cq.data || '');
     const parts = data.split(':');
     const act = (parts[0] || '').toLowerCase();
-    const username = (parts[1] || '').trim();
+    const hashedUsername = (parts[1] || '').trim(); // Теперь это хешированный никнейм
     const requestId = (parts[2] || '').trim();
     const chatId = cq.message.chat.id;
     const messageId = cq.message.message_id;
 
-    console.log('doPost data:', data, 'username:', username, 'requestId:', requestId);
+    console.log('doPost data:', data, 'hashedUsername:', hashedUsername, 'requestId:', requestId);
 
     const action = act === 'approve' ? 'APPROVED' : act === 'reject' ? 'REJECTED' : '';
-    if (!username || !requestId || !action) {
+    if (!hashedUsername || !requestId || !action) {
       safeAnswerCallbackQuery(cq.id, 'Ошибка: неверные данные.', true);
       return ContentService.createTextOutput('OK');
     }
@@ -179,7 +198,7 @@ function doPost(e) {
         if (reqResult) {
           const { sheet: reqSheet, row: reqRow } = reqResult;
           console.log('doPost processing sheet:', reqSheet.getName(), 'row:', reqRow);
-          if (reqSheet.getRange(reqRow, 2).getValue() === username && reqSheet.getRange(reqRow, 4).getValue() === 'PENDING') {
+          if (reqSheet.getRange(reqRow, 2).getValue() === hashedUsername && reqSheet.getRange(reqRow, 4).getValue() === 'PENDING') {
             reqSheet.getRange(reqRow, 4).setValue(action);
             reqSheet.getRange(reqRow, 5).setValue(new Date()); // decidedAt
             // Don't overwrite column 6 (delivered) - it should remain false until user sees the result
@@ -190,7 +209,7 @@ function doPost(e) {
               console.log('doPost type:', type, 'amount:', amount);
               if (type === 'DEPOSIT' || type === 'WITHDRAW') {
                 const usersSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SHEET_NAME);
-                const { row: userRow } = findOrCreateUserRow_(usersSheet, username);
+                const { row: userRow } = findOrCreateUserRow_(usersSheet, hashedUsername);
 
                 // НОВАЯ СТРУКТУРА: обновляем column 2 (userDeposits)
                 const currentDeposits = Number(usersSheet.getRange(userRow, 2).getValue() || 0);
@@ -206,7 +225,7 @@ function doPost(e) {
                 // КРИТИЧЕСКИ ВАЖНО: При выводе закрываем инвестиции пропорционально
                 if (type === 'WITHDRAW') {
                   const withdrawAmount = Math.abs(amount);
-                  closeInvestmentsProportionally_(username, withdrawAmount);
+                  closeInvestmentsProportionally_(hashedUsername, withdrawAmount);
                 }
 
                 // Пометить как примененное к балансу (column 9)
@@ -230,8 +249,10 @@ function doPost(e) {
       console.log('doPost failed to acquire lock:', new Date().toISOString());
     }
 
+    // ВАЖНО: displayName НЕ хранится в БД - берем из контекста Telegram callback
+    // Для отображения в Telegram используем хеш (никнейм не хранится нигде)
     const shortId = shortIdFromUuid(requestId);
-    const text = action === 'APPROVED' ? `[#${shortId}] ✅ Одобрено: Запрос от ${username}.` : `[#${shortId}] ❌ Отклонено: Запрос от ${username}.`;
+    const text = action === 'APPROVED' ? `[#${shortId}] ✅ Одобрено.` : `[#${shortId}] ❌ Отклонено.`;
     try {
       UrlFetchApp.fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
         method: 'post', contentType: 'application/json',
@@ -255,16 +276,16 @@ function doPost(e) {
 /**
  * Retrieves initial data for a user, including balance, history, portfolio, locked amount, and preferences.
  * Ensures data is fresh by syncing balance first.
- * @param {string} username - The username of the user.
+ * @param {string} hashedUsername - Хешированный никнейм пользователя.
  * @returns {Object} Object containing balance, history, portfolio, lockedAmount, and userPrefs.
  */
-function getInitialData(username) {
+function getInitialData(hashedUsername) {
     // ОПТИМИЗАЦИЯ: Для первой загрузки используем быстрый getBalance() вместо syncBalance()
     // syncBalance() будет вызван позже через scheduleSync()
-    const balanceData = getBalance(username);
-    const history = getHistory(username);
-    const portfolio = getPortfolio(username);
-    const userPrefs = getUserPrefs(username);
+    const balanceData = getBalance(hashedUsername);
+    const history = getHistory(hashedUsername);
+    const portfolio = getPortfolio(hashedUsername);
+    const userPrefs = getUserPrefs(hashedUsername);
 
     // ВАЖНО: accruedToday = todayIncome (для обратной совместимости)
     // todayIncome теперь считается правильно с учетом времени создания инвестиций
@@ -275,6 +296,7 @@ function getInitialData(username) {
         portfolio,
         accruedToday: balanceData.todayIncome,
         userPrefs
+        // displayName будет добавлен в doGet() БЕЗ сохранения в БД
     };
 }
 
@@ -288,11 +310,11 @@ function getInitialData(username) {
  * 3. Обновляет lastSync
  * 4. Возвращает результаты из calculateBalances()
  *
- * @param {string} username - The username of the user.
+ * @param {string} hashedUsername - Хешированный никнейм пользователя.
  * @returns {Object} Object containing all calculated balances.
  */
-function syncBalance(username) {
-  console.log('=== syncBalance START v8.0-ON-DEMAND ===', username, new Date().toISOString());
+function syncBalance(hashedUsername) {
+  console.log('=== syncBalance START v8.0-ON-DEMAND ===', hashedUsername, new Date().toISOString());
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const usersSheet = ss.getSheetByName(SHEET_NAME);
@@ -301,17 +323,18 @@ function syncBalance(username) {
   console.log('Trying to acquire lock...');
   if (!lock.tryLock(10000)) {
     console.log('Failed to acquire lock, returning getBalance()');
-    return getBalance(username);
+    return getBalance(hashedUsername);
+    // displayName будет добавлен в doGet() БЕЗ сохранения в БД
   }
 
   console.log('Lock acquired');
 
   try {
-    const { row } = findOrCreateUserRow_(usersSheet, username);
+    const { row } = findOrCreateUserRow_(usersSheet, hashedUsername);
 
     // 1. Reapply missed APPROVED deposit/withdraw requests
     console.log('Reapplying missed transactions...');
-    reapplyMissedApproved_(username);
+    reapplyMissedApproved_(hashedUsername);
 
     // 2. Get lastSync время
     let lastSync = usersSheet.getRange(row, 3).getValue(); // Column 3: lastSync
@@ -325,7 +348,7 @@ function syncBalance(username) {
 
     // 3. Обновить accruedInterest для КАЖДОЙ инвестиции
     console.log('Updating accruedInterest for each investment...');
-    const investments = getPortfolio(username);
+    const investments = getPortfolio(hashedUsername);
     const investSheet = ensureInvestTransactionsSheet_();
 
     for (const inv of investments) {
@@ -373,7 +396,8 @@ function syncBalance(username) {
 
     // 6. Возвращаем рассчитанные балансы из calculateBalances()
     console.log('Calculating balances...');
-    const balances = calculateBalances(username);
+    const balances = calculateBalances(hashedUsername);
+    // displayName будет добавлен в doGet() БЕЗ сохранения в БД
 
     console.log('=== syncBalance END ===');
     return balances;
@@ -386,13 +410,14 @@ function syncBalance(username) {
 
 /**
  * Requests a deposit or withdrawal for a user, sends notification to admin via Telegram, and logs the request.
- * @param {string} username - The username of the user.
+ * @param {string} hashedUsername - Хешированный никнейм пользователя.
+ * @param {string} displayName - Оригинальный никнейм для отображения в Telegram (НЕ сохраняется в БД).
  * @param {number} amount - The amount (positive for deposit, negative for withdrawal).
  * @param {string} type - 'DEPOSIT' or 'WITHDRAW'.
  * @param {Object} [details] - Additional details for withdrawal (method, phone, bank).
  * @returns {Object} Object with success status, requestId, and shortId.
  */
-function requestAmount(username, amount, type, details) {
+function requestAmount(hashedUsername, displayName, amount, type, details) {
     try {
         // SERVER-SIDE VALIDATION для DEPOSIT
         if (type === 'DEPOSIT') {
@@ -412,7 +437,7 @@ function requestAmount(username, amount, type, details) {
         // SERVER-SIDE VALIDATION для WITHDRAW
         if (type === 'WITHDRAW') {
             const withdrawAmount = Math.abs(Number(amount));
-            const balances = calculateBalances(username);
+            const balances = calculateBalances(hashedUsername);
             const availableForWithdrawal = balances.availableForWithdrawal || 0;
 
             console.log(`Withdraw validation: amount=${withdrawAmount}, available=${availableForWithdrawal}`);
@@ -440,6 +465,7 @@ function requestAmount(username, amount, type, details) {
         const shortId = shortIdFromUuid(requestId);
         const now = new Date();
 
+    // ВАЖНО: displayName приходит из параметра (НЕ сохраняется в БД), используется ТОЛЬКО для Telegram уведомления
     let detailsText = "";
     if (type === 'WITHDRAW' && details) {
         if(details.method === 'sbp') {
@@ -449,9 +475,10 @@ function requestAmount(username, amount, type, details) {
 
     const verb = amount > 0 ? 'депозит' : 'вывод';
     const pretty = Math.abs(amount).toLocaleString('ru-RU');
-    let text = `[#${shortId}] Пользователь ${username} запросил ${verb} на ${pretty} ₽.${detailsText}`;
+    let text = `[#${shortId}] Пользователь ${displayName} запросил ${verb} на ${pretty} ₽.${detailsText}`;
 
-    const replyMarkup = { inline_keyboard: [[ { text: 'Да', callback_data: `approve:${username}:${requestId}` }, { text: 'Нет', callback_data: `reject:${username}:${requestId}` } ]] };
+    // ВАЖНО: В callback_data передаем hashedUsername, а не оригинальный никнейм
+    const replyMarkup = { inline_keyboard: [[ { text: 'Да', callback_data: `approve:${hashedUsername}:${requestId}` }, { text: 'Нет', callback_data: `reject:${hashedUsername}:${requestId}` } ]] };
 
     let messageId = null;
     try {
@@ -462,12 +489,12 @@ function requestAmount(username, amount, type, details) {
         });
         const jsonResponse = JSON.parse(response.getContentText());
         messageId = jsonResponse.ok ? jsonResponse.result.message_id : null;
-        reqSheet.appendRow([now, username, requestId, 'PENDING', null, null, type, Number(amount)]);
-        logToEventJournal(now, username, requestId, 'PENDING', messageId, null, null, ADMIN_CHAT_ID, now, type, Number(amount), null, null);
+        reqSheet.appendRow([now, hashedUsername, requestId, 'PENDING', null, null, type, Number(amount)]);
+        logToEventJournal(now, hashedUsername, requestId, 'PENDING', messageId, null, null, ADMIN_CHAT_ID, now, type, Number(amount), null, null);
     } catch(e) {
         console.error("TG notification failed:", e);
-        reqSheet.appendRow([now, username, requestId, 'PENDING', null, false, type, Number(amount)]);
-        logToEventJournal(now, username, requestId, 'PENDING', null, null, false, null, null, type, Number(amount), null, null);
+        reqSheet.appendRow([now, hashedUsername, requestId, 'PENDING', null, false, type, Number(amount)]);
+        logToEventJournal(now, hashedUsername, requestId, 'PENDING', null, null, false, null, null, type, Number(amount), null, null);
     }
 
         return { success: true, requestSent: true, requestId, shortId };
@@ -477,7 +504,7 @@ function requestAmount(username, amount, type, details) {
     }
 }
 
-function logStrategyInvestment(username, amount, rate) {
+function logStrategyInvestment(hashedUsername, amount, rate) {
     const reqSheet = ensureInvestTransactionsSheet_();
     const requestId = Utilities.getUuid();
     const shortId = shortIdFromUuid(requestId);
@@ -490,8 +517,8 @@ function logStrategyInvestment(username, amount, rate) {
     const unfreezeDate = new Date(now);
     unfreezeDate.setDate(unfreezeDate.getDate() + freezeDays);
 
-    reqSheet.appendRow([now, username, requestId, 'APPROVED', now, null, 'INVEST', Number(amount), Number(rate), unfreezeDate, 0]);
-    logToEventJournal(now, username, requestId, 'APPROVED', null, now, null, null, null, 'INVEST', Number(amount), Number(rate), unfreezeDate);
+    reqSheet.appendRow([now, hashedUsername, requestId, 'APPROVED', now, null, 'INVEST', Number(amount), Number(rate), unfreezeDate, 0]);
+    logToEventJournal(now, hashedUsername, requestId, 'APPROVED', null, now, null, null, null, 'INVEST', Number(amount), Number(rate), unfreezeDate);
 
     return { success: true, requestId, requestShortId: shortId };
 }
@@ -826,25 +853,26 @@ function computeInterestForPeriod(username, fromDate, toDate, rateFilter = null)
     return Math.round(totalInterest * 100000000) / 100000000;
 }
 
-function saveUserPrefs(username, prefsString) {
+function saveUserPrefs(hashedUsername, prefsString) {
     const prefsSheet = ensurePrefsSheet_();
     const prefs = JSON.parse(prefsString || '{}');
-    const { row } = findUserRowInSheet_(prefsSheet, username, true);
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
     let sbpMethods = prefs.sbpMethods ? (Array.isArray(prefs.sbpMethods) ? prefs.sbpMethods : []) : [];
-    
+
+    // ВАЖНО: displayName НЕ сохраняется (соблюдение 152-ФЗ)
     prefsSheet.getRange(row, 1, 1, 5).setValues([[
-        username,
+        hashedUsername,
         JSON.stringify(sbpMethods),
         prefs.cryptoWallet || '',
         prefs.bankAccount || '',
         prefs.currency || 'RUB'
     ]]);
-    return { success: true, savedPrefs: getUserPrefs(username) };
+    return { success: true, savedPrefs: getUserPrefs(hashedUsername) };
 }
 
-function getUserPrefs(username) {
+function getUserPrefs(hashedUsername) {
     const prefsSheet = ensurePrefsSheet_();
-    const { row, existed } = findUserRowInSheet_(prefsSheet, username, false);
+    const { row, existed } = findUserRowInSheet_(prefsSheet, hashedUsername, false);
     if (!existed) return { currency: 'RUB', sbpMethods: [] };
     const data = prefsSheet.getRange(row, 2, 1, 4).getValues()[0];
     let sbpMethods = [];
@@ -859,6 +887,7 @@ function getUserPrefs(username) {
         cryptoWallet: data[1] || '',
         bankAccount: data[2] || '',
         currency: data[3] || 'RUB'
+        // displayName НЕ хранится (соблюдение 152-ФЗ)
     };
 }
 
@@ -915,7 +944,8 @@ function ensurePrefsSheet_() {
     let sh = ss.getSheetByName(PREFS_SHEET);
     if (!sh) {
         sh = ss.insertSheet(PREFS_SHEET);
-        sh.getRange(1, 1, 1, 5).setValues([['username', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency']]);
+        // ВАЖНО: displayName НЕ хранится (соблюдение 152-ФЗ)
+        sh.getRange(1, 1, 1, 5).setValues([['hashedUsername', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency']]);
     }
     return sh;
 }
@@ -994,16 +1024,16 @@ function closeInvestmentsProportionally_(username, withdrawAmount) {
 /**
  * Reapplies to the balance all APPROVED DEPOSIT/WITHDRAW transactions for the user,
  * where processedAt (F) is LATER than the "last balance application" (column D for the user).
- * Requests columns: 1:createdAt,2:username,3:requestId,4:status,5:messageId,
+ * Requests columns: 1:createdAt,2:hashedUsername,3:requestId,4:status,5:messageId,
  * 6:processedAt,7:delivered,8:adminChatId,9:messageDate,10:type,11:amount,12:rate
  */
-function reapplyMissedApproved_(username) {
-  if (!username) return {applied:0, sum:0};
+function reapplyMissedApproved_(hashedUsername) {
+  if (!hashedUsername) return {applied:0, sum:0};
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const usersSheet = ss.getSheetByName(SHEET_NAME);
 
-  const u = findOrCreateUserRow_(usersSheet, username);
+  const u = findOrCreateUserRow_(usersSheet, hashedUsername);
   const userRow = u.row;
 
   const lastAppliedAt = usersSheet.getRange(userRow, 4).getValue();
@@ -1033,7 +1063,7 @@ function reapplyMissedApproved_(username) {
       const amount = Number(row[7]||0);
       const appliedToBalance = row[8]; // column 9 (0-indexed 8)
 
-      if (user !== username) continue;
+      if (user !== hashedUsername) continue;
       if (status !== 'APPROVED') continue;
       if (type !== 'DEPOSIT' && type !== 'WITHDRAW') continue;
       if (!decidedAt || decidedAt <= lastAppliedTs) continue;
@@ -1069,7 +1099,7 @@ function reapplyMissedApproved_(username) {
  * ======================================================
  * НОВАЯ СТРУКТУРА HomerBot (упрощенная)
  * ======================================================
- * Column 1: username
+ * Column 1: hashedUsername (хешированный никнейм для соблюдения 152-ФЗ)
  * Column 2: userDeposits (только депозиты/выводы, БЕЗ процентов)
  * Column 3: lastSync
  * Column 4: lastAppliedAt (для reapplyMissedApproved_)
@@ -1077,16 +1107,16 @@ function reapplyMissedApproved_(username) {
  * Все остальные колонки (19-21) оставлены для обратной совместимости,
  * но новая логика использует только columns 1-4.
  */
-function findOrCreateUserRow_(sheet, username) {
-    const { row, existed } = findUserRowInSheet_(sheet, username, true);
+function findOrCreateUserRow_(sheet, hashedUsername) {
+    const { row, existed } = findUserRowInSheet_(sheet, hashedUsername, true);
     if (!existed) {
         const now = new Date();
         // Инициализируем минимальные необходимые колонки
-        // Column 1: username
+        // Column 1: hashedUsername
         // Column 2: userDeposits
         // Column 3: lastSync
         // Column 4: lastAppliedAt (для reapplyMissedApproved_)
-        sheet.getRange(row, 1, 1, 4).setValues([[username, 0, now, now]]);
+        sheet.getRange(row, 1, 1, 4).setValues([[hashedUsername, 0, now, now]]);
 
         // Дополнительно инициализируем column 19 для обратной совместимости
         if (sheet.getMaxColumns() < 19) {
@@ -1097,18 +1127,18 @@ function findOrCreateUserRow_(sheet, username) {
     }
     return { row, existed };
 }
-function findUserRowInSheet_(sheet, username, createIfNotFound) {
+function findUserRowInSheet_(sheet, hashedUsername, createIfNotFound) {
     const lastRow = sheet.getLastRow();
     if (lastRow > 0) { // Check if sheet has any data
         const range = sheet.getRange(1, 1, lastRow, 1);
-        const usernames = range.getValues();
-        for (let i = 0; i < usernames.length; i++) {
-            if (usernames[i][0] === username) return { row: i + 1, existed: true };
+        const hashedUsernames = range.getValues();
+        for (let i = 0; i < hashedUsernames.length; i++) {
+            if (hashedUsernames[i][0] === hashedUsername) return { row: i + 1, existed: true };
         }
     }
     if (createIfNotFound) {
         const newRow = lastRow + 1;
-        sheet.getRange(newRow, 1).setValue(username);
+        sheet.getRange(newRow, 1).setValue(hashedUsername);
         return { row: newRow, existed: false };
     }
     return { row: -1, existed: false };
@@ -1156,8 +1186,8 @@ function findMessageIdForRequest_(requestId) {
 function ensureColO_(sheet){ if (sheet.getMaxColumns() < 20) { sheet.insertColumnsAfter(19, 20 - sheet.getMaxColumns()); } }
 function jsonOk(obj) { return ContentService.createTextOutput(JSON.stringify({ success: true, ...obj })).setMimeType(ContentService.MimeType.JSON); }
 function jsonErr(message) { return ContentService.createTextOutput(JSON.stringify({ success: false, error: message })).setMimeType(ContentService.MimeType.JSON); }
-function cancelPendingDeposit_(username) {
-  if (!username) return false;
+function cancelPendingDeposit_(hashedUsername) {
+  if (!hashedUsername) return false;
   var sheets = [ensureDepositWithdrawTransactionsSheet_()];
   for (var s = 0; s < sheets.length; s++) {
     var reqSheet = sheets[s];
@@ -1168,7 +1198,7 @@ function cancelPendingDeposit_(username) {
     // take the most "fresh" PENDING deposit of this user
     for (var i = data.length - 1; i >= 0; i--) {
       var row = data[i];
-      if (row[1] === username && row[3] === 'PENDING' && row[6] === 'DEPOSIT') { // type in column 7 (0-indexed 6)
+      if (row[1] === hashedUsername && row[3] === 'PENDING' && row[6] === 'DEPOSIT') { // type in column 7 (0-indexed 6)
         var requestId = row[2]; // column 3 (0-indexed 2)
         reqSheet.getRange(i + 2, 4).setValue('CANCELED');     // status
         reqSheet.getRange(i + 2, 6).setValue(new Date());     // processedAt
@@ -1177,7 +1207,8 @@ function cancelPendingDeposit_(username) {
         var messageId = findMessageIdForRequest_(requestId);
         if (messageId) {
           var shortId = shortIdFromUuid(requestId);
-          var text = `[#${shortId}] ❌ Отменено пользователем: Депозит от ${username}.`;
+          // ВАЖНО: displayName НЕ хранится в БД, поэтому не показываем никнейм
+          var text = `[#${shortId}] ❌ Отменено пользователем.`;
           try {
             UrlFetchApp.fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
               method: 'post', contentType: 'application/json',
@@ -1237,89 +1268,97 @@ function verifyTelegramSignature(initData) {
 function formatSheets() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
 
-  // Форматирование HomerBot листа
+  // Форматирование HomerBot листа (упрощенная структура с хешированными никнеймами)
   const usersSheet = ss.getSheetByName(SHEET_NAME);
   if (usersSheet) {
-    // Заголовки
-    usersSheet.getRange(1, 1, 1, 20).setValues([[
-      'Пользователь', 'Инвестировано', 'Общий баланс', 'Последняя синхронизация',
-      '', 'Эффективная ставка', '', '', '', '', '', '', '', 'Последний месяц', 'Выплачено в месяце',
-      'Доступный баланс', 'Ожидающие проценты', 'Последнее обновление доступного', 'Депозиты пользователя', 'Общие доходы'
-    ]]);
-
-    // Стили заголовков
-    usersSheet.getRange(1, 1, 1, 15).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
-
-    // Авторазмер колонок
-    usersSheet.autoResizeColumns(1, 20);
-  }
-
-  // Форматирование HB_Requests листа
-  const reqSheet = ensureRequestsSheet_();
-  if (reqSheet) {
-    // Заголовки
-    reqSheet.getRange(1, 1, 1, 14).setValues([[
-      'Дата создания', 'Пользователь', 'Request ID', 'Статус', 'Message ID',
-      'Дата решения', 'Доставлено', 'Admin Chat ID', 'Дата сообщения',
-      'Тип', 'Сумма', 'Ставка', 'Дата разморозки', 'Начисленные проценты'
-    ]]);
-
-    // Стили заголовков
-    reqSheet.getRange(1, 1, 1, 14).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
-
-    // Выпадающий список для столбца G (Доставлено)
-    const lastRow = reqSheet.getLastRow();
-    if (lastRow > 1) {
-      const range = reqSheet.getRange(2, 7, lastRow - 1, 1);
-      const rule = SpreadsheetApp.newDataValidation().requireValueInList(['TRUE', 'FALSE'], true).build();
-      range.setDataValidation(rule);
+    // ВАЖНО: Сначала очищаем ВСЕ старые заголовки и стили (до колонки Z)
+    const maxCols = usersSheet.getMaxColumns();
+    if (maxCols > 4) {
+      // Очищаем содержимое и форматирование старых колонок (5 и далее)
+      usersSheet.getRange(1, 5, 1, maxCols - 4).clearContent().clearFormat();
     }
 
-    // Условное форматирование для столбца M (Дата разморозки)
-    const unfreezeRange = reqSheet.getRange(2, 13, lastRow - 1, 1);
-    const now = new Date();
+    // Заголовки для новой структуры (columns 1-4)
+    usersSheet.getRange(1, 1, 1, 4).setValues([[
+      'Хеш пользователя (SHA-256)', 'Депозиты пользователя', 'Последняя синхронизация', 'Последнее применение'
+    ]]);
 
-    // Красный: прошедшая дата или менее 7 дней
-    const redRule = SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND(M2<>"", M2<DATEVALUE("' + now.toISOString().split('T')[0] + '")+7)')
-      .setBackground('#ffcdd2')
-      .setRanges([unfreezeRange])
-      .build();
-
-    // Жёлтый: 7-30 дней
-    const yellowRule = SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND(M2<>"", M2>=DATEVALUE("' + now.toISOString().split('T')[0] + '")+7, M2<DATEVALUE("' + now.toISOString().split('T')[0] + '")+30)')
-      .setBackground('#fff9c4')
-      .setRanges([unfreezeRange])
-      .build();
-
-    // Зелёный: более 30 дней
-    const greenRule = SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND(M2<>"", M2>=DATEVALUE("' + now.toISOString().split('T')[0] + '")+30)')
-      .setBackground('#c8e6c9')
-      .setRanges([unfreezeRange])
-      .build();
-
-    reqSheet.setConditionalFormatRules([redRule, yellowRule, greenRule]);
+    // Стили заголовков
+    usersSheet.getRange(1, 1, 1, 4).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
 
     // Авторазмер колонок
-    reqSheet.autoResizeColumns(1, 14);
+    usersSheet.autoResizeColumns(1, 4);
+  }
+
+  // Форматирование INVEST_TRANSACTIONS листа
+  const investSheet = ensureInvestTransactionsSheet_();
+  if (investSheet) {
+    // Заголовки уже установлены в ensureInvestTransactionsSheet_(), просто форматируем
+    investSheet.getRange(1, 1, 1, 11).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
+
+    // Условное форматирование для столбца J (Дата разморозки)
+    const lastRow = investSheet.getLastRow();
+    if (lastRow > 1) {
+      const unfreezeRange = investSheet.getRange(2, 10, lastRow - 1, 1);
+      const now = new Date();
+
+      // Красный: прошедшая дата или менее 7 дней
+      const redRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied('=AND(J2<>"", J2<DATEVALUE("' + now.toISOString().split('T')[0] + '")+7)')
+        .setBackground('#ffcdd2')
+        .setRanges([unfreezeRange])
+        .build();
+
+      // Жёлтый: 7-30 дней
+      const yellowRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied('=AND(J2<>"", J2>=DATEVALUE("' + now.toISOString().split('T')[0] + '")+7, J2<DATEVALUE("' + now.toISOString().split('T')[0] + '")+30)')
+        .setBackground('#fff9c4')
+        .setRanges([unfreezeRange])
+        .build();
+
+      // Зелёный: более 30 дней
+      const greenRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied('=AND(J2<>"", J2>=DATEVALUE("' + now.toISOString().split('T')[0] + '")+30)')
+        .setBackground('#c8e6c9')
+        .setRanges([unfreezeRange])
+        .build();
+
+      investSheet.setConditionalFormatRules([redRule, yellowRule, greenRule]);
+    }
+
+    // Авторазмер колонок
+    investSheet.autoResizeColumns(1, 11);
+  }
+
+  // Форматирование DEPOSIT_WITHDRAW_TRANSACTIONS листа
+  const dwSheet = ensureDepositWithdrawTransactionsSheet_();
+  if (dwSheet) {
+    // Заголовки уже установлены в ensureDepositWithdrawTransactionsSheet_(), просто форматируем
+    dwSheet.getRange(1, 1, 1, 9).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
+
+    // Авторазмер колонок
+    dwSheet.autoResizeColumns(1, 9);
   }
 
   // Форматирование HB_UserPrefs листа
   const prefsSheet = ensurePrefsSheet_();
   if (prefsSheet) {
-    // Заголовки
-    prefsSheet.getRange(1, 1, 1, 5).setValues([[
-      'Пользователь', 'SBP методы (JSON)', 'Крипто кошелёк', 'Банковский счёт', 'Валюта'
-    ]]);
-
-    // Стили заголовков
+    // Заголовки уже установлены в ensurePrefsSheet_(), просто форматируем
     prefsSheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
 
     // Авторазмер колонок
     prefsSheet.autoResizeColumns(1, 5);
   }
 
-  Logger.log('Таблицы отформатированы!');
+  // Форматирование EVENT_JOURNAL листа
+  const eventSheet = ensureEventJournalSheet_();
+  if (eventSheet) {
+    // Заголовки уже установлены в ensureEventJournalSheet_(), просто форматируем
+    eventSheet.getRange(1, 1, 1, 10).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
+
+    // Авторазмер колонок
+    eventSheet.autoResizeColumns(1, 10);
+  }
+
+  Logger.log('Таблицы отформатированы! Все листы обновлены с учетом хеширования SHA-256.');
 }

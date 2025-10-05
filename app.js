@@ -1,7 +1,8 @@
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
 
 // -------- STATE --------
-let username = null;
+let username = null; // Оригинальный никнейм пользователя (для отправки на сервер и отображения)
+let displayName = null; // Отображаемое имя пользователя (возвращается сервером)
 let initData = '';
 let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, lockedAmountForWithdrawal: 0, availableBalance: 0, history: [], portfolio: [] };
 let userPrefs = { currency: 'RUB', sbpMethods: [] };
@@ -384,8 +385,8 @@ console.log('=== UPDATE DASHBOARD ===');
   document.getElementById('investedBalance').innerHTML =
     `${fmtMoney(investedAmount, currency)} <span class="cur-sym">${currencySymbol}</span>`;
 
-  // Username
-  document.getElementById('profileUsername').textContent = username || 'User';
+  // Username (используем displayName, если доступен)
+  document.getElementById('profileUsername').textContent = displayName || username || 'User';
 
   // Available for withdrawal
   document.getElementById('withdrawAvailable').innerHTML =
@@ -574,6 +575,8 @@ async function initializeApp() {
 
     setBootProgress(60);
 
+    // Сохраняем displayName из ответа сервера
+    displayName = data.displayName || username;
     userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
     serverState = { ...serverState, ...data };
     if (!serverState.balance) serverState.balance = 0;
@@ -642,6 +645,7 @@ async function syncBalance(fromScheduler = false) {
         console.log('=== RECEIVED from getInitialData ===', full);
         if (full && full.success) {
           data = full;
+          displayName = full.displayName || username; // Обновляем displayName
           serverState = { ...serverState, ...full };
           updateDashboard(serverState);
           recomputeFilteredHistory();
@@ -661,6 +665,7 @@ async function syncBalance(fromScheduler = false) {
         console.log('=== RECEIVED from getHistory ===', histRes);
 
         if (balRes.status === 'fulfilled' && balRes.value?.success) {
+          displayName = balRes.value.displayName || username; // Обновляем displayName
           data = balRes.value;
           serverState = { ...serverState, ...balRes.value };
           updateDashboard(serverState);
