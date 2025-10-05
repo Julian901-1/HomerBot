@@ -1384,7 +1384,7 @@ function updateWithdrawUI() {
       const option = document.createElement('div');
       option.className = 'select-option';
       option.dataset.index = index;
-      option.textContent = `SBP: ${method.phone} (${method.bank})`;
+      option.textContent = `СБП: ${method.phone} (${method.bank})`;
       option.onclick = () => selectCustomOption(option);
       optionsContainer.appendChild(option);
     });
