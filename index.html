@@ -151,14 +151,8 @@
           <div class="method-card disabled"><div class="method-info"><h3>Безопасность <span class="dev-notice">В разработке</span></h3><p>KYC, Пин-код, Подтверждение вывода</p></div></div>
           <div class="method-card disabled"><div class="method-info"><h3>Язык <span class="dev-notice">В разработке</span></h3><p>Русский, English</p></div></div>
           <div class="method-card" onclick="window.open('https://docs.google.com/document/d/1Rv3N2iTgwHXhTkSgv-BwKLrekVpZtoGfU_ct2lDw00g/edit?usp=sharing', '_blank')"><div class="method-info"><h3>Юридическая информация</h3><p>Условия использования</p></div></div>
+          <div class="method-card" onclick="openModal('settings')"><div class="method-info"><h3>Настройки</h3><p>Настройки приложения</p></div></div>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-top:16px; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:12px;">
-          <label for="devModeToggle">Режим разработчика</label>
-          <label class="toggle-switch"><input type="checkbox" id="devModeToggle"><span class="slider"></span></label>
-        </div>
-        <div id="devVersion" class="dev-version" style="display:none; text-align:center; font-size:12px; opacity:.7; margin-top:6px; margin-bottom:12px;">
- v1
-</div>
       </div>
     </div>
 
@@ -466,6 +460,32 @@
         <button class="btn btn-primary" style="width:100%; margin-top: 0;" id="niConfirmBtn" disabled>Подтвердить</button>
       </div>
     </div>
+
+    <!-- Settings -->
+    <div id="modalSettings" class="modal-overlay" role="dialog" aria-labelledby="settings-title" aria-modal="true">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="settings-title" class="modal-title">Настройки</h2>
+          <button class="close-btn" onclick="closeModal('settings')" aria-label="Закрыть настройки">✕</button>
+        </div>
+        <div style="text-align: center; margin: 16px 0; padding: 16px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 12px;">
+          <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 4px;">Версия приложения</div>
+          <div style="font-size: 18px; font-weight: 700;">v1.0</div>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 12px; margin-bottom: 12px;">
+          <label for="devModeToggle">Режим разработчика</label>
+          <label class="toggle-switch"><input type="checkbox" id="devModeToggle"><span class="slider"></span></label>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 12px;">
+          <label for="autoRenewToggle">Автопродление инвестиций</label>
+          <label class="toggle-switch"><input type="checkbox" id="autoRenewToggle" checked><span class="slider"></span></label>
+        </div>
+        <div style="font-size: 13px; color: var(--text-secondary); margin-top: 12px; padding: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px;">
+          При включении автопродления инвестиции на 17% и 18% будут автоматически продлеваться на тот же срок после окончания периода заморозки. Вы получите уведомление в Telegram за день до продления.
+        </div>
+      </div>
+    </div>
+
     <script src="app.js"></script>
   </body>
 </html>

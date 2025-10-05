@@ -5,7 +5,7 @@ let username = null; // Оригинальный никнейм пользова
 let displayName = null; // Отображаемое имя пользователя (возвращается сервером)
 let initData = '';
 let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, lockedAmountForWithdrawal: 0, availableBalance: 0, history: [], portfolio: [] };
-let userPrefs = { currency: 'RUB', sbpMethods: [] };
+let userPrefs = { currency: 'RUB', sbpMethods: [], autoRenew: true };
 let devMode = false;
 let lastChosenRate = null;
 let syncTimer = null;
@@ -211,6 +211,12 @@ function openModal(modalId) {
   modal.classList.add('active');
   modal.style.display = 'flex';          // NEW: ensure shown
   document.body.classList.add('modal-open');
+
+        // Special logic for "Settings"
+  if (modalId === 'settings') {
+    const autoRenewToggle = document.getElementById('autoRenewToggle');
+    if (autoRenewToggle) autoRenewToggle.checked = userPrefs.autoRenew !== false;
+  }
 
         // Special logic for "Withdraw"
  if (modalId === 'withdraw') {
@@ -531,6 +537,9 @@ async function initializeApp() {
     username = (tg?.initDataUnsafe?.user?.username) || 'marulin';
     initData = tg?.initData || '';
 
+    // Получаем chatId из Telegram WebApp
+    const chatId = tg?.initDataUnsafe?.user?.id || null;
+
     // ОПТИМИЗАЦИЯ: Показываем UI с заглушками немедленно
     devMode = localStorage.getItem('devMode') === 'true';
     const devToggle = document.getElementById('devModeToggle');
@@ -564,7 +573,8 @@ async function initializeApp() {
     setBootProgress(cachedData ? 50 : 30);
 
     console.log('=== CALLING getInitialData from initializeApp ===');
-    const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+    // Передаём chatId в backend для сохранения
+    const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}${chatId ? `&chatId=${chatId}` : ''}`);
     console.log('=== RECEIVED from getInitialData ===', data);
 
     if (!data || !data.success) {
@@ -866,6 +876,20 @@ function setupEventListeners() {
   renderHistoryPage(false);
   renderPortfolio(serverState.portfolio);
 });
+
+  // Auto renew toggle
+  onIf(document.getElementById('autoRenewToggle'), 'change', async function () {
+    userPrefs.autoRenew = this.checked;
+    try {
+      await apiGet(`?action=setUserPref&username=${encodeURIComponent(username)}&key=autoRenew&value=${this.checked}`);
+      showPopup(this.checked ? 'Автопродление включено' : 'Автопродление отключено');
+    } catch (err) {
+      console.error('Failed to update autoRenew:', err);
+      showPopup('Ошибка сохранения настройки');
+      this.checked = !this.checked;
+      userPrefs.autoRenew = this.checked;
+    }
+  });
 
 
 // Deposit – create request

@@ -164,6 +164,11 @@ function doGet(e) {
        if (!isValid) return jsonErr('Invalid signature');
      }
 
+    // Сохраняем chatId при первом взаимодействии (если передан)
+    if (p.chatId) {
+      saveChatId_(hashedUsername, p.chatId);
+    }
+
     switch (action) {
       case 'getInitialData':
         const initialData = getInitialData(hashedUsername);
@@ -191,6 +196,9 @@ function doGet(e) {
 
       case 'saveUserPrefs':
         return jsonOk(saveUserPrefs(hashedUsername, p.prefs));
+
+      case 'setUserPref':
+        return jsonOk(setUserPref(hashedUsername, p.key, p.value));
 
       case 'getHistory':
         return jsonOk({ history: getHistory(hashedUsername) });
@@ -445,11 +453,64 @@ function syncBalance(hashedUsername) {
 
     if (unfrozenInvestments.length > 0) {
       console.log(`Unfreezing ${unfrozenInvestments.length} investments...`);
+      const userPrefs = getUserPrefs(hashedUsername);
+
       unfrozenInvestments.forEach(inv => {
         const reqRow = findRequestRowById_(investSheet, inv.requestId);
         if (reqRow) {
-          investSheet.getRange(reqRow, 6).setValue(now); // Помечаем как delivered
-          console.log(`Unfrozen investment ${inv.shortId}`);
+          if (userPrefs.autoRenew) {
+            // Автопродление: создаём новую инвестицию с ТЕКУЩЕЙ ставкой из конфига
+            const principal = inv.amount;
+            const frozenInterest = inv.accruedInterest || 0;
+
+            // Помечаем старую инвестицию как delivered
+            investSheet.getRange(reqRow, 6).setValue(now);
+
+            // Определяем тип инвестиции (STABLE или AGGRESSIVE) и берём ТЕКУЩУЮ ставку
+            const oldRateConfig = getRateConfig(inv.rate);
+            let newRateConfig;
+
+            if (oldRateConfig.freezeDays === 30) {
+              // Была 17% (Стабильный) → берём текущую ставку STABLE
+              newRateConfig = INVESTMENT_RATES.STABLE;
+            } else if (oldRateConfig.freezeDays === 90) {
+              // Была 18% (Агрессивный) → берём текущую ставку AGGRESSIVE
+              newRateConfig = INVESTMENT_RATES.AGGRESSIVE;
+            } else {
+              // На всякий случай используем старый конфиг
+              newRateConfig = oldRateConfig;
+            }
+
+            const newRequestId = Utilities.getUuid();
+            const newUnfreezeDate = new Date(now);
+            newUnfreezeDate.setDate(newUnfreezeDate.getDate() + newRateConfig.freezeDays);
+
+            const lastRow = investSheet.getLastRow() + 1;
+            investSheet.getRange(lastRow, 1, 1, 11).setValues([[
+              now,                          // A: createdAt
+              hashedUsername,               // B: hashedUsername
+              newRequestId,                 // C: requestId
+              shortIdFromUuid(newRequestId),// D: shortId
+              'APPROVED',                   // E: status
+              null,                         // F: delivered (null = заморожено)
+              null,                         // G: displayName
+              principal,                    // H: amount (только principal, БЕЗ процентов)
+              newRateConfig.rate,           // I: rate (ТЕКУЩАЯ ставка из конфига!)
+              newRateConfig.freezeDays > 0 ? newUnfreezeDate : null, // J: unfreezeDate
+              0                             // K: accruedInterest
+            ]]);
+
+            // Размороженные проценты добавляем в available16Interest (колонка U/21)
+            usersSheet.getRange(row, 21).setValue(
+              round2((usersSheet.getRange(row, 21).getValue() || 0) + frozenInterest)
+            );
+
+            console.log(`Auto-renewed investment ${inv.shortId} (${inv.rate}% → ${newRateConfig.rate}%) → new ${shortIdFromUuid(newRequestId)}, frozen interest ${round2(frozenInterest)} → available16Interest`);
+          } else {
+            // Без автопродления: просто размораживаем
+            investSheet.getRange(reqRow, 6).setValue(now);
+            console.log(`Unfrozen investment ${inv.shortId}`);
+          }
         }
       });
     }
@@ -956,8 +1017,8 @@ function saveUserPrefs(hashedUsername, prefsString) {
 function getUserPrefs(hashedUsername) {
     const prefsSheet = ensurePrefsSheet_();
     const { row, existed } = findUserRowInSheet_(prefsSheet, hashedUsername, false);
-    if (!existed) return { currency: 'RUB', sbpMethods: [] };
-    const data = prefsSheet.getRange(row, 2, 1, 4).getValues()[0];
+    if (!existed) return { currency: 'RUB', sbpMethods: [], autoRenew: true };
+    const data = prefsSheet.getRange(row, 2, 1, 5).getValues()[0];
     let sbpMethods = [];
     try {
         sbpMethods = JSON.parse(data[0] || '[]');
@@ -969,9 +1030,28 @@ function getUserPrefs(hashedUsername) {
         sbpMethods: sbpMethods,
         cryptoWallet: data[1] || '',
         bankAccount: data[2] || '',
-        currency: data[3] || 'RUB'
+        currency: data[3] || 'RUB',
+        autoRenew: data[4] === 'true' || data[4] === true || data[4] === undefined || data[4] === ''
         // displayName НЕ хранится (соблюдение 152-ФЗ)
     };
+}
+
+function setUserPref(hashedUsername, key, value) {
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
+    const currentPrefs = getUserPrefs(hashedUsername);
+
+    // Обновляем только указанное поле
+    if (key === 'autoRenew') {
+        const boolValue = value === 'true' || value === true;
+        prefsSheet.getRange(row, 6).setValue(boolValue);
+        currentPrefs.autoRenew = boolValue;
+    } else if (key === 'currency') {
+        prefsSheet.getRange(row, 5).setValue(value || 'RUB');
+        currentPrefs.currency = value || 'RUB';
+    }
+
+    return { success: true, updatedPrefs: currentPrefs };
 }
 
 function ensureRequestsSheet_() {
@@ -1040,7 +1120,7 @@ function ensurePrefsSheet_() {
     if (!sh) {
         sh = ss.insertSheet(PREFS_SHEET);
         // ВАЖНО: displayName НЕ хранится (соблюдение 152-ФЗ)
-        sh.getRange(1, 1, 1, 5).setValues([['hashedUsername', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency']]);
+        sh.getRange(1, 1, 1, 6).setValues([['hashedUsername', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency', 'autoRenew']]);
     }
     return sh;
 }
@@ -1347,6 +1427,199 @@ function safeAnswerCallbackQuery(id, text, showAlert = false) {
             muteHttpExceptions: true
         });
     } catch(e) {}
+}
+
+/**
+ * Сохраняет chatId пользователя при первом взаимодействии
+ * @param {string} hashedUsername - Хешированный никнейм пользователя
+ * @param {string} chatId - Telegram chatId пользователя
+ */
+function saveChatId_(hashedUsername, chatId) {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const usersSheet = ss.getSheetByName(SHEET_NAME);
+    const { row } = findOrCreateUserRow_(usersSheet, hashedUsername);
+
+    // Проверяем, есть ли уже chatId
+    const existingChatId = usersSheet.getRange(row, 22).getValue();
+    if (!existingChatId || existingChatId !== chatId) {
+      usersSheet.getRange(row, 22).setValue(chatId);
+      console.log(`Saved chatId for user ${hashedUsername}: ${chatId}`);
+    }
+  } catch (e) {
+    console.error('Failed to save chatId:', e);
+  }
+}
+
+/**
+ * Отправляет уведомление пользователю об автопродлении инвестиции
+ * @param {string} hashedUsername - Хешированный никнейм пользователя
+ * @param {string} investmentName - Название инвестиции (например, "Стабильный")
+ * @param {number} amount - Сумма инвестиции
+ * @param {number} freezeDays - Срок заморозки в днях
+ */
+function sendAutoRenewalNotification_(hashedUsername, investmentName, amount, freezeDays) {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const usersSheet = ss.getSheetByName(SHEET_NAME);
+    const { row } = findOrCreateUserRow_(usersSheet, hashedUsername);
+
+    let chatId = usersSheet.getRange(row, 22).getValue();
+
+    if (!chatId) {
+      console.log('ChatId not found for user, skipping auto-renewal notification');
+      return;
+    }
+
+    const text = `✅ Завтра продлим вашу инвестицию *${investmentName}* с суммой *${round2(amount)} ₽* ещё на *${freezeDays} дней*!`;
+
+    UrlFetchApp.fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        chat_id: chatId,
+        text: text,
+        parse_mode: 'Markdown'
+      }),
+      muteHttpExceptions: true
+    });
+
+    console.log(`Auto-renewal notification sent to user ${hashedUsername}`);
+  } catch (e) {
+    console.error('Failed to send auto-renewal notification:', e);
+  }
+}
+
+/**
+ * Ежедневная проверка инвестиций, которые размораживаются завтра
+ * Вызывается по триггеру каждый день в определенное время (например, в 12:00)
+ */
+function checkUpcomingRenewals() {
+  console.log('=== checkUpcomingRenewals START ===', new Date().toISOString());
+
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const investSheet = ss.getSheetByName(INVEST_TRANSACTIONS);
+    const usersSheet = ss.getSheetByName(SHEET_NAME);
+
+    if (!investSheet) {
+      console.log('INVEST_TRANSACTIONS sheet not found');
+      return;
+    }
+
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const dayAfterTomorrow = new Date(tomorrow);
+    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+
+    console.log('Checking for investments unfreezing tomorrow:', tomorrow.toISOString());
+
+    const lastRow = investSheet.getLastRow();
+    if (lastRow < 2) {
+      console.log('No investments found');
+      return;
+    }
+
+    const data = investSheet.getRange(2, 1, lastRow - 1, 10).getValues();
+
+    // Группируем по пользователям
+    const userInvestments = {};
+
+    for (let i = 0; i < data.length; i++) {
+      const createdAt = data[i][0];
+      const hashedUsername = data[i][1];
+      const status = data[i][4];
+      const delivered = data[i][5];
+      const amount = Number(data[i][7]);
+      const rate = Number(data[i][8]);
+      const unfreezeDate = data[i][9];
+
+      // Пропускаем если не 17% или 18%
+      if (rate !== 17 && rate !== 18) continue;
+
+      // Пропускаем если уже разморожено
+      if (delivered) continue;
+
+      // Пропускаем если статус не APPROVED
+      if (status !== 'APPROVED') continue;
+
+      // Проверяем, размораживается ли завтра
+      if (unfreezeDate instanceof Date) {
+        const unfreezeDateOnly = new Date(unfreezeDate);
+        unfreezeDateOnly.setHours(0, 0, 0, 0);
+
+        if (unfreezeDateOnly >= tomorrow && unfreezeDateOnly < dayAfterTomorrow) {
+          if (!userInvestments[hashedUsername]) {
+            userInvestments[hashedUsername] = [];
+          }
+
+          userInvestments[hashedUsername].push({
+            amount: amount,
+            rate: rate,
+            unfreezeDate: unfreezeDate
+          });
+        }
+      }
+    }
+
+    // Отправляем уведомления пользователям
+    let notificationsSent = 0;
+    for (const hashedUsername in userInvestments) {
+      const investments = userInvestments[hashedUsername];
+
+      // Проверяем настройку автопродления
+      const userPrefs = getUserPrefs(hashedUsername);
+      if (!userPrefs.autoRenew) {
+        console.log(`User ${hashedUsername} has autoRenew disabled, skipping notification`);
+        continue;
+      }
+
+      // Получаем chatId
+      const { row } = findOrCreateUserRow_(usersSheet, hashedUsername);
+      const chatId = usersSheet.getRange(row, 22).getValue();
+
+      if (!chatId) {
+        console.log(`ChatId not found for user ${hashedUsername}, skipping notification`);
+        continue;
+      }
+
+      // Отправляем уведомление для каждой инвестиции
+      for (const inv of investments) {
+        const rateConfig = getRateConfig(inv.rate);
+        sendAutoRenewalNotification_(hashedUsername, rateConfig.name, inv.amount, rateConfig.freezeDays);
+        notificationsSent++;
+      }
+    }
+
+    console.log(`=== checkUpcomingRenewals END: ${notificationsSent} notifications sent ===`);
+  } catch (e) {
+    console.error('checkUpcomingRenewals error:', e);
+  }
+}
+
+/**
+ * Устанавливает ежедневный триггер для проверки автопродлений
+ * Запустить вручную один раз из Google Apps Script Editor
+ */
+function setupDailyRenewalCheckTrigger() {
+  // Удаляем существующие триггеры для этой функции
+  const triggers = ScriptApp.getProjectTriggers();
+  for (const trigger of triggers) {
+    if (trigger.getHandlerFunction() === 'checkUpcomingRenewals') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  }
+
+  // Создаём новый триггер: каждый день в 12:00
+  ScriptApp.newTrigger('checkUpcomingRenewals')
+    .timeBased()
+    .atHour(12)
+    .everyDays(1)
+    .create();
+
+  console.log('Daily renewal check trigger created (12:00 every day)');
 }
 
 function verifyTelegramSignature(initData) {
