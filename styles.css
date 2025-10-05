@@ -254,7 +254,7 @@
     .quick-amounts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0; }
     .quick-amount-btn { padding: 12px; border-radius: 12px; font-size: 14px; color: var(--text-primary); background: var(--glass-bg); border: 1px solid var(--glass-border); }
 
-    .method-card { border-radius: 16px; padding: 20px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; background: var(--glass-bg); }
+    .method-card { border-radius: 16px; padding: 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; background: var(--glass-bg); }
     .method-card.disabled { opacity: 0.5; cursor: not-allowed; }
     .method-info h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; color: var(--text-primary); }
     .method-info p { font-size: 14px; color: var(--text-secondary); }
