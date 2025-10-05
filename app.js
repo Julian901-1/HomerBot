@@ -537,8 +537,14 @@ async function initializeApp() {
     username = (tg?.initDataUnsafe?.user?.username) || 'marulin';
     initData = tg?.initData || '';
 
-    // Получаем chatId из Telegram WebApp
+    // Получаем chatId из Telegram WebApp (для личных чатов user.id = chat_id)
     const chatId = tg?.initDataUnsafe?.user?.id || null;
+    console.log('Telegram WebApp data:', {
+      username: username,
+      chatId: chatId,
+      hasInitData: !!initData,
+      fullUser: tg?.initDataUnsafe?.user
+    });
 
     // ОПТИМИЗАЦИЯ: Показываем UI с заглушками немедленно
     devMode = localStorage.getItem('devMode') === 'true';

@@ -1436,15 +1436,26 @@ function safeAnswerCallbackQuery(id, text, showAlert = false) {
  */
 function saveChatId_(hashedUsername, chatId) {
   try {
+    console.log(`saveChatId_ called: hashedUsername=${hashedUsername}, chatId=${chatId}`);
+
+    if (!chatId) {
+      console.log('No chatId provided, skipping save');
+      return;
+    }
+
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const usersSheet = ss.getSheetByName(SHEET_NAME);
     const { row } = findOrCreateUserRow_(usersSheet, hashedUsername);
 
     // Проверяем, есть ли уже chatId
     const existingChatId = usersSheet.getRange(row, 22).getValue();
+    console.log(`Existing chatId in row ${row}, column 22: ${existingChatId}`);
+
     if (!existingChatId || existingChatId !== chatId) {
       usersSheet.getRange(row, 22).setValue(chatId);
-      console.log(`Saved chatId for user ${hashedUsername}: ${chatId}`);
+      console.log(`✅ Saved chatId for user ${hashedUsername} in row ${row}: ${chatId}`);
+    } else {
+      console.log(`ChatId already saved for user ${hashedUsername}`);
     }
   } catch (e) {
     console.error('Failed to save chatId:', e);
