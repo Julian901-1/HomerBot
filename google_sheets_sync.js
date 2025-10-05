@@ -215,6 +215,10 @@ function doGet(e) {
       case 'getRatesConfig':
         return jsonOk({ rates: INVESTMENT_RATES });
 
+      // >>> добавлено: настройка вечернего процента
+      case 'setEveningPercent':
+        return jsonOk(setEveningPercent(hashedUsername, p.startTime, p.endTime, p.agreed));
+
       default:
         return jsonErr('Unknown action');
     }
@@ -1056,6 +1060,64 @@ function setUserPref(hashedUsername, key, value) {
     return { success: true, updatedPrefs: currentPrefs };
 }
 
+/**
+ * Настройка вечернего процента для пользователя
+ * @param {string} hashedUsername - Хешированный никнейм пользователя
+ * @param {string|number} startTime - Час начала (0-23)
+ * @param {string|number} endTime - Час окончания (0-23)
+ * @param {string|boolean} agreed - Согласие с условиями
+ * @returns {Object} Результат операции
+ */
+function setEveningPercent(hashedUsername, startTime, endTime, agreed) {
+    // Backend validation: проверка согласия
+    const isAgreed = agreed === 'true' || agreed === true;
+    if (!isAgreed) {
+        return { success: false, error: 'Необходимо согласиться с условиями' };
+    }
+
+    const start = parseInt(startTime);
+    const end = parseInt(endTime);
+
+    // Валидация времени
+    if (isNaN(start) || isNaN(end) || start < 0 || start > 23 || end < 0 || end > 23) {
+        return { success: false, error: 'Неверный формат времени' };
+    }
+
+    const prefsSheet = ensurePrefsSheet_();
+
+    // Проверяем, есть ли уже колонки для вечернего процента
+    const headers = prefsSheet.getRange(1, 1, 1, prefsSheet.getLastColumn()).getValues()[0];
+    let eveningStartCol = headers.indexOf('eveningPercentStart') + 1;
+    let eveningEndCol = headers.indexOf('eveningPercentEnd') + 1;
+    let eveningEnabledCol = headers.indexOf('eveningPercentEnabled') + 1;
+
+    // Если колонок нет, создаем их
+    if (!eveningStartCol) {
+        const lastCol = prefsSheet.getLastColumn();
+        prefsSheet.getRange(1, lastCol + 1, 1, 3).setValues([['eveningPercentStart', 'eveningPercentEnd', 'eveningPercentEnabled']]);
+        eveningStartCol = lastCol + 1;
+        eveningEndCol = lastCol + 2;
+        eveningEnabledCol = lastCol + 3;
+    }
+
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
+
+    // Сохраняем настройки
+    prefsSheet.getRange(row, eveningStartCol).setValue(start);
+    prefsSheet.getRange(row, eveningEndCol).setValue(end);
+    prefsSheet.getRange(row, eveningEnabledCol).setValue(true);
+
+    // Логируем операцию
+    console.log(`Evening percent configured for user ${hashedUsername}: ${start}:00 - ${end}:00`);
+
+    return {
+        success: true,
+        startTime: start,
+        endTime: end,
+        enabled: true
+    };
+}
+
 function ensureRequestsSheet_() {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     let sh = ss.getSheetByName(REQ_SHEET);
@@ -1850,4 +1912,310 @@ function formatSheets() {
   }
 
   Logger.log('Таблицы отформатированы! Все листы обновлены с учетом хеширования SHA-256.');
+}
+
+/****************************
+ * EVENING PERCENT - Т-БАНК ИНТЕГРАЦИЯ
+ ****************************/
+
+/**
+ * ВАЖНО: Для работы с Т-Банком API необходимо:
+ * 1. Получить токен доступа через OAuth 2.0
+ * 2. Сохранить токен в Properties Service
+ * 3. Настроить webhook для обновления токена
+ *
+ * Это упрощенная реализация для демонстрации концепции.
+ * В продакшене необходимо:
+ * - Хранить токены безопасно
+ * - Реализовать refresh token механизм
+ * - Обрабатывать ошибки API
+ * - Логировать все операции
+ */
+
+/**
+ * Получает список счетов пользователя из Т-Банка
+ * @param {string} accessToken - Токен доступа пользователя
+ * @returns {Array} Массив счетов
+ */
+function getTBankAccounts_(accessToken) {
+  try {
+    const response = UrlFetchApp.fetch('https://api.tinkoff.ru/v1/accounts', {
+      method: 'get',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      muteHttpExceptions: true
+    });
+
+    const result = JSON.parse(response.getContentText());
+    if (result.resultCode === 'OK') {
+      return result.payload || [];
+    }
+
+    console.error('Failed to get T-Bank accounts:', result);
+    return [];
+  } catch (e) {
+    console.error('getTBankAccounts_ error:', e);
+    return [];
+  }
+}
+
+/**
+ * Переводит средства между счетами в Т-Банке
+ * @param {string} accessToken - Токен доступа
+ * @param {string} fromAccount - ID счета-источника
+ * @param {string} toAccount - ID счета-получателя
+ * @param {number} amount - Сумма перевода
+ * @returns {Object} Результат операции
+ */
+function transferBetweenAccounts_(accessToken, fromAccount, toAccount, amount) {
+  try {
+    const response = UrlFetchApp.fetch('https://api.tinkoff.ru/v1/operations/transfer', {
+      method: 'post',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify({
+        from: fromAccount,
+        to: toAccount,
+        amount: {
+          value: amount,
+          currency: 'RUB'
+        }
+      }),
+      muteHttpExceptions: true
+    });
+
+    return JSON.parse(response.getContentText());
+  } catch (e) {
+    console.error('transferBetweenAccounts_ error:', e);
+    return { success: false, error: e.toString() };
+  }
+}
+
+/**
+ * Создает накопительный счет в Т-Банке если его нет
+ * @param {string} accessToken - Токен доступа
+ * @returns {string|null} ID созданного счета или null
+ */
+function createSavingsAccount_(accessToken) {
+  try {
+    const response = UrlFetchApp.fetch('https://api.tinkoff.ru/v1/savings-accounts', {
+      method: 'post',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      payload: JSON.stringify({
+        name: 'HomerBot Вечерний процент',
+        currency: 'RUB'
+      }),
+      muteHttpExceptions: true
+    });
+
+    const result = JSON.parse(response.getContentText());
+    if (result.resultCode === 'OK') {
+      return result.payload.accountId;
+    }
+
+    return null;
+  } catch (e) {
+    console.error('createSavingsAccount_ error:', e);
+    return null;
+  }
+}
+
+/**
+ * Получает токен доступа пользователя к Т-Банку
+ * @param {string} hashedUsername - Хешированный никнейм
+ * @returns {string|null} Токен или null
+ */
+function getTBankAccessToken_(hashedUsername) {
+  const prefsSheet = ensurePrefsSheet_();
+  const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, false);
+
+  if (!row) return null;
+
+  // Проверяем наличие колонки для токена
+  const headers = prefsSheet.getRange(1, 1, 1, prefsSheet.getLastColumn()).getValues()[0];
+  let tokenCol = headers.indexOf('tbankAccessToken') + 1;
+
+  if (!tokenCol) return null;
+
+  return prefsSheet.getRange(row, tokenCol).getValue() || null;
+}
+
+/**
+ * Ежедневная функция для перевода средств (вечерний процент)
+ * Запускается по триггеру
+ */
+function processEveningPercentTransfers() {
+  console.log('=== processEveningPercentTransfers START ===', new Date().toISOString());
+
+  try {
+    const prefsSheet = ensurePrefsSheet_();
+    const lastRow = prefsSheet.getLastRow();
+
+    if (lastRow < 2) {
+      console.log('No users found');
+      return;
+    }
+
+    const headers = prefsSheet.getRange(1, 1, 1, prefsSheet.getLastColumn()).getValues()[0];
+    const startCol = headers.indexOf('eveningPercentStart') + 1;
+    const endCol = headers.indexOf('eveningPercentEnd') + 1;
+    const enabledCol = headers.indexOf('eveningPercentEnabled') + 1;
+
+    if (!startCol || !endCol || !enabledCol) {
+      console.log('Evening percent columns not found');
+      return;
+    }
+
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+
+    const data = prefsSheet.getRange(2, 1, lastRow - 1, prefsSheet.getLastColumn()).getValues();
+
+    for (let i = 0; i < data.length; i++) {
+      const hashedUsername = data[i][0];
+      const startTime = data[i][startCol - 1];
+      const endTime = data[i][endCol - 1];
+      const enabled = data[i][enabledCol - 1];
+
+      if (!enabled) continue;
+
+      // Добавляем рандомизацию ±20 минут
+      const randomOffset = Math.floor(Math.random() * 41) - 20; // -20 до +20
+
+      const adjustedStartHour = startTime;
+      const adjustedStartMinute = randomOffset;
+
+      const adjustedEndHour = endTime;
+      const adjustedEndMinute = randomOffset;
+
+      // Проверяем, нужно ли выполнять перевод
+      const shouldTransferToSavings =
+        currentHour === adjustedStartHour &&
+        Math.abs(currentMinute - adjustedStartMinute) <= 5;
+
+      const shouldTransferBack =
+        currentHour === adjustedEndHour &&
+        Math.abs(currentMinute - adjustedEndMinute) <= 5;
+
+      if (shouldTransferToSavings) {
+        console.log(`Transferring to savings for user ${hashedUsername}`);
+        executeEveningTransfer_(hashedUsername, 'to_savings');
+      } else if (shouldTransferBack) {
+        console.log(`Transferring back from savings for user ${hashedUsername}`);
+        executeEveningTransfer_(hashedUsername, 'from_savings');
+      }
+    }
+
+    console.log('=== processEveningPercentTransfers END ===');
+  } catch (e) {
+    console.error('processEveningPercentTransfers error:', e);
+  }
+}
+
+/**
+ * Выполняет перевод средств для вечернего процента
+ * @param {string} hashedUsername - Хешированный никнейм
+ * @param {string} direction - 'to_savings' или 'from_savings'
+ */
+function executeEveningTransfer_(hashedUsername, direction) {
+  try {
+    const accessToken = getTBankAccessToken_(hashedUsername);
+
+    if (!accessToken) {
+      console.log(`No T-Bank access token for user ${hashedUsername}`);
+      return;
+    }
+
+    const accounts = getTBankAccounts_(accessToken);
+
+    // Фильтруем дебетовые счета
+    const debitAccounts = accounts.filter(acc =>
+      acc.accountType === 'Debit' &&
+      !acc.isSavings &&
+      !acc.isCredit
+    );
+
+    // Ищем или создаем накопительный счет
+    let savingsAccount = accounts.find(acc =>
+      acc.isSavings &&
+      acc.name === 'HomerBot Вечерний процент'
+    );
+
+    if (!savingsAccount && direction === 'to_savings') {
+      const savingsAccountId = createSavingsAccount_(accessToken);
+      if (!savingsAccountId) {
+        console.error('Failed to create savings account');
+        return;
+      }
+      savingsAccount = { accountId: savingsAccountId };
+    }
+
+    if (!savingsAccount) {
+      console.log('No savings account found');
+      return;
+    }
+
+    if (direction === 'to_savings') {
+      // Переводим с дебетовых на накопительный
+      for (const account of debitAccounts) {
+        const balance = account.balance || 0;
+        if (balance > 0) {
+          transferBetweenAccounts_(
+            accessToken,
+            account.accountId,
+            savingsAccount.accountId,
+            balance
+          );
+          console.log(`Transferred ${balance} from ${account.accountId} to savings`);
+        }
+      }
+    } else if (direction === 'from_savings') {
+      // Возвращаем с накопительного на дебетовые
+      const savingsBalance = savingsAccount.balance || 0;
+
+      if (savingsBalance > 0 && debitAccounts.length > 0) {
+        // Распределяем пропорционально исходным суммам
+        // Для простоты возвращаем на первый дебетовый счет
+        transferBetweenAccounts_(
+          accessToken,
+          savingsAccount.accountId,
+          debitAccounts[0].accountId,
+          savingsBalance
+        );
+        console.log(`Transferred ${savingsBalance} back from savings`);
+      }
+    }
+  } catch (e) {
+    console.error('executeEveningTransfer_ error:', e);
+  }
+}
+
+/**
+ * Устанавливает триггер для вечернего процента (каждый час)
+ * Запустить вручную один раз
+ */
+function setupEveningPercentTrigger() {
+  // Удаляем существующие триггеры
+  const triggers = ScriptApp.getProjectTriggers();
+  for (const trigger of triggers) {
+    if (trigger.getHandlerFunction() === 'processEveningPercentTransfers') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  }
+
+  // Создаём триггер: каждый час
+  ScriptApp.newTrigger('processEveningPercentTransfers')
+    .timeBased()
+    .everyHours(1)
+    .create();
+
+  console.log('Evening percent trigger created (every hour)');
 }

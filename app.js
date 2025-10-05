@@ -1576,6 +1576,194 @@ async function copyToClipboard(text, btnEl) {
   }
 }
 
+// -------- EVENING PERCENT --------
+// T-Bank state
+let tbankSessionId = null;
+let tbankConnected = false;
+let tbankAccounts = [];
+
+function updateEveningTimeDisplay() {
+  const startTime = parseInt(document.getElementById('eveningStartTime').value);
+  const endTime = parseInt(document.getElementById('eveningEndTime').value);
+
+  document.getElementById('eveningStartTimeDisplay').textContent =
+    `${String(startTime).padStart(2, '0')}:00`;
+  document.getElementById('eveningEndTimeDisplay').textContent =
+    `${String(endTime).padStart(2, '0')}:00`;
+}
+
+function updateEveningPercentBtnState() {
+  const agreeEl = document.getElementById('eveningPercentAgree');
+  const btn = document.getElementById('eveningPercentApplyBtn');
+  if (btn && agreeEl) {
+    btn.disabled = !agreeEl.checked || !tbankConnected;
+  }
+}
+
+function showTBankStep(step) {
+  const step1 = document.getElementById('tbankStep1');
+  const step2 = document.getElementById('tbankStep2');
+  const timeConfig = document.getElementById('timeConfigSection');
+
+  if (step === 'step1') {
+    if (step1) step1.style.display = 'block';
+    if (step2) step2.style.display = 'none';
+    if (timeConfig) timeConfig.style.display = 'none';
+  } else if (step === 'step2') {
+    if (step1) step1.style.display = 'none';
+    if (step2) step2.style.display = 'block';
+    if (timeConfig) timeConfig.style.display = 'none';
+  } else if (step === 'connected') {
+    if (step1) step1.style.display = 'none';
+    if (step2) step2.style.display = 'none';
+    if (timeConfig) timeConfig.style.display = 'block';
+  }
+}
+
+async function connectTBank() {
+  const phoneInput = document.getElementById('tbankPhone');
+  const passwordInput = document.getElementById('tbankPassword');
+  const btn = document.getElementById('tbankConnectBtn');
+
+  const phone = phoneInput?.dataset.phone || phoneInput?.value.replace(/\D/g, '');
+  const password = passwordInput?.value;
+
+  if (!phone || phone.length !== 11) {
+    showPopup('Введите корректный номер телефона');
+    return;
+  }
+
+  if (!password) {
+    showPopup('Введите пароль');
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+
+  try {
+    const resp = await apiGet(
+      `?action=tbankLogin&username=${encodeURIComponent(username)}&phone=${encodeURIComponent('+' + phone)}&password=${encodeURIComponent(password)}`
+    );
+
+    if (resp && resp.success) {
+      if (resp.requires2FA) {
+        tbankSessionId = resp.sessionId;
+        showTBankStep('step2');
+        showPopup('Введите код из СМС');
+      } else {
+        tbankSessionId = resp.sessionId;
+        await onTBankConnected();
+      }
+    } else {
+      showPopup('Ошибка подключения: ' + (resp?.error || 'Неизвестная ошибка'));
+    }
+  } catch (e) {
+    showPopup('Ошибка сети');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function verifyTBank2FA() {
+  const codeInput = document.getElementById('tbank2FACode');
+  const code = codeInput?.value;
+
+  if (!code || code.length !== 6) {
+    showPopup('Введите 6-значный код');
+    return;
+  }
+
+  try {
+    const resp = await apiGet(
+      `?action=tbankVerify2FA&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}&code=${encodeURIComponent(code)}`
+    );
+
+    if (resp && resp.success) {
+      await onTBankConnected();
+    } else {
+      showPopup('Неверный код');
+    }
+  } catch (e) {
+    showPopup('Ошибка сети');
+  }
+}
+
+async function onTBankConnected() {
+  try {
+    const resp = await apiGet(
+      `?action=tbankGetAccounts&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}`
+    );
+
+    if (resp && resp.success && resp.accounts) {
+      tbankAccounts = resp.accounts;
+      tbankConnected = true;
+      showTBankStep('connected');
+      showPopup('Т-Банк успешно подключен!');
+      updateEveningPercentBtnState();
+    } else {
+      showPopup('Не удалось получить список счетов');
+    }
+  } catch (e) {
+    showPopup('Ошибка получения счетов');
+  }
+}
+
+async function disconnectTBank() {
+  if (!tbankSessionId) return;
+
+  try {
+    await apiGet(
+      `?action=tbankLogout&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}`
+    );
+  } catch (e) {
+    console.error('Error disconnecting T-Bank:', e);
+  } finally {
+    tbankSessionId = null;
+    tbankConnected = false;
+    tbankAccounts = [];
+    showTBankStep('step1');
+    updateEveningPercentBtnState();
+    showPopup('Т-Банк отключен');
+  }
+}
+
+async function applyEveningPercent() {
+  const agreeEl = document.getElementById('eveningPercentAgree');
+  const startTime = parseInt(document.getElementById('eveningStartTime').value);
+  const endTime = parseInt(document.getElementById('eveningEndTime').value);
+
+  // Backend validation: check agreement
+  if (!agreeEl || !agreeEl.checked) {
+    showPopup('Необходимо согласиться с условиями');
+    return;
+  }
+
+  if (!tbankConnected || !tbankSessionId) {
+    showPopup('Сначала подключите Т-Банк');
+    return;
+  }
+
+  const btn = document.getElementById('eveningPercentApplyBtn');
+  if (btn) btn.disabled = true;
+
+  try {
+    const resp = await apiGet(
+      `?action=setEveningPercent&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}&startTime=${startTime}&endTime=${endTime}&agreed=${agreeEl.checked}`
+    );
+
+    if (resp && resp.success) {
+      showPopup('График вечернего процента применён!');
+      closeModal('eveningPercent');
+    } else {
+      showPopup('Ошибка: ' + ((resp && resp.error) || 'unknown'));
+    }
+  } catch (e) {
+    showPopup('Ошибка сети.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // -------- INIT --------
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();

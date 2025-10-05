@@ -87,7 +87,7 @@
                         </div>
                       </div>
                       <div class="right-options">
-                        <div class="option-rectangle">
+                        <div class="option-rectangle" onclick="openModal('eveningPercent')">
                           <span>Вечерний процент</span>
                         </div>
                         <div class="option-rectangle">
@@ -484,6 +484,122 @@
         </div>
         <div style="font-size: 13px; color: var(--text-secondary); margin-top: 12px; padding: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px;">
           При включении автопродления инвестиции "Стабильный" и "Агрессивный" будут автоматически продлеваться на тот же срок после окончания периода заморозки. Заработанные проценты будут доступны к выводу. Вы получите уведомление в Telegram за день до продления.
+        </div>
+      </div>
+    </div>
+
+    <!-- Evening Percent Modal -->
+    <div id="modalEveningPercent" class="modal-overlay" role="dialog" aria-labelledby="evening-percent-title" aria-modal="true">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="evening-percent-title" class="modal-title">Вечерний процент</h2>
+          <button class="close-btn" onclick="closeModal('eveningPercent')" aria-label="Закрыть вечерний процент">✕</button>
+        </div>
+
+        <div class="glass-card" style="margin-bottom: 16px;">
+          <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.6;">
+            Ваши средства, расположенные на всех счетах Т-Банка, работают на вас даже ночью. Выбрав время, которое вы хотите, чтобы средства работали, они будут переносится на накопительный счёт на это время и деньги будут работать на вас, даже когда вы спите.
+          </p>
+        </div>
+
+        <!-- T-Bank Connection Status -->
+        <div id="tbankConnectionStatus" class="glass-card" style="margin-bottom: 16px; display: none;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              <div>
+                <div style="font-weight: 600;">Т-Банк подключен</div>
+                <div style="font-size: 12px; color: var(--text-secondary);" id="tbankAccountsInfo">—</div>
+              </div>
+            </div>
+            <button class="btn" style="padding: 8px 16px; font-size: 13px;" onclick="disconnectTBank()">Отключить</button>
+          </div>
+        </div>
+
+        <!-- T-Bank Connection Form -->
+        <div id="tbankConnectionForm" class="glass-card" style="margin-bottom: 16px;">
+          <h3 style="margin-bottom: 12px; font-size: 16px;">Подключение Т-Банка</h3>
+
+          <div id="tbankStep1" style="display: block;">
+            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
+              Для работы функции необходимо безопасно подключить ваш аккаунт Т-Банка
+            </p>
+
+            <input type="tel" class="input-field" id="tbankPhone" placeholder="+7 (___) ___-__-__"
+                   style="margin-bottom: 12px;" oninput="formatPhoneInput(this)" inputmode="numeric">
+
+            <input type="password" class="input-field" id="tbankPassword" placeholder="Пароль от Т-Банка"
+                   style="margin-bottom: 16px;">
+
+            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; padding: 10px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px;">
+              🔒 Ваши данные шифруются с использованием AES-256 и не сохраняются на серверах
+            </div>
+
+            <button class="btn btn-primary" id="tbankConnectBtn" style="width: 100%;" onclick="connectTBank()">
+              Подключить Т-Банк
+            </button>
+          </div>
+
+          <div id="tbankStep2" style="display: none;">
+            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
+              Введите код из СМС для подтверждения
+            </p>
+
+            <input type="text" class="input-field" id="tbank2FACode" placeholder="Код из СМС"
+                   style="margin-bottom: 16px; text-align: center; font-size: 20px; letter-spacing: 8px;"
+                   maxlength="6" inputmode="numeric">
+
+            <button class="btn btn-primary" id="tbankVerifyBtn" style="width: 100%;" onclick="verifyTBank2FA()">
+              Подтвердить
+            </button>
+          </div>
+
+          <div id="tbankConnecting" style="display: none; text-align: center; padding: 20px;">
+            <div class="spinner-big" aria-label="Подключение"></div>
+            <p style="color: var(--text-secondary); margin-top: 12px;">Подключаемся к Т-Банку...</p>
+          </div>
+        </div>
+
+        <!-- Time Configuration (shown only after T-Bank is connected) -->
+        <div id="timeConfigSection" style="display: none;">
+          <div class="glass-card" style="margin-bottom: 16px;">
+            <h3 style="margin-bottom: 16px; font-size: 16px;">Рабочее время</h3>
+
+            <div class="time-config-container">
+              <div class="time-selector">
+                <label for="eveningStartTime" style="display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 14px;">Начало</label>
+                <input type="range" id="eveningStartTime" min="0" max="23" value="22" oninput="updateEveningTimeDisplay()">
+                <div id="eveningStartTimeDisplay" class="time-display">22:00</div>
+              </div>
+
+              <div class="time-separator">—</div>
+
+              <div class="time-selector">
+                <label for="eveningEndTime" style="display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 14px;">Конец</label>
+                <input type="range" id="eveningEndTime" min="0" max="23" value="6" oninput="updateEveningTimeDisplay()">
+                <div id="eveningEndTimeDisplay" class="time-display">06:00</div>
+              </div>
+            </div>
+
+            <div style="margin-top: 12px; padding: 10px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; font-size: 13px; color: var(--text-secondary);">
+              Фактическое время будет варьироваться ±20 минут для безопасности операций
+            </div>
+          </div>
+
+          <div class="agree-row" style="margin-bottom: 16px;">
+            <span>Я согласен с <a href="https://docs.google.com/document/d/1Rv3N2iTgwHXhTkSgv-BwKLrekVpZtoGfU_ct2lDw00g/edit?usp=sharing" target="_blank">условиями</a></span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="eveningPercentAgree" onchange="updateEveningPercentBtnState()">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <button class="btn btn-primary" id="eveningPercentApplyBtn" style="width: 100%;" disabled onclick="applyEveningPercent()">
+            Применить график
+          </button>
         </div>
       </div>
     </div>
