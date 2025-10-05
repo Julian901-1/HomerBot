@@ -18,7 +18,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Services
-const encryptionService = new EncryptionService(process.env.ENCRYPTION_KEY);
+const encryptionService = new EncryptionService(process.env.ENCRYPTION_SECRET_KEY || process.env.ENCRYPTION_KEY);
 const sessionManager = new SessionManager();
 
 // Health check
