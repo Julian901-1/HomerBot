@@ -267,6 +267,29 @@
 
     .copy-btn { border-radius: 8px; width: 48px; height: 48px; display:flex; align-items:center; justify-content:center; margin-left:8px; flex-shrink: 0;}
 
+    .max-amount-btn {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: var(--text-primary);
+    }
+    .max-amount-btn:hover {
+      background: rgba(255,255,255,0.4);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .max-amount-btn:active {
+      transform: translateY(0);
+    }
+
     .history-item.status-approved { background: rgba(52, 211, 153, 0.1); border-color: rgba(52, 211, 153, 0.3); }
     .history-item.status-pending { background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.3); }
     .history-item.status-rejected, .history-item.status-canceled { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.3); }

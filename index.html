@@ -275,7 +275,16 @@
             <div class="select-trigger" id="select-trigger">Выберите реквизиты</div>
             <div class="select-options" id="select-options"></div>
           </div>
-          <input type="text" class="amount-input" id="withdrawAmount" placeholder="0" oninput="formatAmountInput(this); updateWithdrawBtnState(); updateWithdrawWarning();" inputmode="decimal">
+          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px;">
+            <input type="text" class="amount-input" id="withdrawAmount" placeholder="0" oninput="formatAmountInput(this); updateWithdrawBtnState(); updateWithdrawWarning();" inputmode="decimal" style="margin-bottom: 0; flex: 1;">
+            <button class="max-amount-btn" onclick="setMaxWithdrawAmount()" aria-label="Установить максимальную сумму" title="Вся доступная сумма">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </button>
+          </div>
 
           <div id="withdraw-warning" style="display:none; margin: 16px 0; padding: 12px; border: 1px solid rgba(220, 38, 38, 0.5); border-radius: 8px; background: rgba(220, 38, 38, 0.05);">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -444,8 +453,17 @@
         </div>
         <div class="input-field" id="niStrategyReadonly" style="text-align:center;font-weight:700;margin-bottom:12px;">—</div>
         <p style="text-align: center; color: var(--text-secondary); margin-bottom: 12px;">Доступно для инвестирования: <b id="investAvailable">—</b></p>
-        <input type="text" class="amount-input" id="niAmount" placeholder="0" oninput="formatAmountInput(this); updateInvestButtonState();" inputmode="decimal">
-        <button class="btn btn-primary" style="width:100%" id="niConfirmBtn" disabled>Подтвердить</button>
+        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px;">
+          <input type="text" class="amount-input" id="niAmount" placeholder="0" oninput="formatAmountInput(this); updateInvestButtonState();" inputmode="decimal" style="margin-bottom: 0; flex: 1;">
+          <button class="max-amount-btn" onclick="setMaxInvestAmount()" aria-label="Установить максимальную сумму" title="Вся доступная сумма">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
+        </div>
+        <button class="btn btn-primary" style="width:100%; margin-top: 0;" id="niConfirmBtn" disabled>Подтвердить</button>
       </div>
     </div>
     <script src="app.js"></script>

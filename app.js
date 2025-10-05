@@ -1155,6 +1155,35 @@ function setDepositAmount(amount) {
     document.activeElement.blur();
   }
 }
+
+function setMaxWithdrawAmount() {
+  const available = serverState.availableForWithdrawal || 0;
+  const input = document.getElementById('withdrawAmount');
+  if (input) {
+    input.value = available.toString().replace('.', ',');
+    formatAmountInput(input);
+    updateWithdrawBtnState();
+    updateWithdrawWarning();
+  }
+  // Снимаем фокус с кнопки
+  if (document.activeElement) {
+    document.activeElement.blur();
+  }
+}
+
+function setMaxInvestAmount() {
+  const available = serverState.availableForInvest || 0;
+  const input = document.getElementById('niAmount');
+  if (input) {
+    input.value = available.toString().replace('.', ',');
+    formatAmountInput(input);
+    updateInvestButtonState();
+  }
+  // Снимаем фокус с кнопки
+  if (document.activeElement) {
+    document.activeElement.blur();
+  }
+}
 function hydrateDepositStep2(amountRub, shortId) {
   const currency = userPrefs.currency;
   const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
