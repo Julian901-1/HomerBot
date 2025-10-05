@@ -595,22 +595,18 @@ async function initializeApp() {
       console.warn('Failed to cache data:', e);
     }
 
-    // ОПТИМИЗАЦИЯ: Используем requestAnimationFrame для отложенного рендера
-    requestAnimationFrame(() => {
-      updateDashboard(serverState);
-      setBootProgress(85);
+    // ОПТИМИЗАЦИЯ: Рендерим UI немедленно без requestAnimationFrame
+    updateDashboard(serverState);
+    setBootProgress(85);
 
-      requestAnimationFrame(() => {
-        recomputeFilteredHistory();
-        renderHistoryPage(false);
-        renderPortfolio(serverState.portfolio);
-        updateWithdrawUI();
+    recomputeFilteredHistory();
+    renderHistoryPage(false);
+    renderPortfolio(serverState.portfolio);
+    updateWithdrawUI();
 
-        setBootProgress(95);
-        scheduleSync(2000);
-        finishBootScreen();
-      });
-    });
+    setBootProgress(95);
+    scheduleSync(2000);
+    finishBootScreen();
   } catch (e) {
     console.error('Initialization error:', e.message, e.stack);
     finishBootScreen();
@@ -1092,34 +1088,26 @@ function pickTwoHints_() {
 function setBootHint(text) {
   const h = document.getElementById('boot-hint');
   if (h) {
-    h.style.opacity = '0';
-    setTimeout(() => {
-      h.textContent = text;
-      h.style.opacity = '1';
-    }, 250);
+    // ОПТИМИЗАЦИЯ: Убираем задержку - мгновенно показываем текст
+    h.textContent = text;
+    h.style.opacity = '1';
   }
 }
 function setBootProgress(p) {
-  // simulate gradual loading — smoothly catch up to target
+  // ОПТИМИЗАЦИЯ: Мгновенная установка прогресса без анимации
   bootProgressTarget = Math.max(0, Math.min(100, p));
   const fill = document.getElementById('boot-progress-fill');
   if (!fill) return;
   clearInterval(bootProgressTimer);
-  bootProgressTimer = setInterval(() => {
-    const cur = parseFloat(fill.style.width||'0');
-    const step = Math.max(0.8, (bootProgressTarget - cur) * 0.25); // easing
-    const next = Math.min(bootProgressTarget, cur + step);
-    fill.style.width = next + '%';
-    // switch phrase roughly in the middle
-    if (next > 55 && bootHintsPicked[1]) {
-      setBootHint(bootHintsPicked[1]);
-      bootHintsPicked[1] = null;
-    }
-    if (Math.abs(next - bootProgressTarget) < 0.5) {
-      fill.style.width = bootProgressTarget + '%';
-      clearInterval(bootProgressTimer);
-    }
-  }, 80);
+
+  // Устанавливаем прогресс мгновенно
+  fill.style.width = bootProgressTarget + '%';
+
+  // switch phrase roughly in the middle
+  if (bootProgressTarget > 55 && bootHintsPicked[1]) {
+    setBootHint(bootHintsPicked[1]);
+    bootHintsPicked[1] = null;
+  }
 }
 function finishBootScreen() {
   const overlay = document.getElementById('boot-screen');
