@@ -962,7 +962,19 @@ function logToEventJournal(createdAt, username, requestId, status, messageId, de
     const sheet = ensureEventJournalSheet_();
     // For DEPOSIT and WITHDRAW operations, set status to "-"
     const finalStatus = (type === 'DEPOSIT' || type === 'WITHDRAW') ? '-' : status;
-    sheet.appendRow([createdAt, username, requestId, finalStatus, messageId, decidedAt, null, type, amount, rate]);
+    // Структура: Дата создания, Пользователь, Request ID, Статус, Message ID, Дата решения, Доставлено, Тип, Сумма, Ставка
+    sheet.appendRow([
+        createdAt,      // A: Дата создания
+        username,       // B: Пользователь
+        requestId,      // C: Request ID
+        finalStatus,    // D: Статус
+        messageId,      // E: Message ID
+        decidedAt,      // F: Дата решения (была проблема - записывался null вместо даты)
+        delivered,      // G: Доставлено
+        type,           // H: Тип
+        amount,         // I: Сумма
+        rate            // J: Ставка
+    ]);
 }
 
 function ensurePrefsSheet_() {
@@ -1406,7 +1418,13 @@ function formatSheets() {
   // Форматирование INVEST_TRANSACTIONS листа
   const investSheet = ensureInvestTransactionsSheet_();
   if (investSheet) {
-    // Заголовки уже установлены в ensureInvestTransactionsSheet_(), просто форматируем
+    // Устанавливаем заголовки явно (на случай если лист уже существовал)
+    investSheet.getRange(1, 1, 1, 11).setValues([[
+      'Дата создания', 'Пользователь', 'Request ID', 'Статус', 'Дата решения',
+      'Доставлено', 'Тип', 'Сумма', 'Ставка', 'Дата разморозки', 'Начисленные проценты'
+    ]]);
+
+    // Форматирование заголовков
     investSheet.getRange(1, 1, 1, 11).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
 
     // Условное форматирование для столбца J (Дата разморозки)
@@ -1446,7 +1464,13 @@ function formatSheets() {
   // Форматирование DEPOSIT_WITHDRAW_TRANSACTIONS листа
   const dwSheet = ensureDepositWithdrawTransactionsSheet_();
   if (dwSheet) {
-    // Заголовки уже установлены в ensureDepositWithdrawTransactionsSheet_(), просто форматируем
+    // Устанавливаем заголовки явно (на случай если лист уже существовал)
+    dwSheet.getRange(1, 1, 1, 9).setValues([[
+      'Дата создания', 'Пользователь', 'Request ID', 'Статус', 'Дата решения',
+      'Доставлено', 'Тип', 'Сумма', 'Применено к балансу'
+    ]]);
+
+    // Форматирование заголовков
     dwSheet.getRange(1, 1, 1, 9).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
 
     // Авторазмер колонок
@@ -1466,7 +1490,13 @@ function formatSheets() {
   // Форматирование EVENT_JOURNAL листа
   const eventSheet = ensureEventJournalSheet_();
   if (eventSheet) {
-    // Заголовки уже установлены в ensureEventJournalSheet_(), просто форматируем
+    // Устанавливаем заголовки явно (на случай если лист уже существовал)
+    eventSheet.getRange(1, 1, 1, 10).setValues([[
+      'Дата создания', 'Пользователь', 'Request ID', 'Статус', 'Message ID',
+      'Дата решения', 'Доставлено', 'Тип', 'Сумма', 'Ставка'
+    ]]);
+
+    // Форматирование заголовков
     eventSheet.getRange(1, 1, 1, 10).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
 
     // Авторазмер колонок
