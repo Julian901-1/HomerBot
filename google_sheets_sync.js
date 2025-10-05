@@ -1447,13 +1447,13 @@ function saveChatId_(hashedUsername, chatId) {
     const usersSheet = ss.getSheetByName(SHEET_NAME);
     const { row } = findOrCreateUserRow_(usersSheet, hashedUsername);
 
-    // Проверяем, есть ли уже chatId
-    const existingChatId = usersSheet.getRange(row, 22).getValue();
-    console.log(`Existing chatId in row ${row}, column 22: ${existingChatId}`);
+    // Проверяем, есть ли уже chatId (колонка F = 6)
+    const existingChatId = usersSheet.getRange(row, 6).getValue();
+    console.log(`Existing chatId in row ${row}, column F (6): ${existingChatId}`);
 
     if (!existingChatId || existingChatId !== chatId) {
-      usersSheet.getRange(row, 22).setValue(chatId);
-      console.log(`✅ Saved chatId for user ${hashedUsername} in row ${row}: ${chatId}`);
+      usersSheet.getRange(row, 6).setValue(chatId);
+      console.log(`✅ Saved chatId for user ${hashedUsername} in row ${row}, column F: ${chatId}`);
     } else {
       console.log(`ChatId already saved for user ${hashedUsername}`);
     }
@@ -1475,7 +1475,7 @@ function sendAutoRenewalNotification_(hashedUsername, investmentName, amount, fr
     const usersSheet = ss.getSheetByName(SHEET_NAME);
     const { row } = findOrCreateUserRow_(usersSheet, hashedUsername);
 
-    let chatId = usersSheet.getRange(row, 22).getValue();
+    let chatId = usersSheet.getRange(row, 6).getValue(); // Колонка F = 6
 
     if (!chatId) {
       console.log('ChatId not found for user, skipping auto-renewal notification');
@@ -1587,9 +1587,9 @@ function checkUpcomingRenewals() {
         continue;
       }
 
-      // Получаем chatId
+      // Получаем chatId (колонка F = 6)
       const { row } = findOrCreateUserRow_(usersSheet, hashedUsername);
-      const chatId = usersSheet.getRange(row, 22).getValue();
+      const chatId = usersSheet.getRange(row, 6).getValue();
 
       if (!chatId) {
         console.log(`ChatId not found for user ${hashedUsername}, skipping notification`);

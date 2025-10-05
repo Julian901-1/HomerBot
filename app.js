@@ -533,17 +533,33 @@ async function initializeApp() {
     setBootProgress(10);
 
     const tg = window.Telegram?.WebApp;
+
+    // Детальное логирование Telegram WebApp
+    console.log('=== TELEGRAM WEBAPP DEBUG ===');
+    console.log('1. window.Telegram exists:', !!window.Telegram);
+    console.log('2. WebApp exists:', !!tg);
+    console.log('3. Full WebApp object:', tg);
+    console.log('4. initDataUnsafe:', tg?.initDataUnsafe);
+    console.log('5. initData (raw):', tg?.initData);
+    console.log('=============================');
+
     tg?.expand?.();
     username = (tg?.initDataUnsafe?.user?.username) || 'marulin';
     initData = tg?.initData || '';
 
     // Получаем chatId из Telegram WebApp (для личных чатов user.id = chat_id)
-    const chatId = tg?.initDataUnsafe?.user?.id || null;
+    let chatId = tg?.initDataUnsafe?.user?.id || null;
+
+    // ВРЕМЕННО: Для тестирования без Telegram можно указать chatId вручную
+    // Раскомментируйте следующую строку и укажите ваш Telegram ID для тестов
+    // chatId = chatId || '487525838'; // Замените на ваш реальный Telegram ID
+
     console.log('Telegram WebApp data:', {
       username: username,
       chatId: chatId,
       hasInitData: !!initData,
-      fullUser: tg?.initDataUnsafe?.user
+      fullUser: tg?.initDataUnsafe?.user,
+      isTelegramEnvironment: !!tg?.initDataUnsafe
     });
 
     // ОПТИМИЗАЦИЯ: Показываем UI с заглушками немедленно
