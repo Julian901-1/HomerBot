@@ -78,6 +78,16 @@ function hashUsername(username) {
  ****************************/
 
 /**
+ * Handles OPTIONS requests (CORS preflight)
+ * @returns {ContentService.TextOutput} Response with CORS headers
+ */
+function doOptions(e) {
+  return ContentService
+    .createTextOutput('')
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
+/**
  * Handles GET requests to the Google Apps Script web app.
  * Processes various actions like getting initial data, syncing balance, requesting deposits/withdrawals, etc.
  * @param {Object} e - The event object containing request parameters.
@@ -1195,8 +1205,25 @@ function findMessageIdForRequest_(requestId) {
     return null;
 }
 function ensureColO_(sheet){ if (sheet.getMaxColumns() < 20) { sheet.insertColumnsAfter(19, 20 - sheet.getMaxColumns()); } }
-function jsonOk(obj) { return ContentService.createTextOutput(JSON.stringify({ success: true, ...obj })).setMimeType(ContentService.MimeType.JSON); }
-function jsonErr(message) { return ContentService.createTextOutput(JSON.stringify({ success: false, error: message })).setMimeType(ContentService.MimeType.JSON); }
+
+/**
+ * Создает успешный JSON ответ с CORS заголовками
+ * ВАЖНО: Google Apps Script не поддерживает setHeader(), поэтому используется хак через callback
+ */
+function jsonOk(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ success: true, ...obj }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Создает ошибочный JSON ответ с CORS заголовками
+ */
+function jsonErr(message) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ success: false, error: message }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
 function cancelPendingDeposit_(hashedUsername) {
   if (!hashedUsername) return false;
   var sheets = [ensureDepositWithdrawTransactionsSheet_()];
