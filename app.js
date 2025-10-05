@@ -1377,7 +1377,7 @@ function updateWithdrawUI() {
   if (!optionsContainer || !trigger) return;
 
   optionsContainer.innerHTML = '';
-  trigger.textContent = 'Select credentials';
+  trigger.textContent = 'Выберите реквизиты';
 
   if (userPrefs.sbpMethods && userPrefs.sbpMethods.length > 0) {
     userPrefs.sbpMethods.forEach((method, index) => {
