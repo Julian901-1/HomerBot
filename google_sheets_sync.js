@@ -47,10 +47,58 @@ function getRateConfig(rate) {
 }
 
 /****************************
- * UTILS
+ * UTILS - ДЕСЯТИЧНАЯ АРИФМЕТИКА
+ * Используем высокую точность для расчётов с последующим банковским округлением
+ * Это упростит миграцию на Postgres Decimal в будущем
  ****************************/
 function shortIdFromUuid(uuid) { const p = String(uuid || '').split('-'); return p.length >= 3 ? p[1] : String(uuid || '').slice(0, 4); }
-function round2(v){ return Math.round((Number(v)+Number.EPSILON)*100)/100; }
+
+/**
+ * Банковское округление (round half to even) до 2 знаков после запятой
+ * Используется для отображения денежных сумм пользователю
+ * @param {number} v - Число для округления
+ * @returns {number} Округлённое до 2 знаков число
+ */
+function round2(v) {
+  const num = Number(v);
+  if (!isFinite(num)) return 0;
+
+  // Умножаем на 100 для работы с копейками
+  const shifted = num * 100;
+  const floor = Math.floor(shifted);
+  const decimal = shifted - floor;
+
+  // Банковское округление: если дробная часть ровно 0.5, округляем к чётному
+  if (Math.abs(decimal - 0.5) < Number.EPSILON) {
+    return (floor % 2 === 0 ? floor : floor + 1) / 100;
+  }
+
+  // Обычное округление для других случаев
+  return Math.round(shifted) / 100;
+}
+
+/**
+ * Банковское округление до 8 знаков после запятой
+ * Используется для внутренних расчётов процентов
+ * @param {number} v - Число для округления
+ * @returns {number} Округлённое до 8 знаков число
+ */
+function round8(v) {
+  const num = Number(v);
+  if (!isFinite(num)) return 0;
+
+  const shifted = num * 100000000;
+  const floor = Math.floor(shifted);
+  const decimal = shifted - floor;
+
+  // Банковское округление
+  if (Math.abs(decimal - 0.5) < Number.EPSILON) {
+    return (floor % 2 === 0 ? floor : floor + 1) / 100000000;
+  }
+
+  return Math.round(shifted) / 100000000;
+}
+
 function monthKey_(d) { const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'); return `${y}-${m}`; }
 function startOfMonth_(d) { return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0); }
 function endOfMonth_(d)   { return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999); }
@@ -374,12 +422,13 @@ function syncBalance(hashedUsername) {
       const rate = Number(investSheet.getRange(reqRow, 9).getValue());
 
       // Считаем проценты с момента создания до СЕЙЧАС
-      const dailyRate = (rate / 100) / 365.25;
+      // Используем высокую точность (8 знаков) для внутренних расчётов
+      const dailyRate = round8((rate / 100) / 365.25);
       const msElapsed = now.getTime() - createdAt.getTime();
-      const daysElapsed = msElapsed / (24 * 60 * 60 * 1000);
-      const accrued = amount * dailyRate * daysElapsed;
+      const daysElapsed = round8(msElapsed / (24 * 60 * 60 * 1000));
+      const accrued = round8(amount * dailyRate * daysElapsed);
 
-      // Сохраняем в колонку K (column 11)
+      // Сохраняем в колонку K (column 11) с округлением до 2 знаков для хранения
       investSheet.getRange(reqRow, 11).setValue(round2(accrued));
 
       console.log(`Updated investment ${inv.shortId}: accrued=${round2(accrued)}`);
@@ -412,6 +461,11 @@ function syncBalance(hashedUsername) {
     console.log('Calculating balances...');
     const balances = calculateBalances(hashedUsername);
     // displayName будет добавлен в doGet() БЕЗ сохранения в БД
+
+    // 7. Обновляем НЕТТО (колонка E/5) - общий баланс (депозиты + профиты)
+    const totalBalance = round2(balances.userDeposits + balances.totalEarnings);
+    usersSheet.getRange(row, 5).setValue(totalBalance);
+    console.log('Updated НЕТТО (column E):', totalBalance);
 
     console.log('=== syncBalance END ===');
     return balances;
@@ -664,27 +718,27 @@ function updateInvestmentAccrued_(username, interest16, interest1718) {
   // Update 16% investments
   if (interest16 > 0) {
     const portfolio16 = portfolio.filter(inv => inv.rate === 16);
-    const total16 = portfolio16.reduce((sum, inv) => sum + inv.amount, 0);
+    const total16 = portfolio16.reduce((sum, inv) => round8(sum + inv.amount), 0);
     portfolio16.forEach(inv => {
-      const share = total16 > 0 ? (inv.amount / total16) * interest16 : 0;
+      const share = total16 > 0 ? round8((inv.amount / total16) * interest16) : 0;
       const reqRow = findRequestRowById_(investSheet, inv.requestId);
       if (reqRow) {
         const currentAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
-        investSheet.getRange(reqRow, 11).setValue(round2(currentAccrued + share));
+        investSheet.getRange(reqRow, 11).setValue(round2(round8(currentAccrued + share)));
       }
     });
   }
-  
+
   // Update 17%/18% investments
   if (interest1718 > 0) {
     const portfolio1718 = portfolio.filter(inv => inv.rate === 17 || inv.rate === 18);
-    const total1718 = portfolio1718.reduce((sum, inv) => sum + inv.amount, 0);
+    const total1718 = portfolio1718.reduce((sum, inv) => round8(sum + inv.amount), 0);
     portfolio1718.forEach(inv => {
-      const share = total1718 > 0 ? (inv.amount / total1718) * interest1718 : 0;
+      const share = total1718 > 0 ? round8((inv.amount / total1718) * interest1718) : 0;
       const reqRow = findRequestRowById_(investSheet, inv.requestId);
       if (reqRow) {
         const currentAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
-        investSheet.getRange(reqRow, 11).setValue(round2(currentAccrued + share));
+        investSheet.getRange(reqRow, 11).setValue(round2(round8(currentAccrued + share)));
       }
     });
   }
@@ -773,20 +827,21 @@ function calculateBalances(username) {
     const createdAt = new Date(investSheet.getRange(reqRow, 1).getValue());
 
     // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Разделяем accruedInterest на "до сегодня" и "сегодня"
-    const dailyRate = (inv.rate / 100) / 365.25;
+    // Используем высокую точность (8 знаков) для расчётов
+    const dailyRate = round8((inv.rate / 100) / 365.25);
 
     // Считаем проценты с создания до начала сегодняшнего дня
     const msUntilToday = Math.max(0, todayStart.getTime() - createdAt.getTime());
-    const daysUntilToday = msUntilToday / (24 * 60 * 60 * 1000);
-    const accruedUntilToday = inv.amount * dailyRate * daysUntilToday;
+    const daysUntilToday = round8(msUntilToday / (24 * 60 * 60 * 1000));
+    const accruedUntilToday = round8(inv.amount * dailyRate * daysUntilToday);
 
     // Считаем проценты за сегодня (с начала дня или с момента создания, если создано сегодня)
     const effectiveStart = createdAt > todayStart ? createdAt : todayStart;
     const msElapsedToday = Math.max(0, now.getTime() - effectiveStart.getTime());
-    const daysElapsedToday = msElapsedToday / (24 * 60 * 60 * 1000);
-    const earnedToday = inv.amount * dailyRate * daysElapsedToday;
+    const daysElapsedToday = round8(msElapsedToday / (24 * 60 * 60 * 1000));
+    const earnedToday = round8(inv.amount * dailyRate * daysElapsedToday);
 
-    todayIncome += earnedToday;
+    todayIncome = round8(todayIncome + earnedToday);
 
     console.log(`  accruedUntilToday=${round2(accruedUntilToday)}, earnedToday=${round2(earnedToday)}`);
 
@@ -803,12 +858,12 @@ function calculateBalances(username) {
       // РАЗБЛОКИРОВАННАЯ инвестиция (16% или разморозившаяся 17%/18%):
       // Доступны для вывода ТОЛЬКО проценты до сегодня!
       // Сегодняшние проценты станут доступны только после 00:00
-      availableForWithdrawal += accruedUntilToday;
+      availableForWithdrawal = round8(availableForWithdrawal + accruedUntilToday);
     }
   }
 
   // КРИТИЧЕСКИ ВАЖНО: Вычитаем заблокированную основную сумму 17%/18%
-  availableForWithdrawal -= locked1718Principal;
+  availableForWithdrawal = round8(availableForWithdrawal - locked1718Principal);
 
   console.log('totalEarnedFromInvestments:', totalEarnedFromInvestments);
   console.log('availableForWithdrawal:', availableForWithdrawal);
@@ -870,13 +925,15 @@ function computeInterestForPeriod(username, fromDate, toDate, rateFilter = null)
         const periodMs = toDateMs - effectiveFromMs;
 
         if (periodMs > 0) {
-            const dailyRate = (investment.rate / 100) / 365.25;
-            const interestForPeriod = investment.amount * dailyRate * (periodMs / (24 * 60 * 60 * 1000));
-            totalInterest += interestForPeriod;
+            // Используем высокую точность (8 знаков) для расчётов
+            const dailyRate = round8((investment.rate / 100) / 365.25);
+            const days = round8(periodMs / (24 * 60 * 60 * 1000));
+            const interestForPeriod = round8(investment.amount * dailyRate * days);
+            totalInterest = round8(totalInterest + interestForPeriod);
         }
     });
-    // Return with high precision (8 decimal places) for internal calculations
-    return Math.round(totalInterest * 100000000) / 100000000;
+    // Возвращаем с высокой точностью (8 знаков) для внутренних расчётов
+    return round8(totalInterest);
 }
 
 function saveUserPrefs(hashedUsername, prefsString) {
@@ -1043,9 +1100,10 @@ function closeInvestmentsProportionally_(username, withdrawAmount) {
       console.log(`Partially closing investment ${inv.shortId}: ${currentAmount} -> ${newAmount}`);
       investSheet.getRange(reqRow, 8).setValue(newAmount);
 
-      // Пересчитываем accruedInterest пропорционально
+      // Пересчитываем accruedInterest пропорционально с высокой точностью
       const oldAccrued = Number(investSheet.getRange(reqRow, 11).getValue() || 0);
-      const newAccrued = round2(oldAccrued * (newAmount / currentAmount));
+      const ratio = round8(newAmount / currentAmount);
+      const newAccrued = round2(round8(oldAccrued * ratio));
       investSheet.getRange(reqRow, 11).setValue(newAccrued);
 
       remaining = 0;
@@ -1141,9 +1199,10 @@ function reapplyMissedApproved_(hashedUsername) {
  * Column 2: userDeposits (только депозиты/выводы, БЕЗ процентов)
  * Column 3: lastSync
  * Column 4: lastAppliedAt (для reapplyMissedApproved_)
+ * Column 5: НЕТТО (общий баланс = депозиты + профиты, обновляется при каждой синхронизации)
  *
  * Все остальные колонки (19-21) оставлены для обратной совместимости,
- * но новая логика использует только columns 1-4.
+ * но новая логика использует только columns 1-5.
  */
 function findOrCreateUserRow_(sheet, hashedUsername) {
     const { row, existed } = findUserRowInSheet_(sheet, hashedUsername, true);
@@ -1154,7 +1213,8 @@ function findOrCreateUserRow_(sheet, hashedUsername) {
         // Column 2: userDeposits
         // Column 3: lastSync
         // Column 4: lastAppliedAt (для reapplyMissedApproved_)
-        sheet.getRange(row, 1, 1, 4).setValues([[hashedUsername, 0, now, now]]);
+        // Column 5: НЕТТО (общий баланс)
+        sheet.getRange(row, 1, 1, 5).setValues([[hashedUsername, 0, now, now, 0]]);
 
         // Дополнительно инициализируем column 19 для обратной совместимости
         if (sheet.getMaxColumns() < 19) {
@@ -1398,21 +1458,21 @@ function formatSheets() {
   if (usersSheet) {
     // ВАЖНО: Сначала очищаем ВСЕ старые заголовки и стили (до колонки Z)
     const maxCols = usersSheet.getMaxColumns();
-    if (maxCols > 4) {
-      // Очищаем содержимое и форматирование старых колонок (5 и далее)
-      usersSheet.getRange(1, 5, 1, maxCols - 4).clearContent().clearFormat();
+    if (maxCols > 5) {
+      // Очищаем содержимое и форматирование старых колонок (6 и далее)
+      usersSheet.getRange(1, 6, 1, maxCols - 5).clearContent().clearFormat();
     }
 
-    // Заголовки для новой структуры (columns 1-4)
-    usersSheet.getRange(1, 1, 1, 4).setValues([[
-      'Хеш пользователя (SHA-256)', 'Депозиты пользователя', 'Последняя синхронизация', 'Последнее применение'
+    // Заголовки для новой структуры (columns 1-5)
+    usersSheet.getRange(1, 1, 1, 5).setValues([[
+      'Хеш пользователя (SHA-256)', 'Депозиты пользователя', 'Последняя синхронизация', 'Последнее применение', 'НЕТТО'
     ]]);
 
     // Стили заголовков
-    usersSheet.getRange(1, 1, 1, 4).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
+    usersSheet.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#e3f2fd').setBorder(true, true, true, true, null, null);
 
     // Авторазмер колонок
-    usersSheet.autoResizeColumns(1, 4);
+    usersSheet.autoResizeColumns(1, 5);
   }
 
   // Форматирование INVEST_TRANSACTIONS листа
