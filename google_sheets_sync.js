@@ -466,6 +466,8 @@ function requestAmount(hashedUsername, displayName, amount, type, details) {
         const now = new Date();
 
     // ВАЖНО: displayName приходит из параметра (НЕ сохраняется в БД), используется ТОЛЬКО для Telegram уведомления
+    console.log('requestAmount: displayName =', displayName, 'hashedUsername =', hashedUsername);
+
     let detailsText = "";
     if (type === 'WITHDRAW' && details) {
         if(details.method === 'sbp') {
@@ -477,6 +479,9 @@ function requestAmount(hashedUsername, displayName, amount, type, details) {
     const pretty = Math.abs(amount).toLocaleString('ru-RU');
     let text = `[#${shortId}] Пользователь ${displayName} запросил ${verb} на ${pretty} ₽.${detailsText}`;
 
+    console.log('Telegram message text:', text);
+    console.log('Sending to chat:', ADMIN_CHAT_ID);
+
     // ВАЖНО: В callback_data передаем hashedUsername, а не оригинальный никнейм
     const replyMarkup = { inline_keyboard: [[ { text: 'Да', callback_data: `approve:${hashedUsername}:${requestId}` }, { text: 'Нет', callback_data: `reject:${hashedUsername}:${requestId}` } ]] };
 
@@ -487,8 +492,14 @@ function requestAmount(hashedUsername, displayName, amount, type, details) {
             payload: JSON.stringify({ chat_id: ADMIN_CHAT_ID, text: text, reply_markup: replyMarkup }),
             muteHttpExceptions: true
         });
+        console.log('Telegram API response status:', response.getResponseCode());
         const jsonResponse = JSON.parse(response.getContentText());
+        console.log('Telegram API response:', JSON.stringify(jsonResponse));
         messageId = jsonResponse.ok ? jsonResponse.result.message_id : null;
+
+        if (!jsonResponse.ok) {
+            console.error('Telegram API error:', jsonResponse.description);
+        }
         reqSheet.appendRow([now, hashedUsername, requestId, 'PENDING', null, null, type, Number(amount)]);
         logToEventJournal(now, hashedUsername, requestId, 'PENDING', messageId, null, null, ADMIN_CHAT_ID, now, type, Number(amount), null, null);
     } catch(e) {
