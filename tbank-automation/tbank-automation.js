@@ -116,8 +116,10 @@ export class TBankAutomation {
         await this.page.waitForSelector('[automation-id="otp-input"]', { timeout: 10000 });
         console.log('[TBANK] ✅ Found OTP input field');
 
-        const pageText = await this.page.evaluate(() => document.body.textContent);
-        console.log('[TBANK] Page text snippet:', pageText.substring(0, 200));
+        const pageHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
+        console.log('[TBANK] ========== SMS PAGE HTML START ==========');
+        console.log(pageHtml);
+        console.log('[TBANK] ========== SMS PAGE HTML END ==========');
 
         console.log('[TBANK] Step 2: Waiting for SMS code from user...');
         const smsCode = await this.waitForUserInput('sms');
@@ -135,6 +137,12 @@ export class TBankAutomation {
             console.log('[TBANK] Navigation after SMS timeout or no navigation occurred:', e.message);
           });
           console.log('[TBANK] ✅ SMS step completed, navigation finished');
+
+          // Логируем HTML страницы после навигации
+          const afterNavHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
+          console.log('[TBANK] ========== AFTER SMS SUBMIT HTML START ==========');
+          console.log(afterNavHtml);
+          console.log('[TBANK] ========== AFTER SMS SUBMIT HTML END ==========');
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (e) {
@@ -146,8 +154,10 @@ export class TBankAutomation {
         await this.page.waitForSelector('[automation-id="card-input"]', { timeout: 5000 });
         console.log('[TBANK] ✅ Found card input field');
 
-        const pageText = await this.page.evaluate(() => document.body.textContent);
-        console.log('[TBANK] Page text snippet:', pageText.substring(0, 200));
+        const pageHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
+        console.log('[TBANK] ========== CARD PAGE HTML START ==========');
+        console.log(pageHtml);
+        console.log('[TBANK] ========== CARD PAGE HTML END ==========');
 
         // Проверяем, есть ли сохранённая карта (будет передана через savedCard если есть)
         let cardNumber = this.savedCard;
@@ -171,13 +181,22 @@ export class TBankAutomation {
           console.log('[TBANK] Navigation after card timeout or no navigation occurred:', e.message);
         });
         console.log('[TBANK] ✅ Card step completed, navigation finished');
+
+        // Логируем HTML страницы после навигации
+        const afterCardHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
+        console.log('[TBANK] ========== AFTER CARD SUBMIT HTML START ==========');
+        console.log(afterCardHtml);
+        console.log('[TBANK] ========== AFTER CARD SUBMIT HTML END ==========');
+
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (e) {
         console.log('[TBANK] Step 3 not required or error:', e.message);
         const currentUrl = this.page.url();
-        const pageText = await this.page.evaluate(() => document.body.textContent).catch(() => 'Unable to get page text');
+        const pageHtml = await this.page.evaluate(() => document.documentElement.outerHTML).catch(() => 'Unable to get page HTML');
         console.log('[TBANK] Current URL:', currentUrl);
-        console.log('[TBANK] Current page text snippet:', pageText.substring(0, 300));
+        console.log('[TBANK] ========== CURRENT PAGE HTML START ==========');
+        console.log(pageHtml);
+        console.log('[TBANK] ========== CURRENT PAGE HTML END ==========');
       }
 
       // Step 4: Optional PIN code rejection
