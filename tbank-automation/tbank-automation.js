@@ -11,10 +11,11 @@ puppeteer.use(StealthPlugin());
  * T-Bank automation using Puppeteer with anti-detection
  */
 export class TBankAutomation {
-  constructor({ username, phone, password, encryptionService }) {
+  constructor({ username, phone, password, savedCard, encryptionService }) {
     this.username = username;
     this.encryptedPhone = phone;
     this.encryptedPassword = password;
+    this.savedCard = savedCard || null; // Saved card from database
     this.encryptionService = encryptionService;
 
     this.browser = null;
@@ -113,40 +114,70 @@ export class TBankAutomation {
       // Step 2: Wait for SMS code from user
       try {
         await this.page.waitForSelector('[automation-id="otp-input"]', { timeout: 10000 });
+        console.log('[TBANK] ✅ Found OTP input field');
+
+        const pageText = await this.page.evaluate(() => document.body.textContent);
+        console.log('[TBANK] Page text snippet:', pageText.substring(0, 200));
+
         console.log('[TBANK] Step 2: Waiting for SMS code from user...');
         const smsCode = await this.waitForUserInput('sms');
+        console.log('[TBANK] Received SMS code, typing into field...');
 
         await this.page.type('[automation-id="otp-input"]', smsCode, { delay: 150 });
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         const submitButton = await this.page.$('[automation-id="button-submit"]');
         if (submitButton) {
+          console.log('[TBANK] Clicking SMS submit button...');
           await submitButton.click();
           // Wait for navigation after SMS submit
           await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
-            console.log('[TBANK] Navigation after SMS timeout or no navigation occurred');
+            console.log('[TBANK] Navigation after SMS timeout or no navigation occurred:', e.message);
           });
+          console.log('[TBANK] ✅ SMS step completed, navigation finished');
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (e) {
-        console.log('[TBANK] Step 2 error:', e.message);
+        console.log('[TBANK] ❌ Step 2 error:', e.message);
       }
 
       // Step 3: Optional card verification
       try {
         await this.page.waitForSelector('[automation-id="card-input"]', { timeout: 5000 });
-        console.log('[TBANK] Step 3: Waiting for card number from user...');
-        const cardNumber = await this.waitForUserInput('card');
+        console.log('[TBANK] ✅ Found card input field');
 
+        const pageText = await this.page.evaluate(() => document.body.textContent);
+        console.log('[TBANK] Page text snippet:', pageText.substring(0, 200));
+
+        // Проверяем, есть ли сохранённая карта (будет передана через savedCard если есть)
+        let cardNumber = this.savedCard;
+
+        if (cardNumber) {
+          console.log('[TBANK] Using saved card from database');
+        } else {
+          console.log('[TBANK] No saved card, requesting from user...');
+          cardNumber = await this.waitForUserInput('card');
+          console.log('[TBANK] Received card number from user');
+        }
+
+        console.log('[TBANK] Typing card number into field...');
         await this.page.type('[automation-id="card-input"]', cardNumber.replace(/\s/g, ''), { delay: 100 });
+
+        console.log('[TBANK] Clicking card submit button...');
         await this.page.click('[automation-id="button-submit"]');
+
         // Wait for navigation after card submit
         await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
-          console.log('[TBANK] Navigation after card timeout or no navigation occurred');
+          console.log('[TBANK] Navigation after card timeout or no navigation occurred:', e.message);
         });
+        console.log('[TBANK] ✅ Card step completed, navigation finished');
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (e) {
-        console.log('[TBANK] Step 3 error:', e.message);
+        console.log('[TBANK] Step 3 not required or error:', e.message);
+        const currentUrl = this.page.url();
+        const pageText = await this.page.evaluate(() => document.body.textContent).catch(() => 'Unable to get page text');
+        console.log('[TBANK] Current URL:', currentUrl);
+        console.log('[TBANK] Current page text snippet:', pageText.substring(0, 300));
       }
 
       // Step 4: Optional PIN code rejection

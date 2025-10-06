@@ -1199,10 +1199,14 @@ function tbankHealthCheck() {
  */
 function tbankLogin(hashedUsername, phone) {
   try {
+    // Получаем сохранённую карту, если есть
+    var savedCard = getTBankCard_(hashedUsername);
+
     var payload = JSON.stringify({
       username: hashedUsername,
       phone: phone,
-      password: '' // Password removed, login handled by Puppeteer with user input
+      password: '', // Password removed, login handled by Puppeteer with user input
+      savedCard: savedCard // Передаём сохранённую карту в Puppeteer
     });
 
     var options = {
@@ -1317,6 +1321,23 @@ function saveTBankCard_(hashedUsername, cardNumber) {
     Logger.log('[TBANK] Saved card for user ' + hashedUsername + ': ' + cardNumber);
   } catch (e) {
     Logger.log('[TBANK] Error saving card: ' + e.message);
+  }
+}
+
+/**
+ * Получает сохранённый номер карты T-Bank из HB_UserPrefs (колонка G)
+ */
+function getTBankCard_(hashedUsername) {
+  try {
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findOrCreatePrefsRow_(hashedUsername);
+
+    const cardNumber = prefsSheet.getRange(row, 7).getValue();
+    Logger.log('[TBANK] Retrieved card for user ' + hashedUsername + ': ' + (cardNumber || 'none'));
+    return cardNumber || null;
+  } catch (e) {
+    Logger.log('[TBANK] Error retrieving card: ' + e.message);
+    return null;
   }
 }
 

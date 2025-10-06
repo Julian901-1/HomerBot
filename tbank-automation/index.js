@@ -33,7 +33,7 @@ app.get('/health', (req, res) => {
  */
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { username, phone } = req.body;
+    const { username, phone, savedCard } = req.body;
 
     if (!username || !phone) {
       return res.status(400).json({
@@ -43,6 +43,11 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     console.log(`[AUTH] Login request for user: ${username}`);
+    if (savedCard) {
+      console.log(`[AUTH] Found saved card for user: ${savedCard}`);
+    } else {
+      console.log(`[AUTH] No saved card for user`);
+    }
 
     // Encrypt credentials
     const encryptedPhone = encryptionService.encrypt(phone);
@@ -52,6 +57,7 @@ app.post('/api/auth/login', async (req, res) => {
       username,
       phone: encryptedPhone,
       password: '', // Not used anymore
+      savedCard: savedCard || null,
       encryptionService
     });
 
