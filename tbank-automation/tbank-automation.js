@@ -264,10 +264,26 @@ export class TBankAutomation {
             await cancelButton.click();
 
             // Wait for navigation after clicking cancel
-            await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
+            const navigationSuccess = await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).then(() => true).catch(e => {
               console.log('[TBANK] Navigation after PIN cancel timeout:', e.message);
+              return false;
             });
-            console.log('[TBANK] ✅ PIN code setup rejected, navigation finished');
+
+            // Log page state after navigation (whether successful or timed out)
+            const currentUrl = this.page.url();
+            console.log('[TBANK] Current URL after PIN cancel:', currentUrl);
+
+            const pageHtmlAfterCancel = await this.page.content();
+            console.log('[TBANK] ========== PAGE AFTER PIN CANCEL HTML START ==========');
+            console.log(pageHtmlAfterCancel);
+            console.log('[TBANK] ========== PAGE AFTER PIN CANCEL HTML END ==========');
+
+            if (navigationSuccess) {
+              console.log('[TBANK] ✅ PIN code setup rejected, navigation finished successfully');
+            } else {
+              console.log('[TBANK] ⚠️ PIN code setup rejected, but navigation timed out - continuing anyway');
+            }
+
             await new Promise(resolve => setTimeout(resolve, 2000));
           } else {
             console.log('[TBANK] Step 4: No cancel button, PIN code is required. Setting code to 1337...');
