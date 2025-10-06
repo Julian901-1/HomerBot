@@ -152,6 +152,12 @@ function doGet(e) {
    const p = (e && e.parameter) || {};
    try {
      const { action, username, initData } = p;
+
+     // tbankHealthCheck не требует username
+     if (action === 'tbankHealthCheck') {
+       return jsonOk(tbankHealthCheck());
+     }
+
      if (!action || !username) return jsonErr('Missing required parameters');
 
      // Хешируем никнейм для хранения в базе (для соблюдения 152-ФЗ)
@@ -220,9 +226,6 @@ function doGet(e) {
         return jsonOk(setEveningPercent(hashedUsername, p.startTime, p.endTime, p.agreed, p.sessionId));
 
       // >>> T-Bank integration actions
-      case 'tbankHealthCheck':
-        return jsonOk(tbankHealthCheck());
-
       case 'tbankLogin':
         return jsonOk(tbankLogin(hashedUsername, p.phone));
 
