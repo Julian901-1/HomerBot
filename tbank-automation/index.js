@@ -55,24 +55,19 @@ app.post('/api/auth/login', async (req, res) => {
       encryptionService
     });
 
-    // Attempt login
-    const loginResult = await automation.login();
-
-    if (!loginResult.success) {
-      return res.status(401).json({
-        success: false,
-        error: loginResult.error,
-        requires2FA: loginResult.requires2FA
-      });
-    }
-
-    // Store session
+    // Store session immediately (before login starts)
     const sessionId = sessionManager.createSession(username, automation);
 
+    // Start login process asynchronously (don't wait for it)
+    automation.login().catch(error => {
+      console.error(`[AUTH] Login error for session ${sessionId}:`, error);
+    });
+
+    // Return session ID immediately so user can start providing input
     res.json({
       success: true,
       sessionId,
-      message: 'Authentication successful'
+      message: 'Login process started, waiting for user input'
     });
 
   } catch (error) {

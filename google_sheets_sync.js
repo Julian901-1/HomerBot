@@ -1148,8 +1148,8 @@ function setEveningPercent(hashedUsername, startTime, endTime, agreed, sessionId
 
 // URL сервиса Puppeteer на Render
 var TBANK_SERVICE_URL = 'https://homerbot.onrender.com/api';
-// Таймаут для запросов к Puppeteer (увеличен из-за cold start на Render)
-var TBANK_REQUEST_TIMEOUT = 65000; // 65 секунд
+// Таймаут для запросов к Puppeteer (login теперь асинхронный, возвращает сразу)
+var TBANK_REQUEST_TIMEOUT = 30000; // 30 секунд
 
 /**
  * Прокси-функция для авторизации в T-Bank через Puppeteer сервис
