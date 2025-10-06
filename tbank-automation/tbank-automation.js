@@ -238,6 +238,24 @@ export class TBankAutomation {
             console.log('[TBANK] ========== AFTER SECURITY QUESTION HTML START ==========');
             console.log(afterQuestionHtml);
             console.log('[TBANK] ========== AFTER SECURITY QUESTION HTML END ==========');
+
+            // Check if we're already on /mybank/ after security question
+            const currentUrl = this.page.url();
+            console.log('[TBANK] Current URL after security question:', currentUrl);
+            if (currentUrl.includes('/mybank/')) {
+              console.log('[TBANK] ✅ Already on /mybank/ page, skipping login navigation steps');
+              const isLoggedIn = await this.checkLoginStatus();
+
+              if (isLoggedIn) {
+                this.sessionActive = true;
+                this.pendingInputType = null;
+                this.startKeepAlive();
+                return {
+                  success: true,
+                  message: 'Login successful'
+                };
+              }
+            }
           }
         }
       } catch (e) {
@@ -285,6 +303,22 @@ export class TBankAutomation {
             }
 
             await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Check if we're already on /mybank/ after PIN cancel
+            if (currentUrl.includes('/mybank/')) {
+              console.log('[TBANK] ✅ Already on /mybank/ page, skipping login navigation steps');
+              const isLoggedIn = await this.checkLoginStatus();
+
+              if (isLoggedIn) {
+                this.sessionActive = true;
+                this.pendingInputType = null;
+                this.startKeepAlive();
+                return {
+                  success: true,
+                  message: 'Login successful'
+                };
+              }
+            }
           } else {
             console.log('[TBANK] Step 4: No cancel button, PIN code is required. Setting code to 1337...');
 
@@ -313,10 +347,28 @@ export class TBankAutomation {
               if (submitButton) {
                 console.log('[TBANK] Clicking submit button...');
                 await submitButton.click();
-                await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
+                await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(e => {
                   console.log('[TBANK] Navigation after PIN setup timeout:', e.message);
                 });
                 console.log('[TBANK] ✅ PIN code 1337 set successfully');
+
+                // Check if we're already on /mybank/ after PIN setup
+                const currentUrl = this.page.url();
+                console.log('[TBANK] Current URL after PIN setup:', currentUrl);
+                if (currentUrl.includes('/mybank/')) {
+                  console.log('[TBANK] ✅ Already on /mybank/ page, skipping login navigation steps');
+                  const isLoggedIn = await this.checkLoginStatus();
+
+                  if (isLoggedIn) {
+                    this.sessionActive = true;
+                    this.pendingInputType = null;
+                    this.startKeepAlive();
+                    return {
+                      success: true,
+                      message: 'Login successful'
+                    };
+                  }
+                }
               } else {
                 console.log('[TBANK] ❌ Submit button not found');
               }
