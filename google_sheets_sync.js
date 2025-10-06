@@ -220,6 +220,9 @@ function doGet(e) {
         return jsonOk(setEveningPercent(hashedUsername, p.startTime, p.endTime, p.agreed, p.sessionId));
 
       // >>> T-Bank integration actions
+      case 'tbankHealthCheck':
+        return jsonOk(tbankHealthCheck());
+
       case 'tbankLogin':
         return jsonOk(tbankLogin(hashedUsername, p.phone));
 
@@ -1152,6 +1155,35 @@ var TBANK_SERVICE_URL = 'https://homerbot.onrender.com/api';
 var TBANK_REQUEST_TIMEOUT = 30000; // 30 секунд
 
 /**
+ * Проверка доступности Puppeteer сервиса
+ */
+function tbankHealthCheck() {
+  try {
+    var options = {
+      method: 'get',
+      muteHttpExceptions: true,
+      timeout: 10000 // 10 секунд
+    };
+
+    var response = UrlFetchApp.fetch(TBANK_SERVICE_URL.replace('/api', '') + '/health', options);
+    var responseCode = response.getResponseCode();
+    var responseText = response.getContentText();
+
+    if (responseCode === 200) {
+      return { success: true, status: 'online', message: 'Puppeteer сервис доступен' };
+    } else {
+      return { success: false, status: 'error', message: 'Сервис вернул код: ' + responseCode };
+    }
+  } catch (e) {
+    return {
+      success: false,
+      status: 'offline',
+      message: 'Сервис недоступен. Возможно, он перезагружается после деплоя (требуется 1-2 минуты)'
+    };
+  }
+}
+
+/**
  * Прокси-функция для авторизации в T-Bank через Puppeteer сервис
  */
 function tbankLogin(hashedUsername, phone) {
@@ -1171,16 +1203,35 @@ function tbankLogin(hashedUsername, phone) {
     };
 
     var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/login', options);
-    var result = JSON.parse(response.getContentText());
+    var responseCode = response.getResponseCode();
+    var responseText = response.getContentText();
 
+    // Проверка на HTML вместо JSON (сервер вернул ошибку)
+    if (responseText.trim().startsWith('<')) {
+      console.error('tbankLogin: Received HTML instead of JSON. Response code:', responseCode);
+      return {
+        success: false,
+        error: 'Сервер Puppeteer недоступен или перезагружается. Попробуйте через 1-2 минуты.'
+      };
+    }
+
+    var result = JSON.parse(responseText);
     return result;
   } catch (e) {
     console.error('tbankLogin error:', e);
+    var errorStr = String(e);
+
     // Если таймаут из-за cold start, вернуть понятную ошибку
-    if (String(e).includes('timeout') || String(e).includes('Timeout')) {
-      return { success: false, error: 'Сервер запускается, попробуйте через 10 секунд' };
+    if (errorStr.includes('timeout') || errorStr.includes('Timeout')) {
+      return { success: false, error: 'Сервер запускается, попробуйте через 30-60 секунд (cold start)' };
     }
-    return { success: false, error: String(e) };
+
+    // Если ошибка парсинга JSON
+    if (errorStr.includes('JSON') || errorStr.includes('parse')) {
+      return { success: false, error: 'Сервер Puppeteer перезагружается, попробуйте через 1-2 минуты' };
+    }
+
+    return { success: false, error: 'Ошибка подключения: ' + errorStr };
   }
 }
 

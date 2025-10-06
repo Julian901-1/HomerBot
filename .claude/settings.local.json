@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Read(//c/Users/vokel/Downloads/**)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(git -C \"C:\\Users\\vokel\\Downloads\\Build 2\" status)"
     ],
     "deny": [],
     "ask": []

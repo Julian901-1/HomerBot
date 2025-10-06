@@ -1658,6 +1658,26 @@ async function connectTBank() {
 
   if (btn) {
     btn.disabled = true;
+    btn.textContent = 'Проверка сервиса...';
+  }
+
+  // Сначала проверяем доступность сервиса
+  try {
+    const healthCheck = await apiGet(`?action=tbankHealthCheck`);
+
+    if (!healthCheck || !healthCheck.success) {
+      showPopup(healthCheck?.message || 'Сервис Puppeteer недоступен. Подождите 1-2 минуты после деплоя.', 6000);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Подключить Т-Банк';
+      }
+      return;
+    }
+  } catch (e) {
+    showPopup('Не удалось проверить статус сервиса', 3000);
+  }
+
+  if (btn) {
     btn.textContent = 'Подключение...';
   }
 
@@ -1703,8 +1723,15 @@ function startTBankInputPolling() {
           showTBankStep('sms');
         } else if (resp.pendingType === 'card') {
           showTBankStep('card');
+        } else if (resp.pendingType === 'waiting') {
+          // Login in progress, keep polling
+          console.log('Login in progress, waiting for next step...');
+        } else if (resp.pendingType === 'error') {
+          // Login failed
+          stopTBankInputPolling();
+          showPopup('Ошибка входа в Т-Банк. Попробуйте снова.');
         } else if (resp.pendingType === null) {
-          // No pending input, check if connected
+          // Login complete, fetch accounts
           stopTBankInputPolling();
           await onTBankConnected();
         }

@@ -24,7 +24,7 @@ export class TBankAutomation {
 
     // Pending input system
     this.pendingInputResolve = null;
-    this.pendingInputType = null; // 'sms', 'card'
+    this.pendingInputType = 'waiting'; // 'waiting', 'sms', 'card', null (null = login complete)
   }
 
   /**
@@ -177,6 +177,7 @@ export class TBankAutomation {
 
       if (isLoggedIn) {
         this.sessionActive = true;
+        this.pendingInputType = null; // Signal login complete
         this.startKeepAlive();
 
         return {
@@ -185,6 +186,7 @@ export class TBankAutomation {
         };
       }
 
+      this.pendingInputType = 'error';
       return {
         success: false,
         error: 'Login failed - unexpected state'
@@ -192,6 +194,7 @@ export class TBankAutomation {
 
     } catch (error) {
       console.error('[TBANK] Login error:', error);
+      this.pendingInputType = 'error';
       return {
         success: false,
         error: error.message
@@ -220,7 +223,7 @@ export class TBankAutomation {
       console.log(`[TBANK] User provided ${this.pendingInputType}: ${value}`);
       this.pendingInputResolve(value);
       this.pendingInputResolve = null;
-      this.pendingInputType = null;
+      this.pendingInputType = 'waiting'; // Back to waiting for next step or completion
       return true;
     }
     return false;
