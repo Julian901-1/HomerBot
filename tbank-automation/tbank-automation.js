@@ -122,10 +122,14 @@ export class TBankAutomation {
         const submitButton = await this.page.$('[automation-id="button-submit"]');
         if (submitButton) {
           await submitButton.click();
+          // Wait for navigation after SMS submit
+          await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
+            console.log('[TBANK] Navigation after SMS timeout or no navigation occurred');
+          });
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (e) {
-        console.log('[TBANK] No OTP input found or timeout:', e.message);
+        console.log('[TBANK] Step 2 error:', e.message);
       }
 
       // Step 3: Optional card verification
