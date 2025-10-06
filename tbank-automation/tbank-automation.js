@@ -31,12 +31,9 @@ export class TBankAutomation {
 
     console.log(`[TBANK] Initializing browser for user ${this.username}`);
 
-    // Detect if running on Render (or other cloud providers)
-    const isCloud = process.env.RENDER || process.env.RAILWAY || process.env.FLY;
-
+    // В Docker-образе Puppeteer Chrome уже установлен, executablePath не нужен
     this.browser = await puppeteer.launch({
       headless: process.env.PUPPETEER_HEADLESS === 'true',
-      executablePath: isCloud ? '/usr/bin/chromium' : undefined,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',

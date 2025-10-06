@@ -3,6 +3,9 @@ FROM ghcr.io/puppeteer/puppeteer:24.1.0
 # Set working directory
 WORKDIR /app
 
+# Update npm to latest version
+RUN npm install -g npm@11.6.1
+
 # Copy package files
 COPY package*.json ./
 
