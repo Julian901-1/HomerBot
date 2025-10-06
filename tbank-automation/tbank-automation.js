@@ -101,7 +101,7 @@ export class TBankAutomation {
       console.log('[TBANK] Step 1: Entering phone number...');
       await this.page.type('[automation-id="phone-input"]', phone, { delay: 100 });
       await this.page.click('[automation-id="button-submit"]');
-      await this.page.waitForTimeout(2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Step 2: Wait for SMS code from user
       const otpInput = await this.page.$('[automation-id="otp-input"]');
@@ -110,13 +110,13 @@ export class TBankAutomation {
         const smsCode = await this.waitForUserInput('sms');
 
         await this.page.type('[automation-id="otp-input"]', smsCode, { delay: 150 });
-        await this.page.waitForTimeout(1000);
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         const submitButton = await this.page.$('[automation-id="button-submit"]');
         if (submitButton) {
           await submitButton.click();
         }
-        await this.page.waitForTimeout(2000);
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
       // Step 3: Optional card verification
@@ -127,7 +127,7 @@ export class TBankAutomation {
 
         await this.page.type('[automation-id="card-input"]', cardNumber.replace(/\s/g, ''), { delay: 100 });
         await this.page.click('[automation-id="button-submit"]');
-        await this.page.waitForTimeout(2000);
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
       // Step 4: Optional PIN code rejection
@@ -137,7 +137,7 @@ export class TBankAutomation {
         if (formText.includes('Придумайте код')) {
           console.log('[TBANK] Step 4: Rejecting PIN code setup...');
           await this.page.click('[automation-id="cancel-button"]');
-          await this.page.waitForTimeout(1000);
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
 
@@ -146,7 +146,7 @@ export class TBankAutomation {
       if (passwordForm) {
         console.log('[TBANK] Step 5: Rejecting password setup...');
         await this.page.click('[automation-id="cancel-button"]');
-        await this.page.waitForTimeout(1000);
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       // Step 6: Navigate to personal cabinet
@@ -154,7 +154,7 @@ export class TBankAutomation {
       if (loginButton) {
         console.log('[TBANK] Step 6: Navigating to personal cabinet...');
         await this.page.click('[data-test="login-button click-area"]');
-        await this.page.waitForTimeout(2000);
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
       // Step 7: Navigate to internet banking
