@@ -1155,46 +1155,40 @@ var TBANK_SERVICE_URL = 'https://homerbot.onrender.com/api';
 var TBANK_REQUEST_TIMEOUT = 30000; // 30 секунд
 
 /**
- * Проверка доступности Puppeteer сервиса (с retry для cold start)
+ * Проверка доступности Puppeteer сервиса
  */
 function tbankHealthCheck() {
-  var maxAttempts = 3;
-  var timeoutMs = 30000; // 30 секунд на попытку
+  try {
+    var options = {
+      method: 'get',
+      muteHttpExceptions: true,
+      timeout: 60000 // 60 секунд для cold start
+    };
 
-  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      var options = {
-        method: 'get',
-        muteHttpExceptions: true,
-        timeout: timeoutMs
+    var response = UrlFetchApp.fetch(TBANK_SERVICE_URL.replace('/api', '') + '/health', options);
+    var responseCode = response.getResponseCode();
+
+    if (responseCode === 200) {
+      return {
+        success: true,
+        status: 'online',
+        message: 'Puppeteer сервис доступен'
       };
-
-      var response = UrlFetchApp.fetch(TBANK_SERVICE_URL.replace('/api', '') + '/health', options);
-      var responseCode = response.getResponseCode();
-
-      if (responseCode === 200) {
-        return {
-          success: true,
-          status: 'online',
-          message: 'Puppeteer сервис доступен',
-          attempt: attempt
-        };
-      }
-    } catch (e) {
-      Logger.log('[HEALTH CHECK] Attempt ' + attempt + ' failed: ' + e.message);
-
-      // Если это не последняя попытка, ждём 3 секунды перед retry
-      if (attempt < maxAttempts) {
-        Utilities.sleep(3000);
-      }
+    } else {
+      return {
+        success: false,
+        status: 'error',
+        message: 'Сервис вернул код: ' + responseCode
+      };
     }
+  } catch (e) {
+    Logger.log('[HEALTH CHECK] Error: ' + e.message);
+    return {
+      success: false,
+      status: 'offline',
+      message: 'Сервис недоступен: ' + e.message
+    };
   }
-
-  return {
-    success: false,
-    status: 'offline',
-    message: 'Сервис недоступен после ' + maxAttempts + ' попыток. Возможно, cold start занимает больше времени. Попробуйте через минуту.'
-  };
 }
 
 /**
