@@ -244,15 +244,71 @@ export class TBankAutomation {
         console.log('[TBANK] Security question not required or error:', e.message);
       }
 
-      // Step 4: Optional PIN code rejection
-      const pinCancelButton = await this.page.$('[automation-id="cancel-button"]');
-      if (pinCancelButton) {
+      // Step 4: PIN code setup (required or optional)
+      try {
         const formText = await this.page.evaluate(() => document.body.textContent);
         if (formText.includes('Придумайте код')) {
-          console.log('[TBANK] Step 4: Rejecting PIN code setup...');
-          await this.page.click('[automation-id="cancel-button"]');
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          console.log('[TBANK] ✅ Found PIN code setup page');
+
+          // Логируем HTML страницы с PIN кодом
+          const pinPageHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
+          console.log('[TBANK] ========== PIN CODE PAGE HTML START ==========');
+          console.log(pinPageHtml);
+          console.log('[TBANK] ========== PIN CODE PAGE HTML END ==========');
+
+          // Проверяем, есть ли кнопка отмены
+          const cancelButton = await this.page.$('[automation-id="cancel-button"]');
+
+          if (cancelButton) {
+            console.log('[TBANK] Step 4: Cancel button found, rejecting PIN code setup...');
+            await cancelButton.click();
+
+            // Wait for navigation after clicking cancel
+            await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
+              console.log('[TBANK] Navigation after PIN cancel timeout:', e.message);
+            });
+            console.log('[TBANK] ✅ PIN code setup rejected, navigation finished');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } else {
+            console.log('[TBANK] Step 4: No cancel button, PIN code is required. Setting code to 1337...');
+
+            // Вводим код 1337 (по одной цифре в каждое поле)
+            const pinCode = '1337';
+            let pinSetSuccessfully = true;
+
+            for (let i = 0; i < pinCode.length; i++) {
+              const pinInput = await this.page.$(`[automation-id="pin-code-input-${i}"]`);
+              if (pinInput) {
+                await pinInput.type(pinCode[i], { delay: 100 });
+                console.log(`[TBANK] Entered digit ${i + 1}: ${pinCode[i]}`);
+                await new Promise(resolve => setTimeout(resolve, 300));
+              } else {
+                console.log(`[TBANK] ❌ PIN input ${i} not found`);
+                pinSetSuccessfully = false;
+                break;
+              }
+            }
+
+            if (pinSetSuccessfully) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+
+              // Подтверждаем
+              const submitButton = await this.page.$('[automation-id="button-submit"]');
+              if (submitButton) {
+                console.log('[TBANK] Clicking submit button...');
+                await submitButton.click();
+                await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
+                  console.log('[TBANK] Navigation after PIN setup timeout:', e.message);
+                });
+                console.log('[TBANK] ✅ PIN code 1337 set successfully');
+              } else {
+                console.log('[TBANK] ❌ Submit button not found');
+              }
+            }
+          }
         }
+      } catch (e) {
+        console.log('[TBANK] Step 4 error:', e.message);
       }
 
       // Step 5: Optional password rejection
