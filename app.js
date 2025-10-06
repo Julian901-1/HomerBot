@@ -1700,11 +1700,15 @@ async function connectTBank() {
       `?action=tbankLogin&username=${encodeURIComponent(username)}&phone=${encodeURIComponent('+' + phone)}`
     );
 
+    console.log('tbankLogin response:', resp);
+
     if (resp && resp.success) {
       tbankSessionId = resp.sessionId;
+      console.log('Session ID:', tbankSessionId);
       // Start polling for required input
       startTBankInputPolling();
     } else {
+      console.error('tbankLogin failed:', resp);
       showPopup('Ошибка подключения: ' + (resp?.error || 'Неизвестная ошибка'));
       if (btn) {
         btn.disabled = false;
@@ -1712,7 +1716,8 @@ async function connectTBank() {
       }
     }
   } catch (e) {
-    showPopup('Ошибка сети');
+    console.error('tbankLogin exception:', e);
+    showPopup('Ошибка сети: ' + e.message);
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'Подключить Т-Банк';

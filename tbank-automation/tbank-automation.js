@@ -111,8 +111,8 @@ export class TBankAutomation {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Step 2: Wait for SMS code from user
-      const otpInput = await this.page.$('[automation-id="otp-input"]');
-      if (otpInput) {
+      try {
+        await this.page.waitForSelector('[automation-id="otp-input"]', { timeout: 10000 });
         console.log('[TBANK] Step 2: Waiting for SMS code from user...');
         const smsCode = await this.waitForUserInput('sms');
 
@@ -124,17 +124,21 @@ export class TBankAutomation {
           await submitButton.click();
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (e) {
+        console.log('[TBANK] No OTP input found or timeout:', e.message);
       }
 
       // Step 3: Optional card verification
-      const cardInput = await this.page.$('[automation-id="card-input"]');
-      if (cardInput) {
+      try {
+        await this.page.waitForSelector('[automation-id="card-input"]', { timeout: 5000 });
         console.log('[TBANK] Step 3: Waiting for card number from user...');
         const cardNumber = await this.waitForUserInput('card');
 
         await this.page.type('[automation-id="card-input"]', cardNumber.replace(/\s/g, ''), { delay: 100 });
         await this.page.click('[automation-id="button-submit"]');
         await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (e) {
+        console.log('[TBANK] No card input found (optional step), continuing...');
       }
 
       // Step 4: Optional PIN code rejection
