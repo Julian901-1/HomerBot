@@ -1667,8 +1667,12 @@ async function connectTBank() {
 
     const healthCheck = await apiGet(`?action=tbankHealthCheck`);
 
+    console.log('Health check response:', JSON.stringify(healthCheck));
+
     if (!healthCheck || !healthCheck.success) {
-      showPopup(healthCheck?.message || 'Сервис Puppeteer недоступен', 6000);
+      const errorMsg = healthCheck?.message || 'Сервис Puppeteer недоступен';
+      console.error('Health check failed:', errorMsg, 'Full response:', healthCheck);
+      showPopup('DEBUG: ' + errorMsg, 8000);
       if (btn) {
         btn.disabled = false;
         btn.textContent = 'Подключить Т-Банк';
@@ -1678,7 +1682,8 @@ async function connectTBank() {
 
     console.log('Health check successful:', healthCheck.message);
   } catch (e) {
-    showPopup('Не удалось проверить статус сервиса: ' + e.message, 5000);
+    console.error('Health check exception:', e);
+    showPopup('DEBUG: Ошибка проверки: ' + e.message, 8000);
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'Подключить Т-Банк';
