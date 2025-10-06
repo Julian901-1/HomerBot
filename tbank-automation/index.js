@@ -33,9 +33,9 @@ app.get('/health', (req, res) => {
  */
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { username, phone, password } = req.body;
+    const { username, phone } = req.body;
 
-    if (!username || !phone || !password) {
+    if (!username || !phone) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
@@ -46,13 +46,12 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Encrypt credentials
     const encryptedPhone = encryptionService.encrypt(phone);
-    const encryptedPassword = encryptionService.encrypt(password);
 
     // Create automation instance
     const automation = new TBankAutomation({
       username,
       phone: encryptedPhone,
-      password: encryptedPassword,
+      password: '', // Not used anymore
       encryptionService
     });
 
