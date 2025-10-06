@@ -1658,31 +1658,41 @@ async function connectTBank() {
 
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Проверка сервиса...';
+    btn.textContent = 'Пробуждение сервиса...';
   }
 
-  // Сначала проверяем доступность сервиса
+  // Сначала проверяем доступность сервиса (может занять до 90 сек для cold start)
   try {
+    showPopup('Проверка сервиса... При первом запросе после деплоя может потребоваться до 90 секунд', 8000);
+
     const healthCheck = await apiGet(`?action=tbankHealthCheck`);
 
     if (!healthCheck || !healthCheck.success) {
-      showPopup(healthCheck?.message || 'Сервис Puppeteer недоступен. Подождите 1-2 минуты после деплоя.', 6000);
+      showPopup(healthCheck?.message || 'Сервис Puppeteer недоступен. Подождите 1-2 минуты после деплоя.', 8000);
       if (btn) {
         btn.disabled = false;
         btn.textContent = 'Подключить Т-Банк';
       }
       return;
     }
+
+    // Показываем сколько попыток потребовалось
+    if (healthCheck.attempt > 1) {
+      console.log(`Health check successful after ${healthCheck.attempt} attempts`);
+      showPopup('Сервис пробудился успешно!', 2000);
+    }
   } catch (e) {
-    showPopup('Не удалось проверить статус сервиса', 3000);
+    showPopup('Не удалось проверить статус сервиса: ' + e.message, 5000);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Подключить Т-Банк';
+    }
+    return;
   }
 
   if (btn) {
     btn.textContent = 'Подключение...';
   }
-
-  // Показываем предупреждение при первом подключении (cold start на Render)
-  showPopup('Подключение к Т-Банку... Может занять до 60 сек при первом запуске', 5000);
 
   try {
     const resp = await apiGet(

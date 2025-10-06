@@ -1155,32 +1155,46 @@ var TBANK_SERVICE_URL = 'https://homerbot.onrender.com/api';
 var TBANK_REQUEST_TIMEOUT = 30000; // 30 секунд
 
 /**
- * Проверка доступности Puppeteer сервиса
+ * Проверка доступности Puppeteer сервиса (с retry для cold start)
  */
 function tbankHealthCheck() {
-  try {
-    var options = {
-      method: 'get',
-      muteHttpExceptions: true,
-      timeout: 10000 // 10 секунд
-    };
+  var maxAttempts = 3;
+  var timeoutMs = 30000; // 30 секунд на попытку
 
-    var response = UrlFetchApp.fetch(TBANK_SERVICE_URL.replace('/api', '') + '/health', options);
-    var responseCode = response.getResponseCode();
-    var responseText = response.getContentText();
+  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      var options = {
+        method: 'get',
+        muteHttpExceptions: true,
+        timeout: timeoutMs
+      };
 
-    if (responseCode === 200) {
-      return { success: true, status: 'online', message: 'Puppeteer сервис доступен' };
-    } else {
-      return { success: false, status: 'error', message: 'Сервис вернул код: ' + responseCode };
+      var response = UrlFetchApp.fetch(TBANK_SERVICE_URL.replace('/api', '') + '/health', options);
+      var responseCode = response.getResponseCode();
+
+      if (responseCode === 200) {
+        return {
+          success: true,
+          status: 'online',
+          message: 'Puppeteer сервис доступен',
+          attempt: attempt
+        };
+      }
+    } catch (e) {
+      Logger.log('[HEALTH CHECK] Attempt ' + attempt + ' failed: ' + e.message);
+
+      // Если это не последняя попытка, ждём 3 секунды перед retry
+      if (attempt < maxAttempts) {
+        Utilities.sleep(3000);
+      }
     }
-  } catch (e) {
-    return {
-      success: false,
-      status: 'offline',
-      message: 'Сервис недоступен. Возможно, он перезагружается после деплоя (требуется 1-2 минуты)'
-    };
   }
+
+  return {
+    success: false,
+    status: 'offline',
+    message: 'Сервис недоступен после ' + maxAttempts + ' попыток. Возможно, cold start занимает больше времени. Попробуйте через минуту.'
+  };
 }
 
 /**
