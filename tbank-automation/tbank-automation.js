@@ -140,9 +140,13 @@ export class TBankAutomation {
 
         await this.page.type('[automation-id="card-input"]', cardNumber.replace(/\s/g, ''), { delay: 100 });
         await this.page.click('[automation-id="button-submit"]');
+        // Wait for navigation after card submit
+        await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
+          console.log('[TBANK] Navigation after card timeout or no navigation occurred');
+        });
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (e) {
-        console.log('[TBANK] No card input found (optional step), continuing...');
+        console.log('[TBANK] Step 3 error:', e.message);
       }
 
       // Step 4: Optional PIN code rejection

@@ -1292,7 +1292,9 @@ function tbankSubmitInput(hashedUsername, sessionId, value) {
 
     // Если это номер карты (16 цифр), сохраняем в HB_UserPrefs
     var digitsOnly = value.replace(/\D/g, '');
+    Logger.log('[TBANK] Input value: ' + value + ', digits only: ' + digitsOnly + ', length: ' + digitsOnly.length);
     if (digitsOnly.length === 16) {
+      Logger.log('[TBANK] Detected card number, saving...');
       saveTBankCard_(hashedUsername, value);
     }
 
