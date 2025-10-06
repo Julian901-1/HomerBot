@@ -25,7 +25,8 @@ export class TBankAutomation {
 
     // Pending input system
     this.pendingInputResolve = null;
-    this.pendingInputType = 'waiting'; // 'waiting', 'sms', 'card', null (null = login complete)
+    this.pendingInputType = 'waiting'; // 'waiting', 'sms', 'card', 'security-question', null (null = login complete)
+    this.pendingInputData = null; // Additional data (e.g., question text for security-question)
   }
 
   /**
@@ -199,6 +200,50 @@ export class TBankAutomation {
         console.log('[TBANK] ========== CURRENT PAGE HTML END ==========');
       }
 
+      // Step 3.5: Optional security question
+      try {
+        const securityQuestionTitle = await this.page.$('[automation-id="form-title"]');
+        if (securityQuestionTitle) {
+          const titleText = await this.page.evaluate(el => el.textContent, securityQuestionTitle);
+
+          if (titleText.includes('контрольный вопрос')) {
+            console.log('[TBANK] ✅ Found security question page');
+
+            // Получаем текст вопроса
+            const questionElement = await this.page.$('[automation-id="form-description"]');
+            const questionText = await this.page.evaluate(el => el.textContent, questionElement);
+            console.log('[TBANK] Security question:', questionText);
+
+            // Запрашиваем ответ у пользователя
+            console.log('[TBANK] Waiting for user to provide security answer...');
+            const answer = await this.waitForUserInput('security-question', questionText);
+            console.log('[TBANK] Received security answer from user');
+
+            // Вводим ответ
+            await this.page.type('[automation-id="answer-input"]', answer, { delay: 100 });
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Отправляем форму
+            console.log('[TBANK] Submitting security answer...');
+            await this.page.click('[automation-id="button-submit"]');
+
+            // Ждём навигации
+            await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
+              console.log('[TBANK] Navigation after security question timeout:', e.message);
+            });
+            console.log('[TBANK] ✅ Security question step completed');
+
+            // Логируем HTML после ответа на вопрос
+            const afterQuestionHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
+            console.log('[TBANK] ========== AFTER SECURITY QUESTION HTML START ==========');
+            console.log(afterQuestionHtml);
+            console.log('[TBANK] ========== AFTER SECURITY QUESTION HTML END ==========');
+          }
+        }
+      } catch (e) {
+        console.log('[TBANK] Security question not required or error:', e.message);
+      }
+
       // Step 4: Optional PIN code rejection
       const pinCancelButton = await this.page.$('[automation-id="cancel-button"]');
       if (pinCancelButton) {
@@ -266,11 +311,14 @@ export class TBankAutomation {
 
 
   /**
-   * Wait for user input (SMS code or card number)
+   * Wait for user input (SMS code, card number, or security question answer)
+   * @param {string} type - Type of input ('sms', 'card', 'security-question')
+   * @param {string} [data] - Additional data (e.g., question text for security-question)
    */
-  async waitForUserInput(type) {
+  async waitForUserInput(type, data = null) {
     console.log(`[TBANK] Waiting for user to provide ${type}...`);
     this.pendingInputType = type;
+    this.pendingInputData = data; // Store question text or other data
 
     return new Promise((resolve) => {
       this.pendingInputResolve = resolve;
@@ -296,6 +344,13 @@ export class TBankAutomation {
    */
   getPendingInputType() {
     return this.pendingInputType;
+  }
+
+  /**
+   * Get pending input data (e.g., question text)
+   */
+  getPendingInputData() {
+    return this.pendingInputData || null;
   }
 
   /**

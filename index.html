@@ -572,6 +572,19 @@
             </button>
           </div>
 
+          <div id="tbankStepSecurityQuestion" style="display: none;">
+            <p id="tbankQuestionText" style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; font-weight: 500;">
+              <!-- Текст вопроса будет вставлен динамически -->
+            </p>
+
+            <input type="text" class="input-field" id="tbankSecurityAnswer" placeholder="Ваш ответ"
+                   style="margin-bottom: 16px;">
+
+            <button class="btn btn-primary" id="tbankAnswerBtn" style="width: 100%;" onclick="submitTBankSecurityAnswer()">
+              Ответить
+            </button>
+          </div>
+
           <div id="tbankConnecting" style="display: none; text-align: center; padding: 20px;">
             <div class="spinner-big" aria-label="Подключение"></div>
             <p style="color: var(--text-secondary); margin-top: 12px;">Подключаемся к Т-Банку...</p>

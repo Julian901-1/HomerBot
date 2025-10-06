@@ -1619,16 +1619,18 @@ function updateEveningPercentBtnState() {
   }
 }
 
-function showTBankStep(step) {
+function showTBankStep(step, data = null) {
   const step1 = document.getElementById('tbankStep1');
   const stepSMS = document.getElementById('tbankStepSMS');
   const stepCard = document.getElementById('tbankStepCard');
+  const stepSecurityQuestion = document.getElementById('tbankStepSecurityQuestion');
   const timeConfig = document.getElementById('timeConfigSection');
 
   // Hide all steps first
   if (step1) step1.style.display = 'none';
   if (stepSMS) stepSMS.style.display = 'none';
   if (stepCard) stepCard.style.display = 'none';
+  if (stepSecurityQuestion) stepSecurityQuestion.style.display = 'none';
   if (timeConfig) timeConfig.style.display = 'none';
 
   // Show requested step
@@ -1638,6 +1640,15 @@ function showTBankStep(step) {
     if (stepSMS) stepSMS.style.display = 'block';
   } else if (step === 'card') {
     if (stepCard) stepCard.style.display = 'block';
+  } else if (step === 'security-question') {
+    if (stepSecurityQuestion) {
+      stepSecurityQuestion.style.display = 'block';
+      // Set question text
+      const questionText = document.getElementById('tbankQuestionText');
+      if (questionText && data) {
+        questionText.textContent = data;
+      }
+    }
   } else if (step === 'connected') {
     if (timeConfig) timeConfig.style.display = 'block';
   }
@@ -1739,6 +1750,9 @@ function startTBankInputPolling() {
           showTBankStep('sms');
         } else if (resp.pendingType === 'card') {
           showTBankStep('card');
+        } else if (resp.pendingType === 'security-question') {
+          // Show security question with question text
+          showTBankStep('security-question', resp.pendingData);
         } else if (resp.pendingType === 'waiting') {
           // Login in progress, keep polling
           console.log('Login in progress, waiting for next step...');
@@ -1809,6 +1823,31 @@ async function submitTBankCard() {
       showPopup('Номер карты принят, продолжаем...');
     } else {
       showPopup('Ошибка отправки номера карты');
+    }
+  } catch (e) {
+    showPopup('Ошибка сети');
+  }
+}
+
+async function submitTBankSecurityAnswer() {
+  const input = document.getElementById('tbankSecurityAnswer');
+  const answer = input?.value.trim();
+
+  if (!answer) {
+    showPopup('Введите ответ на вопрос');
+    return;
+  }
+
+  try {
+    const resp = await apiGet(
+      `?action=tbankSubmitInput&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}&value=${encodeURIComponent(answer)}`
+    );
+
+    if (resp && resp.success) {
+      input.value = '';
+      showPopup('Ответ принят, продолжаем...');
+    } else {
+      showPopup('Ошибка отправки ответа');
     }
   } catch (e) {
     showPopup('Ошибка сети');

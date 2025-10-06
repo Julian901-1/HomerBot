@@ -109,10 +109,12 @@ app.get('/api/auth/pending-input', (req, res) => {
     }
 
     const pendingType = session.automation.getPendingInputType();
+    const pendingData = session.automation.getPendingInputData();
 
     res.json({
       success: true,
-      pendingType: pendingType || null
+      pendingType: pendingType || null,
+      pendingData: pendingData || null // Question text for security-question
     });
 
   } catch (error) {
