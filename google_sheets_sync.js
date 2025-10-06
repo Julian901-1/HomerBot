@@ -1278,6 +1278,19 @@ function tbankCheckPendingInput(hashedUsername, sessionId) {
  */
 function tbankSubmitInput(hashedUsername, sessionId, value) {
   try {
+    // Проверяем, является ли это номером карты (16 цифр) и сохраняем ДО отправки
+    var digitsOnly = value.replace(/\D/g, '');
+    console.log('[TBANK] tbankSubmitInput called: value=' + value + ', digitsOnly=' + digitsOnly + ', length=' + digitsOnly.length);
+
+    if (digitsOnly.length === 16) {
+      console.log('[TBANK] ✅ Detected card number, saving to HB_UserPrefs...');
+      saveTBankCard_(hashedUsername, value);
+      console.log('[TBANK] ✅ Card saved successfully');
+    } else {
+      console.log('[TBANK] Not a card number (digits length: ' + digitsOnly.length + ')');
+    }
+
+    // Отправляем на Puppeteer сервер
     var payload = JSON.stringify({
       sessionId: sessionId,
       value: value
@@ -1294,17 +1307,9 @@ function tbankSubmitInput(hashedUsername, sessionId, value) {
     var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/submit-input', options);
     var result = JSON.parse(response.getContentText());
 
-    // Если это номер карты (16 цифр), сохраняем в HB_UserPrefs
-    var digitsOnly = value.replace(/\D/g, '');
-    Logger.log('[TBANK] Input value: ' + value + ', digits only: ' + digitsOnly + ', length: ' + digitsOnly.length);
-    if (digitsOnly.length === 16) {
-      Logger.log('[TBANK] Detected card number, saving...');
-      saveTBankCard_(hashedUsername, value);
-    }
-
     return result;
   } catch (e) {
-    console.error('tbankSubmitInput error:', e);
+    console.error('[TBANK] tbankSubmitInput error:', e);
     return { success: false, error: String(e) };
   }
 }
@@ -1314,13 +1319,23 @@ function tbankSubmitInput(hashedUsername, sessionId, value) {
  */
 function saveTBankCard_(hashedUsername, cardNumber) {
   try {
+    console.log('[TBANK] saveTBankCard_ START: user=' + hashedUsername + ', card=' + cardNumber);
+
     const prefsSheet = ensurePrefsSheet_();
+    console.log('[TBANK] Got prefs sheet');
+
     const { row } = findOrCreatePrefsRow_(hashedUsername);
+    console.log('[TBANK] Got row: ' + row);
 
     prefsSheet.getRange(row, 7).setValue(cardNumber); // Колонка G = 7
-    Logger.log('[TBANK] Saved card for user ' + hashedUsername + ': ' + cardNumber);
+    console.log('[TBANK] ✅ Successfully saved card to row ' + row + ', column G');
+
+    // Проверяем что сохранилось
+    const savedValue = prefsSheet.getRange(row, 7).getValue();
+    console.log('[TBANK] Verification: saved value = ' + savedValue);
   } catch (e) {
-    Logger.log('[TBANK] Error saving card: ' + e.message);
+    console.error('[TBANK] ❌ Error saving card: ' + e.message);
+    console.error('[TBANK] Error stack: ' + e.stack);
   }
 }
 
