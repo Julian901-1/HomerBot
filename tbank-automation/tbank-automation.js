@@ -35,8 +35,8 @@ export class TBankAutomation {
 
     console.log(`[TBANK] Initializing browser for user ${this.username}`);
 
-    // В Docker-образе Puppeteer Chrome уже установлен, executablePath не нужен
-    this.browser = await puppeteer.launch({
+    // Use Puppeteer's bundled Chromium
+    const launchOptions = {
       headless: process.env.PUPPETEER_HEADLESS === 'true',
       args: [
         '--no-sandbox',
@@ -51,7 +51,14 @@ export class TBankAutomation {
         width: 1920,
         height: 1080
       }
-    });
+    };
+
+    // Only set executablePath if explicitly provided
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    }
+
+    this.browser = await puppeteer.launch(launchOptions);
 
     this.page = await this.browser.newPage();
 
