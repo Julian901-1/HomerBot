@@ -21,6 +21,10 @@ export class TBankAutomation {
     this.page = null;
     this.keepAliveInterval = null;
     this.sessionActive = false;
+
+    // Pending input system
+    this.pendingInputResolve = null;
+    this.pendingInputType = null; // 'sms', 'card'
   }
 
   /**
@@ -85,7 +89,6 @@ export class TBankAutomation {
       await this.init();
 
       const phone = this.encryptionService.decrypt(this.encryptedPhone);
-      const password = this.encryptionService.decrypt(this.encryptedPassword);
 
       console.log(`[TBANK] Navigating to login page...`);
       await this.page.goto(process.env.TBANK_LOGIN_URL, {
@@ -93,46 +96,73 @@ export class TBankAutomation {
         timeout: parseInt(process.env.PUPPETEER_TIMEOUT)
       });
 
-      // Wait for phone input
-      await this.page.waitForSelector('input[name="phone"], input[type="tel"]', {
-        timeout: 10000
-      });
+      // Step 1: Enter phone number
+      await this.page.waitForSelector('[automation-id="phone-input"]', { timeout: 10000 });
+      console.log('[TBANK] Step 1: Entering phone number...');
+      await this.page.type('[automation-id="phone-input"]', phone, { delay: 100 });
+      await this.page.click('[automation-id="button-submit"]');
+      await this.page.waitForTimeout(2000);
 
-      console.log('[TBANK] Entering phone number...');
-      await this.page.type('input[name="phone"], input[type="tel"]', phone, {
-        delay: 100 // Human-like typing
-      });
+      // Step 2: Wait for SMS code from user
+      const otpInput = await this.page.$('[automation-id="otp-input"]');
+      if (otpInput) {
+        console.log('[TBANK] Step 2: Waiting for SMS code from user...');
+        const smsCode = await this.waitForUserInput('sms');
 
-      // Click continue button
-      await this.page.click('button[type="submit"]');
-      await this.page.waitForNavigation({ waitUntil: 'networkidle2' });
+        await this.page.type('[automation-id="otp-input"]', smsCode, { delay: 150 });
+        await this.page.waitForTimeout(1000);
 
-      // Check if password is required
-      const passwordSelector = 'input[type="password"]';
-      const passwordInput = await this.page.$(passwordSelector);
-
-      if (passwordInput) {
-        console.log('[TBANK] Entering password...');
-        await this.page.type(passwordSelector, password, { delay: 100 });
-        await this.page.click('button[type="submit"]');
-
-        // Wait for either 2FA or main page
-        await Promise.race([
-          this.page.waitForSelector('input[name="code"]', { timeout: 5000 }).catch(() => null),
-          this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 5000 }).catch(() => null)
-        ]);
+        const submitButton = await this.page.$('[automation-id="button-submit"]');
+        if (submitButton) {
+          await submitButton.click();
+        }
+        await this.page.waitForTimeout(2000);
       }
 
-      // Check for 2FA
-      const codeInput = await this.page.$('input[name="code"]');
+      // Step 3: Optional card verification
+      const cardInput = await this.page.$('[automation-id="card-input"]');
+      if (cardInput) {
+        console.log('[TBANK] Step 3: Waiting for card number from user...');
+        const cardNumber = await this.waitForUserInput('card');
 
-      if (codeInput) {
-        console.log('[TBANK] 2FA required');
-        return {
-          success: false,
-          requires2FA: true,
-          message: 'Please provide 2FA code'
-        };
+        await this.page.type('[automation-id="card-input"]', cardNumber.replace(/\s/g, ''), { delay: 100 });
+        await this.page.click('[automation-id="button-submit"]');
+        await this.page.waitForTimeout(2000);
+      }
+
+      // Step 4: Optional PIN code rejection
+      const pinCancelButton = await this.page.$('[automation-id="cancel-button"]');
+      if (pinCancelButton) {
+        const formText = await this.page.evaluate(() => document.body.textContent);
+        if (formText.includes('Придумайте код')) {
+          console.log('[TBANK] Step 4: Rejecting PIN code setup...');
+          await this.page.click('[automation-id="cancel-button"]');
+          await this.page.waitForTimeout(1000);
+        }
+      }
+
+      // Step 5: Optional password rejection
+      const passwordForm = await this.page.$('[automation-id="set-password-form"]');
+      if (passwordForm) {
+        console.log('[TBANK] Step 5: Rejecting password setup...');
+        await this.page.click('[automation-id="cancel-button"]');
+        await this.page.waitForTimeout(1000);
+      }
+
+      // Step 6: Navigate to personal cabinet
+      const loginButton = await this.page.$('[data-test="login-button click-area"]');
+      if (loginButton) {
+        console.log('[TBANK] Step 6: Navigating to personal cabinet...');
+        await this.page.click('[data-test="login-button click-area"]');
+        await this.page.waitForTimeout(2000);
+      }
+
+      // Step 7: Navigate to internet banking
+      const internetBankLink = await this.page.$('[data-item-name="Интернет-банк"]');
+      if (internetBankLink) {
+        console.log('[TBANK] Step 7: Navigating to internet banking...');
+        await this.page.click('[data-item-name="Интернет-банк"]');
+        await this.page.waitForNavigation({ waitUntil: 'networkidle2' });
       }
 
       // Check if we're logged in
@@ -162,58 +192,38 @@ export class TBankAutomation {
     }
   }
 
+
   /**
-   * Submit 2FA code
+   * Wait for user input (SMS code or card number)
    */
-  async submit2FACode(code) {
-    try {
-      console.log('[TBANK] Submitting 2FA code...');
+  async waitForUserInput(type) {
+    console.log(`[TBANK] Waiting for user to provide ${type}...`);
+    this.pendingInputType = type;
 
-      const codeInput = await this.page.$('input[name="code"]');
+    return new Promise((resolve) => {
+      this.pendingInputResolve = resolve;
+    });
+  }
 
-      if (!codeInput) {
-        return {
-          success: false,
-          error: '2FA input not found'
-        };
-      }
-
-      await this.page.type('input[name="code"]', code, { delay: 150 });
-
-      // Submit might be automatic or require button click
-      const submitButton = await this.page.$('button[type="submit"]');
-      if (submitButton) {
-        await submitButton.click();
-      }
-
-      // Wait for navigation or error
-      await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 })
-        .catch(() => {});
-
-      const isLoggedIn = await this.checkLoginStatus();
-
-      if (isLoggedIn) {
-        this.sessionActive = true;
-        this.startKeepAlive();
-
-        return {
-          success: true,
-          message: '2FA verification successful'
-        };
-      }
-
-      return {
-        success: false,
-        error: 'Invalid 2FA code or timeout'
-      };
-
-    } catch (error) {
-      console.error('[TBANK] 2FA submission error:', error);
-      return {
-        success: false,
-        error: error.message
-      };
+  /**
+   * Submit user input from frontend
+   */
+  submitUserInput(value) {
+    if (this.pendingInputResolve) {
+      console.log(`[TBANK] User provided ${this.pendingInputType}: ${value}`);
+      this.pendingInputResolve(value);
+      this.pendingInputResolve = null;
+      this.pendingInputType = null;
+      return true;
     }
+    return false;
+  }
+
+  /**
+   * Get pending input type
+   */
+  getPendingInputType() {
+    return this.pendingInputType;
   }
 
   /**
@@ -297,7 +307,7 @@ export class TBankAutomation {
   }
 
   /**
-   * Get all accounts with balances
+   * Get all accounts with balances (only debit accounts, excluding credit/investments)
    */
   async getAccounts() {
     try {
@@ -307,60 +317,75 @@ export class TBankAutomation {
 
       console.log('[TBANK] Fetching accounts...');
 
-      // Navigate to accounts page if not there
-      const currentUrl = this.page.url();
-      if (!currentUrl.includes('/accounts')) {
-        await this.page.goto(process.env.TBANK_MAIN_URL, {
-          waitUntil: 'networkidle2'
-        });
-      }
-
-      // Wait for accounts to load
-      await this.page.waitForSelector('[data-qa="account-card"], .account-item', {
+      // Wait for account widgets to load
+      await this.page.waitForSelector('[data-qa-type^="atomPanel widget"]', {
         timeout: 10000
       });
 
       // Extract account information
       const accounts = await this.page.evaluate(() => {
-        const accountCards = Array.from(
-          document.querySelectorAll('[data-qa="account-card"], .account-item, [class*="AccountCard"]')
+        const widgets = Array.from(
+          document.querySelectorAll('[data-qa-type^="atomPanel widget"]')
         );
 
-        return accountCards.map((card, index) => {
-          // Try multiple selectors for account name
-          const nameElement = card.querySelector('[data-qa="account-name"], .account-name, [class*="name"]');
-          const name = nameElement?.textContent?.trim() || `Account ${index + 1}`;
+        const balances = [];
 
-          // Try multiple selectors for balance
-          const balanceElement = card.querySelector('[data-qa="balance"], .balance, [class*="Balance"]');
-          const balanceText = balanceElement?.textContent?.trim() || '0';
-          const balance = parseFloat(balanceText.replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+        widgets.forEach(widget => {
+          const widgetClass = widget.getAttribute('data-qa-type');
 
-          // Try to get account ID from data attributes
-          const accountId = card.dataset.accountId ||
-                          card.dataset.id ||
-                          `account_${index}`;
-
-          // Determine account type
-          const cardType = name.toLowerCase();
-          let type = 'debit';
-          if (cardType.includes('накопительн') || cardType.includes('saving')) {
-            type = 'savings';
-          } else if (cardType.includes('кредит') || cardType.includes('credit')) {
-            type = 'credit';
+          // Skip investments, insurance, and external accounts
+          if (widgetClass.includes('widget-investbox') ||
+              widgetClass.includes('widget-invest') ||
+              widgetClass.includes('widget-insurance') ||
+              widgetClass.includes('widget-other')) {
+            return;
           }
 
-          return {
-            id: accountId,
-            name,
-            balance,
-            type,
-            currency: 'RUB'
-          };
+          // Skip credit cards
+          if (widgetClass.includes('widget-credit')) {
+            return;
+          }
+
+          // Only process debit accounts
+          if (widgetClass.includes('widget-debit')) {
+            const nameEl = widget.querySelector('[data-qa-type="subtitle"] span');
+            const balanceEl = widget.querySelector('[data-qa-type="title"] [data-sensitive="true"]');
+
+            if (nameEl && balanceEl) {
+              const name = nameEl.textContent.trim();
+              const balanceText = balanceEl.textContent.trim();
+
+              // Extract widget ID
+              const widgetId = widgetClass.match(/widget-(\d+)/)?.[1] || 'unknown';
+
+              // Parse balance (remove &nbsp; and convert to number)
+              const balanceClean = balanceText.replace(/\u00A0/g, '').replace(/\s/g, '');
+              const balanceValue = parseFloat(balanceClean.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+
+              balances.push({
+                id: widgetId,
+                name: name,
+                balance: balanceValue,
+                balanceFormatted: balanceText,
+                type: 'debit',
+                currency: 'RUB'
+              });
+            }
+          }
         });
+
+        return balances;
       });
 
-      console.log(`[TBANK] Found ${accounts.length} accounts`);
+      console.log(`[TBANK] ✅ Found ${accounts.length} debit accounts for processing`);
+
+      // Log each account
+      accounts.forEach(acc => {
+        console.log(`[TBANK] ✅ [BALANCE] ${acc.name}: ${acc.balanceFormatted}`);
+      });
+
+      console.log('[TBANK] 📊 Account details:', JSON.stringify(accounts, null, 2));
+
       return accounts;
 
     } catch (error) {

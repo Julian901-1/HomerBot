@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/vokel/Downloads/**)"
+      "Read(//c/Users/vokel/Downloads/**)",
+      "Bash(awk:*)"
     ],
     "deny": [],
     "ask": []

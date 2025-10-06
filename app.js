@@ -50,6 +50,25 @@ function parseAmount(str) {
   return isNaN(n) ? 0 : n;
 }
 
+function formatCardInput(input) {
+  // Extract only digits
+  let digits = input.value.replace(/\D/g, '');
+
+  // Limit to 16 digits
+  digits = digits.slice(0, 16);
+
+  // Format as 0000 0000 0000 0000
+  let formatted = '';
+  for (let i = 0; i < digits.length; i++) {
+    if (i > 0 && i % 4 === 0) {
+      formatted += ' ';
+    }
+    formatted += digits[i];
+  }
+
+  input.value = formatted;
+}
+
 function formatPhoneInput(input) {
   // Извлекаем только цифры
   let digits = input.value.replace(/\D/g, '');
@@ -1602,39 +1621,38 @@ function updateEveningPercentBtnState() {
 
 function showTBankStep(step) {
   const step1 = document.getElementById('tbankStep1');
-  const step2 = document.getElementById('tbankStep2');
+  const stepSMS = document.getElementById('tbankStepSMS');
+  const stepCard = document.getElementById('tbankStepCard');
   const timeConfig = document.getElementById('timeConfigSection');
 
+  // Hide all steps first
+  if (step1) step1.style.display = 'none';
+  if (stepSMS) stepSMS.style.display = 'none';
+  if (stepCard) stepCard.style.display = 'none';
+  if (timeConfig) timeConfig.style.display = 'none';
+
+  // Show requested step
   if (step === 'step1') {
     if (step1) step1.style.display = 'block';
-    if (step2) step2.style.display = 'none';
-    if (timeConfig) timeConfig.style.display = 'none';
-  } else if (step === 'step2') {
-    if (step1) step1.style.display = 'none';
-    if (step2) step2.style.display = 'block';
-    if (timeConfig) timeConfig.style.display = 'none';
+  } else if (step === 'sms') {
+    if (stepSMS) stepSMS.style.display = 'block';
+  } else if (step === 'card') {
+    if (stepCard) stepCard.style.display = 'block';
   } else if (step === 'connected') {
-    if (step1) step1.style.display = 'none';
-    if (step2) step2.style.display = 'none';
     if (timeConfig) timeConfig.style.display = 'block';
   }
 }
 
+let tbankPollingInterval = null;
+
 async function connectTBank() {
   const phoneInput = document.getElementById('tbankPhone');
-  const passwordInput = document.getElementById('tbankPassword');
   const btn = document.getElementById('tbankConnectBtn');
 
   const phone = phoneInput?.dataset.phone || phoneInput?.value.replace(/\D/g, '');
-  const password = passwordInput?.value;
 
   if (!phone || phone.length !== 11) {
     showPopup('Введите корректный номер телефона');
-    return;
-  }
-
-  if (!password) {
-    showPopup('Введите пароль');
     return;
   }
 
@@ -1648,24 +1666,22 @@ async function connectTBank() {
 
   try {
     const resp = await apiGet(
-      `?action=tbankLogin&username=${encodeURIComponent(username)}&phone=${encodeURIComponent('+' + phone)}&password=${encodeURIComponent(password)}`
+      `?action=tbankLogin&username=${encodeURIComponent(username)}&phone=${encodeURIComponent('+' + phone)}`
     );
 
     if (resp && resp.success) {
-      if (resp.requires2FA) {
-        tbankSessionId = resp.sessionId;
-        showTBankStep('step2');
-        showPopup('Введите код из СМС');
-      } else {
-        tbankSessionId = resp.sessionId;
-        await onTBankConnected();
-      }
+      tbankSessionId = resp.sessionId;
+      // Start polling for required input
+      startTBankInputPolling();
     } else {
       showPopup('Ошибка подключения: ' + (resp?.error || 'Неизвестная ошибка'));
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Подключить Т-Банк';
+      }
     }
   } catch (e) {
     showPopup('Ошибка сети');
-  } finally {
     if (btn) {
       btn.disabled = false;
       btn.textContent = 'Подключить Т-Банк';
@@ -1673,24 +1689,83 @@ async function connectTBank() {
   }
 }
 
-async function verifyTBank2FA() {
-  const codeInput = document.getElementById('tbank2FACode');
-  const code = codeInput?.value;
+function startTBankInputPolling() {
+  if (tbankPollingInterval) clearInterval(tbankPollingInterval);
 
-  if (!code || code.length !== 6) {
-    showPopup('Введите 6-значный код');
+  tbankPollingInterval = setInterval(async () => {
+    try {
+      const resp = await apiGet(
+        `?action=tbankCheckPendingInput&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}`
+      );
+
+      if (resp && resp.success) {
+        if (resp.pendingType === 'sms') {
+          showTBankStep('sms');
+        } else if (resp.pendingType === 'card') {
+          showTBankStep('card');
+        } else if (resp.pendingType === null) {
+          // No pending input, check if connected
+          stopTBankInputPolling();
+          await onTBankConnected();
+        }
+      }
+    } catch (e) {
+      console.error('Polling error:', e);
+    }
+  }, 2000); // Poll every 2 seconds
+}
+
+function stopTBankInputPolling() {
+  if (tbankPollingInterval) {
+    clearInterval(tbankPollingInterval);
+    tbankPollingInterval = null;
+  }
+}
+
+async function submitTBankSMS() {
+  const input = document.getElementById('tbank2FACode');
+  const code = input?.value;
+
+  if (!code) {
+    showPopup('Введите код из СМС');
     return;
   }
 
   try {
     const resp = await apiGet(
-      `?action=tbankVerify2FA&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}&code=${encodeURIComponent(code)}`
+      `?action=tbankSubmitInput&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}&value=${encodeURIComponent(code)}`
     );
 
     if (resp && resp.success) {
-      await onTBankConnected();
+      input.value = '';
+      showPopup('Код принят, продолжаем...');
     } else {
-      showPopup('Неверный код');
+      showPopup('Ошибка отправки кода');
+    }
+  } catch (e) {
+    showPopup('Ошибка сети');
+  }
+}
+
+async function submitTBankCard() {
+  const input = document.getElementById('tbankCardNumber');
+  const card = input?.value.replace(/\s/g, '');
+
+  if (!card || card.length < 16) {
+    showPopup('Введите номер карты');
+    return;
+  }
+
+  try {
+    const resp = await apiGet(
+      `?action=tbankSubmitInput&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}&value=${encodeURIComponent(card)}`
+    );
+
+    if (resp && resp.success) {
+      input.value = '';
+      showPopup('Номер карты принят, продолжаем...');
+    } else {
+      showPopup('Ошибка отправки номера карты');
     }
   } catch (e) {
     showPopup('Ошибка сети');

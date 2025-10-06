@@ -86,18 +86,17 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 /**
- * Submit 2FA code
- * POST /api/auth/verify-2fa
- * Body: { sessionId, code }
+ * Get pending input type (SMS or card)
+ * GET /api/auth/pending-input?sessionId=xxx
  */
-app.post('/api/auth/verify-2fa', async (req, res) => {
+app.get('/api/auth/pending-input', (req, res) => {
   try {
-    const { sessionId, code } = req.body;
+    const { sessionId } = req.query;
 
-    if (!sessionId || !code) {
+    if (!sessionId) {
       return res.status(400).json({
         success: false,
-        error: 'Missing sessionId or code'
+        error: 'Missing sessionId'
       });
     }
 
@@ -109,25 +108,62 @@ app.post('/api/auth/verify-2fa', async (req, res) => {
       });
     }
 
-    const result = await session.automation.submit2FACode(code);
-
-    if (!result.success) {
-      return res.status(401).json({
-        success: false,
-        error: result.error
-      });
-    }
-
-    // Mark session as authenticated
-    session.authenticated = true;
+    const pendingType = session.automation.getPendingInputType();
 
     res.json({
       success: true,
-      message: '2FA verification successful'
+      pendingType: pendingType || null
     });
 
   } catch (error) {
-    console.error('[AUTH] 2FA verification error:', error);
+    console.error('[AUTH] Get pending input error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Submit user input (SMS code or card number)
+ * POST /api/auth/submit-input
+ * Body: { sessionId, value }
+ */
+app.post('/api/auth/submit-input', (req, res) => {
+  try {
+    const { sessionId, value } = req.body;
+
+    if (!sessionId || !value) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing sessionId or value'
+      });
+    }
+
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        error: 'Session not found'
+      });
+    }
+
+    const submitted = session.automation.submitUserInput(value);
+
+    if (!submitted) {
+      return res.status(400).json({
+        success: false,
+        error: 'No pending input expected'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Input submitted successfully'
+    });
+
+  } catch (error) {
+    console.error('[AUTH] Submit input error:', error);
     res.status(500).json({
       success: false,
       error: error.message

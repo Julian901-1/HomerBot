@@ -221,10 +221,13 @@ function doGet(e) {
 
       // >>> T-Bank integration actions
       case 'tbankLogin':
-        return jsonOk(tbankLogin(hashedUsername, p.phone, p.password));
+        return jsonOk(tbankLogin(hashedUsername, p.phone));
 
-      case 'tbankVerify2FA':
-        return jsonOk(tbankVerify2FA(hashedUsername, p.sessionId, p.code));
+      case 'tbankCheckPendingInput':
+        return jsonOk(tbankCheckPendingInput(hashedUsername, p.sessionId));
+
+      case 'tbankSubmitInput':
+        return jsonOk(tbankSubmitInput(hashedUsername, p.sessionId, p.value));
 
       case 'tbankGetAccounts':
         return jsonOk(tbankGetAccounts(hashedUsername, p.sessionId));
@@ -1151,12 +1154,12 @@ var TBANK_REQUEST_TIMEOUT = 65000; // 65 секунд
 /**
  * Прокси-функция для авторизации в T-Bank через Puppeteer сервис
  */
-function tbankLogin(hashedUsername, phone, password) {
+function tbankLogin(hashedUsername, phone) {
   try {
     var payload = JSON.stringify({
       username: hashedUsername,
       phone: phone,
-      password: password
+      password: '' // Password removed, login handled by Puppeteer with user input
     });
 
     var options = {
@@ -1182,14 +1185,36 @@ function tbankLogin(hashedUsername, phone, password) {
 }
 
 /**
- * Прокси-функция для подтверждения 2FA кода
+ * Проверка ожидающего ввода (SMS или номер карты)
  */
-function tbankVerify2FA(hashedUsername, sessionId, code) {
+function tbankCheckPendingInput(hashedUsername, sessionId) {
+  try {
+    var url = TBANK_SERVICE_URL + '/auth/pending-input?sessionId=' + encodeURIComponent(sessionId);
+
+    var options = {
+      method: 'get',
+      muteHttpExceptions: true,
+      timeout: TBANK_REQUEST_TIMEOUT
+    };
+
+    var response = UrlFetchApp.fetch(url, options);
+    var result = JSON.parse(response.getContentText());
+
+    return result;
+  } catch (e) {
+    console.error('tbankCheckPendingInput error:', e);
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Отправка пользовательского ввода (SMS или номер карты)
+ */
+function tbankSubmitInput(hashedUsername, sessionId, value) {
   try {
     var payload = JSON.stringify({
-      username: hashedUsername,
       sessionId: sessionId,
-      code: code
+      value: value
     });
 
     var options = {
@@ -1200,12 +1225,12 @@ function tbankVerify2FA(hashedUsername, sessionId, code) {
       timeout: TBANK_REQUEST_TIMEOUT
     };
 
-    var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/verify-2fa', options);
+    var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/submit-input', options);
     var result = JSON.parse(response.getContentText());
 
     return result;
   } catch (e) {
-    console.error('tbankVerify2FA error:', e);
+    console.error('tbankSubmitInput error:', e);
     return { success: false, error: String(e) };
   }
 }
