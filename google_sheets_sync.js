@@ -1290,10 +1290,31 @@ function tbankSubmitInput(hashedUsername, sessionId, value) {
     var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/submit-input', options);
     var result = JSON.parse(response.getContentText());
 
+    // Если это номер карты (16 цифр), сохраняем в HB_UserPrefs
+    var digitsOnly = value.replace(/\D/g, '');
+    if (digitsOnly.length === 16) {
+      saveTBankCard_(hashedUsername, value);
+    }
+
     return result;
   } catch (e) {
     console.error('tbankSubmitInput error:', e);
     return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Сохраняет номер карты T-Bank в HB_UserPrefs (колонка G)
+ */
+function saveTBankCard_(hashedUsername, cardNumber) {
+  try {
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findOrCreatePrefsRow_(hashedUsername);
+
+    prefsSheet.getRange(row, 7).setValue(cardNumber); // Колонка G = 7
+    Logger.log('[TBANK] Saved card for user ' + hashedUsername + ': ' + cardNumber);
+  } catch (e) {
+    Logger.log('[TBANK] Error saving card: ' + e.message);
   }
 }
 
@@ -1415,7 +1436,13 @@ function ensurePrefsSheet_() {
     if (!sh) {
         sh = ss.insertSheet(PREFS_SHEET);
         // ВАЖНО: displayName НЕ хранится (соблюдение 152-ФЗ)
-        sh.getRange(1, 1, 1, 6).setValues([['hashedUsername', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency', 'autoRenew']]);
+        sh.getRange(1, 1, 1, 7).setValues([['hashedUsername', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency', 'autoRenew', 'tbankCard']]);
+    } else {
+        // Проверяем, есть ли уже колонка G (tbankCard), если нет - добавляем заголовок
+        var header = sh.getRange(1, 7).getValue();
+        if (!header || header !== 'tbankCard') {
+            sh.getRange(1, 7).setValue('tbankCard');
+        }
     }
     return sh;
 }
