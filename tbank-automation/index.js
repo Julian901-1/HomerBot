@@ -348,17 +348,23 @@ app.listen(PORT, () => {
     console.log('[CRON] Running session cleanup...');
     sessionManager.cleanupExpiredSessions();
   });
+
+  // Start the transfer scheduler
+  console.log('[SERVER] Starting transfer scheduler...');
+  sessionManager.startScheduler();
 });
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  sessionManager.stopScheduler();
   await sessionManager.closeAllSessions();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...');
+  sessionManager.stopScheduler();
   await sessionManager.closeAllSessions();
   process.exit(0);
 });

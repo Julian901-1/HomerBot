@@ -265,21 +265,35 @@ export class SessionManager {
       }
 
       try {
-        // Get user preferences from the session (should be fetched from Google Sheets)
-        // For now, we'll need to pass these as session metadata
-        const { transferToVkladTime, transferFromVkladTime, tbankVkladId, tbankVkladName } = session.metadata || {};
+        const username = session.username;
+
+        // Fetch user schedule from Google Sheets
+        const scheduleResp = await this.fetchUserSchedule(username);
+
+        if (!scheduleResp || !scheduleResp.success) {
+          console.log(`[SCHEDULER] No schedule found for user ${username}`);
+          continue;
+        }
+
+        const { transferToVkladTime, transferFromVkladTime, tbankVkladId, tbankVkladName } = scheduleResp;
 
         if (!transferToVkladTime && !transferFromVkladTime) {
           continue; // No schedule configured for this user
         }
 
-        const username = session.username;
+        // Update session metadata with fresh data from Google Sheets
+        this.updateSessionMetadata(sessionId, {
+          transferToVkladTime,
+          transferFromVkladTime,
+          tbankVkladId,
+          tbankVkladName
+        });
 
         // Check if it's time to transfer TO saving account
         if (transferToVkladTime) {
           const lastTransferTo = this.lastTransferToSaving.get(username);
           if (shouldExecuteNow(transferToVkladTime, lastTransferTo)) {
-            console.log(`[SCHEDULER] Executing transfer TO saving account for ${username}...`);
+            console.log(`[SCHEDULER] ⏰ Time to transfer TO saving account for ${username} (scheduled: ${transferToVkladTime})`);
             await this.executeTransferToSaving(session);
             this.lastTransferToSaving.set(username, new Date());
           }
@@ -289,7 +303,7 @@ export class SessionManager {
         if (transferFromVkladTime) {
           const lastTransferFrom = this.lastTransferFromSaving.get(username);
           if (shouldExecuteNow(transferFromVkladTime, lastTransferFrom)) {
-            console.log(`[SCHEDULER] Executing transfer FROM saving account for ${username}...`);
+            console.log(`[SCHEDULER] ⏰ Time to transfer FROM saving account for ${username} (scheduled: ${transferFromVkladTime})`);
             await this.executeTransferFromSaving(session);
             this.lastTransferFromSaving.set(username, new Date());
           }
@@ -298,6 +312,42 @@ export class SessionManager {
       } catch (error) {
         console.error(`[SCHEDULER] Error processing transfers for session ${sessionId}:`, error);
       }
+    }
+  }
+
+  /**
+   * Fetch user schedule from Google Sheets
+   * @param {string} username - User identifier
+   * @returns {Promise<Object>} Schedule data
+   */
+  async fetchUserSchedule(username) {
+    try {
+      const GOOGLE_SHEETS_URL = process.env.GOOGLE_SHEETS_SCRIPT_URL;
+
+      if (!GOOGLE_SHEETS_URL) {
+        console.error('[SCHEDULER] GOOGLE_SHEETS_SCRIPT_URL not configured');
+        return { success: false };
+      }
+
+      const url = `${GOOGLE_SHEETS_URL}?action=tbankGetTransferSchedule&username=${encodeURIComponent(username)}`;
+      const response = await fetch(url);
+      const data = await response.json();
+
+      // Also fetch vklad data
+      const vkladUrl = `${GOOGLE_SHEETS_URL}?action=tbankGetVklad&username=${encodeURIComponent(username)}`;
+      const vkladResp = await fetch(vkladUrl);
+      const vkladData = await vkladResp.json();
+
+      return {
+        success: true,
+        transferToVkladTime: data.transferToTime,
+        transferFromVkladTime: data.transferFromTime,
+        tbankVkladId: vkladData.vkladId,
+        tbankVkladName: vkladData.vkladName
+      };
+    } catch (error) {
+      console.error('[SCHEDULER] Error fetching user schedule:', error);
+      return { success: false };
     }
   }
 

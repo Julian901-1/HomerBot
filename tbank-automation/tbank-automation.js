@@ -187,15 +187,7 @@ export class TBankAutomation {
         if (currentUrl.includes('/mybank/') || currentUrl.includes('/accounts') || currentUrl.includes('/main')) {
           console.log('[TBANK] ✅ Detected /mybank/ or accounts page');
 
-          // DEBUG: Log HTML after successful login to /mybank/
-          try {
-            const mybankHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
-            console.log('[TBANK] ========== /mybank/ PAGE HTML START (DEBUG) ==========');
-            console.log(mybankHtml);
-            console.log('[TBANK] ========== /mybank/ PAGE HTML END (DEBUG) ==========');
-          } catch (e) {
-            console.log('[TBANK] Could not retrieve /mybank/ HTML:', e.message);
-          }
+          // Login successful - HTML logging removed for performance
 
           this.sessionActive = true;
           this.pendingInputType = null;
@@ -905,12 +897,11 @@ export class TBankAutomation {
         throw new Error('Not logged in');
       }
 
-      console.log(`[TBANK] Transferring ${amount} RUB from "${debitAccountName}" to "${savingAccountName}"...`);
+      console.log(`[TBANK] 💸 Transferring ${amount} RUB from "${debitAccountName}" to "${savingAccountName}"...`);
 
       // Ensure we're on /mybank/ page
       const currentUrl = this.page.url();
       if (!currentUrl.includes('/mybank/')) {
-        console.log('[TBANK] Not on /mybank/ page, navigating...');
         await this.page.goto('https://www.tbank.ru/mybank/', {
           waitUntil: 'networkidle2',
           timeout: 30000
@@ -919,7 +910,7 @@ export class TBankAutomation {
       }
 
       // Step 1: Click on the debit account widget
-      console.log(`[TBANK] Step 1: Looking for debit account widget "${debitAccountName}"...`);
+      console.log(`[TBANK] 1️⃣ Clicking debit account "${debitAccountName}"...`);
 
       const debitAccountWidget = await this.page.evaluateHandle((accountName) => {
         const widgets = Array.from(document.querySelectorAll('[data-qa-type^="atomPanel widget widget-debit"]'));
@@ -933,7 +924,6 @@ export class TBankAutomation {
         throw new Error(`Could not find debit account with name "${debitAccountName}"`);
       }
 
-      console.log('[TBANK] ✅ Found debit account, clicking...');
       const debitLink = await debitAccountWidget.asElement().$('a[data-qa-type="link click-area"]');
       if (!debitLink) {
         throw new Error('Could not find link in debit account widget');
@@ -947,7 +937,7 @@ export class TBankAutomation {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Step 2: Click "Перевести" button
-      console.log('[TBANK] Step 2: Looking for "Перевести" button...');
+      console.log('[TBANK] 2️⃣ Clicking "Перевести" button...');
 
       const transferButton = await this.page.evaluateHandle(() => {
         const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="transferButton"]'));
@@ -958,12 +948,11 @@ export class TBankAutomation {
         throw new Error('Could not find "Перевести" button');
       }
 
-      console.log('[TBANK] ✅ Found "Перевести" button, clicking...');
       await transferButton.asElement().click();
       await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
 
       // Step 3: Click "Между счетами" link
-      console.log('[TBANK] Step 3: Looking for "Между счетами" link...');
+      console.log('[TBANK] 3️⃣ Clicking "Между счетами"...');
 
       const betweenAccountsLink = await this.page.evaluateHandle(() => {
         const links = Array.from(document.querySelectorAll('a[href*="transfer-between-accounts"]'));
@@ -974,7 +963,6 @@ export class TBankAutomation {
         throw new Error('Could not find "Между счетами" link');
       }
 
-      console.log('[TBANK] ✅ Found "Между счетами" link, clicking...');
       await betweenAccountsLink.asElement().click();
       await this.page.waitForNavigation({
         waitUntil: 'networkidle2',
@@ -983,7 +971,7 @@ export class TBankAutomation {
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Step 4: Select saving account in the dropdown
-      console.log(`[TBANK] Step 4: Selecting saving account "${savingAccountName}" in dropdown...`);
+      console.log(`[TBANK] 4️⃣ Selecting saving account "${savingAccountName}"...`);
 
       // Find the selectAccount wrapper
       const selectSuccess = await this.page.evaluate((accountName) => {
@@ -1021,11 +1009,11 @@ export class TBankAutomation {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       if (!selectSuccess) {
-        console.log('[TBANK] ⚠️ Could not select saving account via dropdown, trying alternative method...');
+        console.log('[TBANK] ⚠️ Could not select saving account via dropdown');
       }
 
       // Step 5: Enter amount
-      console.log(`[TBANK] Step 5: Entering amount ${amount}...`);
+      console.log(`[TBANK] 5️⃣ Entering amount ${amount}...`);
 
       await this.page.waitForSelector('input[data-qa-type="amount-from.input"]', {
         timeout: 10000
@@ -1042,17 +1030,14 @@ export class TBankAutomation {
       await this.typeWithHumanDelay('input[data-qa-type="amount-from.input"]', amount.toString());
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      console.log('[TBANK] ✅ Amount entered');
-
       // Step 6: Click "Перевести" submit button
-      console.log('[TBANK] Step 6: Looking for "Перевести" submit button...');
+      console.log('[TBANK] 6️⃣ Submitting transfer...');
 
       const submitButton = await this.page.$('button[data-qa-type="submit-button"][type="submit"]');
       if (!submitButton) {
         throw new Error('Could not find "Перевести" submit button');
       }
 
-      console.log('[TBANK] ✅ Found submit button, clicking...');
       await submitButton.click();
 
       // Wait for transfer to complete
@@ -1063,8 +1048,6 @@ export class TBankAutomation {
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Step 7: Navigate back to /mybank/
-      console.log('[TBANK] Step 7: Navigating back to /mybank/...');
-
       const homeLink = await this.page.$('a[data-qa-type="desktop-ib-navigation-menu-link"][href="/mybank/"]');
       if (homeLink) {
         await homeLink.click();
@@ -1082,7 +1065,7 @@ export class TBankAutomation {
 
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      console.log('[TBANK] ✅ Transfer to saving account completed successfully!');
+      console.log(`[TBANK] ✅ Transfer completed: ${amount} RUB → "${savingAccountName}"`);
 
       return {
         success: true,
@@ -1113,12 +1096,11 @@ export class TBankAutomation {
         throw new Error('Not logged in');
       }
 
-      console.log(`[TBANK] Transferring ${amount} RUB from "${savingAccountName}" back to "${debitAccountName}"...`);
+      console.log(`[TBANK] 💸 Transferring ${amount} RUB from "${savingAccountName}" back to "${debitAccountName}"...`);
 
       // Ensure we're on /mybank/ page
       const currentUrl = this.page.url();
       if (!currentUrl.includes('/mybank/')) {
-        console.log('[TBANK] Not on /mybank/ page, navigating...');
         await this.page.goto('https://www.tbank.ru/mybank/', {
           waitUntil: 'networkidle2',
           timeout: 30000
@@ -1127,7 +1109,7 @@ export class TBankAutomation {
       }
 
       // Step 1: Click on the saving account widget
-      console.log(`[TBANK] Step 1: Looking for saving account widget "${savingAccountName}"...`);
+      console.log(`[TBANK] 1️⃣ Clicking saving account "${savingAccountName}"...`);
 
       const savingAccountWidget = await this.page.evaluateHandle((accountName) => {
         const widgets = Array.from(document.querySelectorAll('[data-qa-type^="atomPanel widget widget-savings"]'));
@@ -1141,7 +1123,6 @@ export class TBankAutomation {
         throw new Error(`Could not find saving account with name "${savingAccountName}"`);
       }
 
-      console.log('[TBANK] ✅ Found saving account, clicking...');
       const savingLink = await savingAccountWidget.asElement().$('a[data-qa-type="link click-area"]');
       if (!savingLink) {
         throw new Error('Could not find link in saving account widget');
@@ -1155,7 +1136,7 @@ export class TBankAutomation {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Step 2: Click "Перевести" button
-      console.log('[TBANK] Step 2: Looking for "Перевести" button...');
+      console.log('[TBANK] 2️⃣ Clicking "Перевести" button...');
 
       const transferButton = await this.page.evaluateHandle(() => {
         const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="transferButton"]'));
@@ -1166,12 +1147,11 @@ export class TBankAutomation {
         throw new Error('Could not find "Перевести" button');
       }
 
-      console.log('[TBANK] ✅ Found "Перевести" button, clicking...');
       await transferButton.asElement().click();
       await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
 
       // Step 3: Click "Между счетами" link
-      console.log('[TBANK] Step 3: Looking for "Между счетами" link...');
+      console.log('[TBANK] 3️⃣ Clicking "Между счетами"...');
 
       const betweenAccountsLink = await this.page.evaluateHandle(() => {
         const links = Array.from(document.querySelectorAll('a[href*="transfer-between-accounts"]'));
@@ -1182,7 +1162,6 @@ export class TBankAutomation {
         throw new Error('Could not find "Между счетами" link');
       }
 
-      console.log('[TBANK] ✅ Found "Между счетами" link, clicking...');
       await betweenAccountsLink.asElement().click();
       await this.page.waitForNavigation({
         waitUntil: 'networkidle2',
@@ -1191,7 +1170,7 @@ export class TBankAutomation {
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Step 4: Select debit account in the dropdown
-      console.log(`[TBANK] Step 4: Selecting debit account "${debitAccountName}" in dropdown...`);
+      console.log(`[TBANK] 4️⃣ Selecting debit account "${debitAccountName}"...`);
 
       const selectSuccess = await this.page.evaluate((accountName) => {
         const selects = Array.from(document.querySelectorAll('[data-qa-type="uikit/selectAccount.wrapper.main"]'));
@@ -1223,7 +1202,7 @@ export class TBankAutomation {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Step 5: Enter amount
-      console.log(`[TBANK] Step 5: Entering amount ${amount}...`);
+      console.log(`[TBANK] 5️⃣ Entering amount ${amount}...`);
 
       await this.page.waitForSelector('input[data-qa-type="amount-from.input"]', {
         timeout: 10000
@@ -1239,17 +1218,14 @@ export class TBankAutomation {
       await this.typeWithHumanDelay('input[data-qa-type="amount-from.input"]', amount.toString());
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      console.log('[TBANK] ✅ Amount entered');
-
       // Step 6: Click "Перевести" submit button
-      console.log('[TBANK] Step 6: Looking for "Перевести" submit button...');
+      console.log('[TBANK] 6️⃣ Submitting transfer...');
 
       const submitButton = await this.page.$('button[data-qa-type="submit-button"][type="submit"]');
       if (!submitButton) {
         throw new Error('Could not find "Перевести" submit button');
       }
 
-      console.log('[TBANK] ✅ Found submit button, clicking...');
       await submitButton.click();
 
       await this.page.waitForNavigation({
@@ -1259,8 +1235,6 @@ export class TBankAutomation {
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Step 7: Navigate back to /mybank/
-      console.log('[TBANK] Step 7: Navigating back to /mybank/...');
-
       const homeLink = await this.page.$('a[data-qa-type="desktop-ib-navigation-menu-link"][href="/mybank/"]');
       if (homeLink) {
         await homeLink.click();
@@ -1277,7 +1251,7 @@ export class TBankAutomation {
 
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      console.log('[TBANK] ✅ Transfer from saving account completed successfully!');
+      console.log(`[TBANK] ✅ Transfer completed: ${amount} RUB → "${debitAccountName}"`);
 
       return {
         success: true,

@@ -1710,6 +1710,7 @@ function showTBankStep(step, data = null) {
 
 let tbankPollingInterval = null;
 let lastShownQuestion = null; // Track last shown question to avoid re-rendering
+let tbankConnectionHandled = false; // Prevent multiple onTBankConnected calls
 
 async function connectTBank() {
   const phoneInput = document.getElementById('tbankPhone');
@@ -1820,6 +1821,9 @@ async function connectTBank() {
 function startTBankInputPolling() {
   if (tbankPollingInterval) clearInterval(tbankPollingInterval);
 
+  // Reset connection handled flag when starting new polling session
+  tbankConnectionHandled = false;
+
   console.log('[TBANK POLLING] Starting polling with sessionId:', tbankSessionId);
 
   tbankPollingInterval = setInterval(async () => {
@@ -1875,8 +1879,9 @@ function startTBankInputPolling() {
           stopTBankInputPolling();
           showPopup('Ошибка входа в Т-Банк. Попробуйте снова.');
           lastShownQuestion = null;
-        } else if (resp.pendingType === null) {
-          // Login complete, fetch accounts
+        } else if (resp.pendingType === null && !tbankConnectionHandled) {
+          // Login complete, fetch accounts (only once)
+          tbankConnectionHandled = true;
           stopTBankInputPolling();
           lastShownQuestion = null;
           await onTBankConnected();
@@ -1897,11 +1902,19 @@ function stopTBankInputPolling() {
 
 async function submitTBankSMS() {
   const input = document.getElementById('tbank2FACode');
+  const btn = document.getElementById('tbankVerifyBtn');
   const code = input?.value;
 
   if (!code) {
     showPopup('Введите код из СМС');
     return;
+  }
+
+  // Блокируем кнопку сразу после нажатия
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.style.cursor = 'not-allowed';
   }
 
   try {
@@ -1910,24 +1923,49 @@ async function submitTBankSMS() {
     );
 
     if (resp && resp.success) {
-      if (input) input.value = '';
       lastShownQuestion = null;
-      showPopup('Код принят, продолжаем...');
+      showPopup('Код принят');
+
+      // Скрываем форму и показываем загрузку
+      const stepSMS = document.getElementById('tbankStepSMS');
+      if (stepSMS) {
+        stepSMS.innerHTML = '<div style="text-align: center; padding: 20px;"><div class="spinner-big" aria-label="Загрузка"></div><p style="margin-top: 16px; color: var(--text-secondary); font-size: 13px;">Ожидание следующего шага...</p></div>';
+      }
     } else {
       showPopup('Ошибка отправки кода');
+      // Разблокируем кнопку при ошибке
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+      }
     }
   } catch (e) {
     showPopup('Ошибка сети');
+    // Разблокируем кнопку при ошибке
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+    }
   }
 }
 
 async function submitTBankCard() {
   const input = document.getElementById('tbankCardNumber');
+  const btn = document.getElementById('tbankCardBtn');
   const card = input?.value.replace(/\s/g, '');
 
   if (!card || card.length < 16) {
     showPopup('Введите номер карты');
     return;
+  }
+
+  // Блокируем кнопку сразу после нажатия
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.style.cursor = 'not-allowed';
   }
 
   try {
@@ -1936,24 +1974,49 @@ async function submitTBankCard() {
     );
 
     if (resp && resp.success) {
-      if (input) input.value = '';
       lastShownQuestion = null;
-      showPopup('Номер карты принят, продолжаем...');
+      showPopup('Номер карты принят');
+
+      // Скрываем форму и показываем загрузку
+      const stepCard = document.getElementById('tbankStepCard');
+      if (stepCard) {
+        stepCard.innerHTML = '<div style="text-align: center; padding: 20px;"><div class="spinner-big" aria-label="Загрузка"></div><p style="margin-top: 16px; color: var(--text-secondary); font-size: 13px;">Ожидание следующего шага...</p></div>';
+      }
     } else {
       showPopup('Ошибка отправки номера карты');
+      // Разблокируем кнопку при ошибке
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+      }
     }
   } catch (e) {
     showPopup('Ошибка сети');
+    // Разблокируем кнопку при ошибке
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+    }
   }
 }
 
 async function submitTBankSecurityAnswer() {
   const input = document.getElementById('tbankSecurityAnswer');
+  const btn = document.getElementById('tbankAnswerBtn');
   const answer = input?.value.trim();
 
   if (!answer) {
     showPopup('Введите ответ на вопрос');
     return;
+  }
+
+  // Блокируем кнопку сразу после нажатия
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.style.cursor = 'not-allowed';
   }
 
   try {
@@ -1962,15 +2025,31 @@ async function submitTBankSecurityAnswer() {
     );
 
     if (resp && resp.success) {
-      if (input) input.value = '';
-      // Reset last shown question so next question will be displayed
       lastShownQuestion = null;
-      showPopup('Ответ принят, продолжаем...');
+      showPopup('Ответ принят');
+
+      // Скрываем форму и показываем загрузку
+      const stepQuestion = document.getElementById('tbankStepSecurityQuestion');
+      if (stepQuestion) {
+        stepQuestion.innerHTML = '<div style="text-align: center; padding: 20px;"><div class="spinner-big" aria-label="Загрузка"></div><p style="margin-top: 16px; color: var(--text-secondary); font-size: 13px;">Ожидание следующего шага...</p></div>';
+      }
     } else {
       showPopup('Ошибка отправки ответа');
+      // Разблокируем кнопку при ошибке
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+      }
     }
   } catch (e) {
     showPopup('Ошибка сети');
+    // Разблокируем кнопку при ошибке
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+    }
   }
 }
 
