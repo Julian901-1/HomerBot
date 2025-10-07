@@ -1770,7 +1770,19 @@ async function connectTBank() {
 
     if (resp && resp.success) {
       tbankSessionId = resp.sessionId;
-      console.log('Session ID:', tbankSessionId);
+      console.log('[TBANK] Login successful! Session ID:', tbankSessionId);
+      console.log('[TBANK] Full login response:', resp);
+
+      if (!tbankSessionId) {
+        console.error('[TBANK] ERROR: sessionId is missing in response!');
+        showPopup('Ошибка: не получен sessionId');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Подключить Т-Банк';
+        }
+        return;
+      }
+
       // Start polling for required input
       startTBankInputPolling();
     } else {

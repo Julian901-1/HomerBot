@@ -16,7 +16,7 @@ export class SessionManager {
    * @param {TBankAutomation} automation - Automation instance
    * @returns {string} Session ID
    */
-  async createSession(username, automation) {
+  createSession(username, automation) {
     // Check if we're at the session limit
     if (this.sessions.size >= this.MAX_SESSIONS) {
       console.log(`[SESSION] ⚠️ Max sessions (${this.MAX_SESSIONS}) reached, cleaning up oldest unauthenticated session`);
@@ -45,11 +45,12 @@ export class SessionManager {
       if (oldestSession) {
         const session = this.sessions.get(oldestSession);
         console.log(`[SESSION] Closing oldest session ${oldestSession} for user ${session.username}`);
-        try {
-          await session.automation.close();
-        } catch (e) {
+
+        // Close asynchronously in background (don't block session creation)
+        session.automation.close().catch(e => {
           console.error(`[SESSION] Error closing session ${oldestSession}:`, e);
-        }
+        });
+
         this.deleteSession(oldestSession);
       }
     }

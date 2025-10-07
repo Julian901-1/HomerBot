@@ -105,7 +105,11 @@ app.get('/api/auth/pending-input', (req, res) => {
   try {
     const { sessionId } = req.query;
 
+    console.log('[AUTH] Pending input check - sessionId:', sessionId);
+    console.log('[AUTH] Active sessions:', sessionManager.getSessionCount());
+
     if (!sessionId) {
+      console.log('[AUTH] ERROR: No sessionId provided');
       return res.status(400).json({
         success: false,
         error: 'Missing sessionId'
@@ -114,11 +118,15 @@ app.get('/api/auth/pending-input', (req, res) => {
 
     const session = sessionManager.getSession(sessionId);
     if (!session) {
+      console.log('[AUTH] ERROR: Session not found for sessionId:', sessionId);
+      console.log('[AUTH] Available session IDs:', Array.from(sessionManager.sessions.keys()));
       return res.status(404).json({
         success: false,
         error: 'Session not found'
       });
     }
+
+    console.log('[AUTH] Session found for user:', session.username);
 
     const pendingType = session.automation.getPendingInputType();
     const pendingData = session.automation.getPendingInputData();
