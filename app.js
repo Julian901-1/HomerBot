@@ -1794,11 +1794,16 @@ async function connectTBank() {
 function startTBankInputPolling() {
   if (tbankPollingInterval) clearInterval(tbankPollingInterval);
 
+  console.log('[TBANK POLLING] Starting polling with sessionId:', tbankSessionId);
+
   tbankPollingInterval = setInterval(async () => {
     try {
+      console.log('[TBANK POLLING] Checking pending input...');
       const resp = await apiGet(
         `?action=tbankCheckPendingInput&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}`
       );
+
+      console.log('[TBANK POLLING] Response:', resp);
 
       if (resp && resp.success) {
         if (resp.pendingType === 'sms') {

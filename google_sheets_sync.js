@@ -1276,6 +1276,29 @@ function tbankCheckPendingInput(hashedUsername, sessionId) {
 }
 
 /**
+ * Проверка ожидающего ввода от пользователя
+ */
+function tbankCheckPendingInput(hashedUsername, sessionId) {
+  try {
+    var url = TBANK_SERVICE_URL + '/auth/pending-input?sessionId=' + encodeURIComponent(sessionId);
+
+    var options = {
+      method: 'get',
+      muteHttpExceptions: true,
+      timeout: TBANK_REQUEST_TIMEOUT
+    };
+
+    var response = UrlFetchApp.fetch(url, options);
+    var result = JSON.parse(response.getContentText());
+
+    return result;
+  } catch (e) {
+    console.error('[TBANK] tbankCheckPendingInput error:', e);
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
  * Отправка пользовательского ввода (SMS или номер карты)
  */
 function tbankSubmitInput(hashedUsername, sessionId, value) {
