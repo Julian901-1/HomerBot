@@ -1199,14 +1199,9 @@ function tbankHealthCheck() {
  */
 function tbankLogin(hashedUsername, phone) {
   try {
-    // Получаем сохранённую карту, если есть
-    var savedCard = getTBankCard_(hashedUsername);
-
     var payload = JSON.stringify({
       username: hashedUsername,
-      phone: phone,
-      password: '', // Password removed, login handled by Puppeteer with user input
-      savedCard: savedCard // Передаём сохранённую карту в Puppeteer
+      phone: phone
     });
 
     var options = {
@@ -1278,17 +1273,7 @@ function tbankCheckPendingInput(hashedUsername, sessionId) {
  */
 function tbankSubmitInput(hashedUsername, sessionId, value) {
   try {
-    // Проверяем, является ли это номером карты (16 цифр) и сохраняем ДО отправки
-    var digitsOnly = value.replace(/\D/g, '');
-    console.log('[TBANK] tbankSubmitInput called: value=' + value + ', digitsOnly=' + digitsOnly + ', length=' + digitsOnly.length);
-
-    if (digitsOnly.length === 16) {
-      console.log('[TBANK] ✅ Detected card number, saving to HB_UserPrefs...');
-      saveTBankCard_(hashedUsername, value);
-      console.log('[TBANK] ✅ Card saved successfully');
-    } else {
-      console.log('[TBANK] Not a card number (digits length: ' + digitsOnly.length + ')');
-    }
+    console.log('[TBANK] tbankSubmitInput called: submitting user input to Puppeteer');
 
     // Отправляем на Puppeteer сервер
     var payload = JSON.stringify({

@@ -11,11 +11,10 @@ puppeteer.use(StealthPlugin());
  * T-Bank automation using Puppeteer with anti-detection
  */
 export class TBankAutomation {
-  constructor({ username, phone, password, savedCard, encryptionService }) {
+  constructor({ username, phone, password, encryptionService }) {
     this.username = username;
     this.encryptedPhone = phone;
     this.encryptedPassword = password;
-    this.savedCard = savedCard || null; // Saved card from database
     this.encryptionService = encryptionService;
 
     this.browser = null;
@@ -23,10 +22,10 @@ export class TBankAutomation {
     this.keepAliveInterval = null;
     this.sessionActive = false;
 
-    // Pending input system
+    // Pending input system - now fully dynamic
     this.pendingInputResolve = null;
-    this.pendingInputType = 'waiting'; // 'waiting', 'sms', 'card', 'security-question', null (null = login complete)
-    this.pendingInputData = null; // Additional data (e.g., question text for security-question)
+    this.pendingInputType = 'waiting'; // 'waiting', 'sms', 'dynamic-question', null (null = login complete)
+    this.pendingInputData = null; // Question text and field type for dynamic questions
   }
 
   /**
@@ -150,277 +149,183 @@ export class TBankAutomation {
         console.log('[TBANK] ❌ Step 2 error:', e.message);
       }
 
-      // Step 3: Optional card verification
-      try {
-        await this.page.waitForSelector('[automation-id="card-input"]', { timeout: 5000 });
-        console.log('[TBANK] ✅ Found card input field');
+      // Dynamic page processing loop after SMS
+      console.log('[TBANK] Starting dynamic page processing...');
+      let maxIterations = 15; // Защита от бесконечного цикла
+      let iteration = 0;
 
-        const pageHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
-        console.log('[TBANK] ========== CARD PAGE HTML START ==========');
-        console.log(pageHtml);
-        console.log('[TBANK] ========== CARD PAGE HTML END ==========');
+      while (iteration < maxIterations) {
+        iteration++;
+        console.log(`[TBANK] --- Page detection iteration ${iteration} ---`);
 
-        // Проверяем, есть ли сохранённая карта (будет передана через savedCard если есть)
-        let cardNumber = this.savedCard;
-
-        if (cardNumber) {
-          console.log('[TBANK] Using saved card from database');
-        } else {
-          console.log('[TBANK] No saved card, requesting from user...');
-          cardNumber = await this.waitForUserInput('card');
-          console.log('[TBANK] Received card number from user');
-        }
-
-        console.log('[TBANK] Typing card number into field...');
-        await this.page.type('[automation-id="card-input"]', cardNumber.replace(/\s/g, ''), { delay: 100 });
-
-        console.log('[TBANK] Clicking card submit button...');
-        await this.page.click('[automation-id="button-submit"]');
-
-        // Wait for navigation after card submit
-        await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
-          console.log('[TBANK] Navigation after card timeout or no navigation occurred:', e.message);
-        });
-        console.log('[TBANK] ✅ Card step completed, navigation finished');
-
-        // Логируем HTML страницы после навигации
-        const afterCardHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
-        console.log('[TBANK] ========== AFTER CARD SUBMIT HTML START ==========');
-        console.log(afterCardHtml);
-        console.log('[TBANK] ========== AFTER CARD SUBMIT HTML END ==========');
-
+        // Wait for page to stabilize
         await new Promise(resolve => setTimeout(resolve, 2000));
-      } catch (e) {
-        console.log('[TBANK] Step 3 not required or error:', e.message);
+
+        // Check if already logged in
         const currentUrl = this.page.url();
-        const pageHtml = await this.page.evaluate(() => document.documentElement.outerHTML).catch(() => 'Unable to get page HTML');
         console.log('[TBANK] Current URL:', currentUrl);
+
+        // Check for login success indicators
+        if (currentUrl.includes('/mybank/') || currentUrl.includes('/accounts') || currentUrl.includes('/main')) {
+          console.log('[TBANK] ✅ Detected /mybank/ or accounts page');
+          this.sessionActive = true;
+          this.pendingInputType = null;
+          this.startKeepAlive();
+          return {
+            success: true,
+            message: 'Login successful'
+          };
+        }
+
+        // Check for "Личный кабинет" button (another success indicator)
+        const personalCabinetButton = await this.page.$('[data-test="login-button click-area"]');
+        if (personalCabinetButton) {
+          console.log('[TBANK] ✅ Found "Личный кабинет" button, clicking it...');
+          await personalCabinetButton.click();
+          await new Promise(resolve => setTimeout(resolve, 3000));
+
+          // After clicking, check if we're on mybank
+          const newUrl = this.page.url();
+          if (newUrl.includes('/mybank/') || newUrl.includes('/accounts') || newUrl.includes('/main')) {
+            console.log('[TBANK] ✅ Successfully navigated to /mybank/');
+            this.sessionActive = true;
+            this.pendingInputType = null;
+            this.startKeepAlive();
+            return {
+              success: true,
+              message: 'Login successful'
+            };
+          }
+          continue;
+        }
+
+        // Get page content to analyze what we're looking at
+        const pageHtml = await this.page.evaluate(() => document.documentElement.outerHTML).catch(() => null);
+        const formTitle = await this.page.$eval('[automation-id="form-title"]', el => el.textContent.trim()).catch(() => null);
+        const formDescription = await this.page.$eval('[automation-id="form-description"]', el => el.textContent.trim()).catch(() => null);
+
+        console.log('[TBANK] Detected form title:', formTitle);
+        console.log('[TBANK] Detected form description:', formDescription);
         console.log('[TBANK] ========== CURRENT PAGE HTML START ==========');
-        console.log(pageHtml);
+        console.log(pageHtml || 'Unable to get page HTML');
         console.log('[TBANK] ========== CURRENT PAGE HTML END ==========');
-      }
 
-      // Step 3.5: Optional security question
-      try {
-        const securityQuestionTitle = await this.page.$('[automation-id="form-title"]');
-        if (securityQuestionTitle) {
-          const titleText = await this.page.evaluate(el => el.textContent, securityQuestionTitle);
+        // Check if there's a "Не сейчас" / "Cancel" button to skip optional steps
+        const cancelButton = await this.page.$('[automation-id="cancel-button"]');
+        if (cancelButton) {
+          console.log('[TBANK] ✅ Found "Не сейчас" button - this is an optional step, skipping...');
+          console.log(`[TBANK] Skipping optional step: "${formTitle || 'unknown'}"`);
+          await cancelButton.click();
+          await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(e => {
+            console.log('[TBANK] Navigation timeout after cancel:', e.message);
+          });
+          console.log('[TBANK] ✅ Optional step skipped');
+          continue;
+        }
 
-          if (titleText.includes('контрольный вопрос')) {
-            console.log('[TBANK] ✅ Found security question page');
+        // If no cancel button, we need to detect what input is required and ask user
+        // Try to find any input field with automation-id
+        const inputFields = await this.page.evaluate(() => {
+          const inputs = document.querySelectorAll('input[automation-id]');
+          return Array.from(inputs).map(input => ({
+            automationId: input.getAttribute('automation-id'),
+            type: input.type,
+            placeholder: input.placeholder,
+            name: input.name
+          }));
+        });
 
-            // Получаем текст вопроса
-            const questionElement = await this.page.$('[automation-id="form-description"]');
-            const questionText = await this.page.evaluate(el => el.textContent, questionElement);
-            console.log('[TBANK] Security question:', questionText);
+        console.log('[TBANK] Found input fields:', JSON.stringify(inputFields, null, 2));
 
-            // Запрашиваем ответ у пользователя
-            console.log('[TBANK] Waiting for user to provide security answer...');
-            const answer = await this.waitForUserInput('security-question', questionText);
-            console.log('[TBANK] Received security answer from user');
+        // Detect what kind of question this is based on available fields
+        if (inputFields.length > 0) {
+          const firstInput = inputFields[0];
+          let questionText = formTitle || '';
+          if (formDescription) {
+            questionText += ` (${formDescription})`;
+          }
 
-            // Вводим ответ
-            await this.page.type('[automation-id="answer-input"]', answer, { delay: 100 });
-            await new Promise(resolve => setTimeout(resolve, 1000));
+          console.log('[TBANK] ✅ Detected dynamic question that requires user input');
+          console.log('[TBANK] Question:', questionText);
+          console.log('[TBANK] Input field:', firstInput.automationId);
 
-            // Отправляем форму
-            console.log('[TBANK] Submitting security answer...');
-            await this.page.click('[automation-id="button-submit"]');
+          // Ask user for input
+          const userAnswer = await this.waitForUserInput('dynamic-question', {
+            question: questionText,
+            fieldType: firstInput.automationId,
+            inputType: firstInput.type
+          });
 
-            // Ждём навигации
+          console.log('[TBANK] Received answer from user, typing into field...');
+
+          // Type the answer into the field
+          const inputSelector = `[automation-id="${firstInput.automationId}"]`;
+          await this.page.type(inputSelector, userAnswer, { delay: 100 });
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          // Submit the form
+          const submitButton = await this.page.$('[automation-id="button-submit"]');
+          if (submitButton) {
+            console.log('[TBANK] Clicking submit button...');
+            await submitButton.click();
             await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
-              console.log('[TBANK] Navigation after security question timeout:', e.message);
+              console.log('[TBANK] Navigation timeout:', e.message);
             });
-            console.log('[TBANK] ✅ Security question step completed');
-
-            // Логируем HTML после ответа на вопрос
-            const afterQuestionHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
-            console.log('[TBANK] ========== AFTER SECURITY QUESTION HTML START ==========');
-            console.log(afterQuestionHtml);
-            console.log('[TBANK] ========== AFTER SECURITY QUESTION HTML END ==========');
-
-            // Check if we're already on /mybank/ after security question
-            const currentUrl = this.page.url();
-            console.log('[TBANK] Current URL after security question:', currentUrl);
-            if (currentUrl.includes('/mybank/')) {
-              console.log('[TBANK] ✅ Already on /mybank/ page, skipping login navigation steps');
-              const isLoggedIn = await this.checkLoginStatus();
-
-              if (isLoggedIn) {
-                this.sessionActive = true;
-                this.pendingInputType = null;
-                this.startKeepAlive();
-                return {
-                  success: true,
-                  message: 'Login successful'
-                };
-              }
-            }
+            console.log('[TBANK] ✅ Answer submitted');
+            continue;
           }
         }
-      } catch (e) {
-        console.log('[TBANK] Security question not required or error:', e.message);
-      }
 
-      // Step 4: PIN code setup (required or optional)
-      try {
-        const formText = await this.page.evaluate(() => document.body.textContent);
-        if (formText.includes('Придумайте код')) {
-          console.log('[TBANK] ✅ Found PIN code setup page');
-
-          // Логируем HTML страницы с PIN кодом
-          const pinPageHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
-          console.log('[TBANK] ========== PIN CODE PAGE HTML START ==========');
-          console.log(pinPageHtml);
-          console.log('[TBANK] ========== PIN CODE PAGE HTML END ==========');
-
-          // Проверяем, есть ли кнопка отмены
-          const cancelButton = await this.page.$('[automation-id="cancel-button"]');
-
-          if (cancelButton) {
-            console.log('[TBANK] Step 4: Cancel button found, rejecting PIN code setup...');
-            await cancelButton.click();
-
-            // Wait for navigation after clicking cancel
-            const navigationSuccess = await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).then(() => true).catch(e => {
-              console.log('[TBANK] Navigation after PIN cancel timeout:', e.message);
-              return false;
-            });
-
-            // Log page state after navigation (whether successful or timed out)
-            const currentUrl = this.page.url();
-            console.log('[TBANK] Current URL after PIN cancel:', currentUrl);
-
-            const pageHtmlAfterCancel = await this.page.content();
-            console.log('[TBANK] ========== PAGE AFTER PIN CANCEL HTML START ==========');
-            console.log(pageHtmlAfterCancel);
-            console.log('[TBANK] ========== PAGE AFTER PIN CANCEL HTML END ==========');
-
-            if (navigationSuccess) {
-              console.log('[TBANK] ✅ PIN code setup rejected, navigation finished successfully');
-            } else {
-              console.log('[TBANK] ⚠️ PIN code setup rejected, but navigation timed out - continuing anyway');
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Check if we're already on /mybank/ after PIN cancel
-            if (currentUrl.includes('/mybank/')) {
-              console.log('[TBANK] ✅ Already on /mybank/ page, skipping login navigation steps');
-              const isLoggedIn = await this.checkLoginStatus();
-
-              if (isLoggedIn) {
-                this.sessionActive = true;
-                this.pendingInputType = null;
-                this.startKeepAlive();
-                return {
-                  success: true,
-                  message: 'Login successful'
-                };
-              }
-            }
-          } else {
-            console.log('[TBANK] Step 4: No cancel button, PIN code is required. Setting code to 1337...');
-
-            // Вводим код 1337 (по одной цифре в каждое поле)
-            const pinCode = '1337';
-            let pinSetSuccessfully = true;
-
-            for (let i = 0; i < pinCode.length; i++) {
-              const pinInput = await this.page.$(`[automation-id="pin-code-input-${i}"]`);
-              if (pinInput) {
-                await pinInput.type(pinCode[i], { delay: 100 });
-                console.log(`[TBANK] Entered digit ${i + 1}: ${pinCode[i]}`);
-                await new Promise(resolve => setTimeout(resolve, 300));
-              } else {
-                console.log(`[TBANK] ❌ PIN input ${i} not found`);
-                pinSetSuccessfully = false;
-                break;
-              }
-            }
-
-            if (pinSetSuccessfully) {
-              await new Promise(resolve => setTimeout(resolve, 1000));
-
-              // Подтверждаем
-              const submitButton = await this.page.$('[automation-id="button-submit"]');
-              if (submitButton) {
-                console.log('[TBANK] Clicking submit button...');
-                await submitButton.click();
-                await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(e => {
-                  console.log('[TBANK] Navigation after PIN setup timeout:', e.message);
-                });
-                console.log('[TBANK] ✅ PIN code 1337 set successfully');
-
-                // Check if we're already on /mybank/ after PIN setup
-                const currentUrl = this.page.url();
-                console.log('[TBANK] Current URL after PIN setup:', currentUrl);
-                if (currentUrl.includes('/mybank/')) {
-                  console.log('[TBANK] ✅ Already on /mybank/ page, skipping login navigation steps');
-                  const isLoggedIn = await this.checkLoginStatus();
-
-                  if (isLoggedIn) {
-                    this.sessionActive = true;
-                    this.pendingInputType = null;
-                    this.startKeepAlive();
-                    return {
-                      success: true,
-                      message: 'Login successful'
-                    };
-                  }
-                }
-              } else {
-                console.log('[TBANK] ❌ Submit button not found');
-              }
-            }
-          }
+        // If no inputs and no cancel button, try clicking any visible links to navigate
+        const internetBankLink = await this.page.$('[data-item-name="Интернет-банк"]');
+        if (internetBankLink) {
+          console.log('[TBANK] Found "Интернет-банк" link, clicking...');
+          await internetBankLink.click();
+          await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(e => {
+            console.log('[TBANK] Navigation timeout:', e.message);
+          });
+          continue;
         }
-      } catch (e) {
-        console.log('[TBANK] Step 4 error:', e.message);
+
+        // If nothing detected, we might be stuck - break the loop
+        console.log('[TBANK] ⚠️ No recognizable elements found on page, breaking loop...');
+        break;
       }
 
-      // Step 5: Optional password rejection
-      const passwordForm = await this.page.$('[automation-id="set-password-form"]');
-      if (passwordForm) {
-        console.log('[TBANK] Step 5: Rejecting password setup...');
-        await this.page.click('[automation-id="cancel-button"]');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
+      console.log('[TBANK] ⚠️ Exited dynamic page loop - performing final checks...');
 
-      // Step 6: Navigate to personal cabinet
-      const loginButton = await this.page.$('[data-test="login-button click-area"]');
-      if (loginButton) {
-        console.log('[TBANK] Step 6: Navigating to personal cabinet...');
-        await this.page.click('[data-test="login-button click-area"]');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-
-      // Step 7: Navigate to internet banking
-      const internetBankLink = await this.page.$('[data-item-name="Интернет-банк"]');
-      if (internetBankLink) {
-        console.log('[TBANK] Step 7: Navigating to internet banking...');
-        await this.page.click('[data-item-name="Интернет-банк"]');
-        await this.page.waitForNavigation({ waitUntil: 'networkidle2' });
-      }
-
-      // Check if we're logged in
-      const isLoggedIn = await this.checkLoginStatus();
-
-      if (isLoggedIn) {
+      // Final check: are we logged in?
+      const finalUrl = this.page.url();
+      if (finalUrl.includes('/mybank/') || finalUrl.includes('/accounts') || finalUrl.includes('/main')) {
+        console.log('[TBANK] ✅ Final URL check passed - logged in successfully');
         this.sessionActive = true;
-        this.pendingInputType = null; // Signal login complete
+        this.pendingInputType = null;
         this.startKeepAlive();
-
         return {
           success: true,
           message: 'Login successful'
         };
       }
 
+      // If not on mybank yet, check if there's a way to navigate there
+      const checkLoginStatus = await this.checkLoginStatus();
+      if (checkLoginStatus) {
+        console.log('[TBANK] ✅ Login status check passed');
+        this.sessionActive = true;
+        this.pendingInputType = null;
+        this.startKeepAlive();
+        return {
+          success: true,
+          message: 'Login successful'
+        };
+      }
+
+      // Login failed
+      console.log('[TBANK] ❌ Login failed - could not reach mybank page');
       this.pendingInputType = 'error';
       return {
         success: false,
-        error: 'Login failed - unexpected state'
+        error: 'Login failed - could not complete authentication flow'
       };
 
     } catch (error) {
@@ -435,14 +340,17 @@ export class TBankAutomation {
 
 
   /**
-   * Wait for user input (SMS code, card number, or security question answer)
-   * @param {string} type - Type of input ('sms', 'card', 'security-question')
-   * @param {string} [data] - Additional data (e.g., question text for security-question)
+   * Wait for user input dynamically
+   * @param {string} type - Type of input ('sms', 'dynamic-question')
+   * @param {object|string} [data] - Additional data (e.g., question object for dynamic questions)
    */
   async waitForUserInput(type, data = null) {
     console.log(`[TBANK] Waiting for user to provide ${type}...`);
+    if (data) {
+      console.log(`[TBANK] Question data:`, JSON.stringify(data, null, 2));
+    }
     this.pendingInputType = type;
-    this.pendingInputData = data; // Store question text or other data
+    this.pendingInputData = data;
 
     return new Promise((resolve) => {
       this.pendingInputResolve = resolve;

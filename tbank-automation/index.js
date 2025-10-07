@@ -33,7 +33,7 @@ app.get('/health', (req, res) => {
  */
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { username, phone, savedCard } = req.body;
+    const { username, phone } = req.body;
 
     if (!username || !phone) {
       return res.status(400).json({
@@ -43,11 +43,6 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     console.log(`[AUTH] Login request for user: ${username}`);
-    if (savedCard) {
-      console.log(`[AUTH] Found saved card for user: ${savedCard}`);
-    } else {
-      console.log(`[AUTH] No saved card for user`);
-    }
 
     // Encrypt credentials
     const encryptedPhone = encryptionService.encrypt(phone);
@@ -57,7 +52,6 @@ app.post('/api/auth/login', async (req, res) => {
       username,
       phone: encryptedPhone,
       password: '', // Not used anymore
-      savedCard: savedCard || null,
       encryptionService
     });
 
@@ -151,13 +145,6 @@ app.post('/api/auth/submit-input', (req, res) => {
         success: false,
         error: 'Session not found'
       });
-    }
-
-    // Check if this is a card number
-    const digitsOnly = value.replace(/\D/g, '');
-    if (digitsOnly.length === 16) {
-      console.log(`[AUTH] ✅ Card number detected: ${value}`);
-      console.log(`[AUTH] Card will be saved by Google Apps Script when it calls this endpoint`);
     }
 
     const submitted = session.automation.submitUserInput(value);
