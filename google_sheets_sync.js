@@ -244,6 +244,19 @@ function doGet(e) {
       case 'tbankSaveSessionId':
         return jsonOk(tbankSaveSessionId(hashedUsername, p.sessionId));
 
+      // >>> T-Bank накопительные счета и расписание переводов
+      case 'tbankSaveVklad':
+        return jsonOk(tbankSaveVklad(hashedUsername, p.vkladId, p.vkladName));
+
+      case 'tbankGetVklad':
+        return jsonOk(tbankGetVklad(hashedUsername));
+
+      case 'tbankSaveTransferSchedule':
+        return jsonOk(tbankSaveTransferSchedule(hashedUsername, p.transferToTime, p.transferFromTime));
+
+      case 'tbankGetTransferSchedule':
+        return jsonOk(tbankGetTransferSchedule(hashedUsername));
+
       default:
         return jsonErr('Unknown action');
     }
@@ -1516,6 +1529,161 @@ function tbankLogout(hashedUsername, sessionId) {
   }
 }
 
+/**
+ * Сохраняет данные о накопительном счёте в HB_UserPrefs
+ * @param {string} hashedUsername - Хешированное имя пользователя
+ * @param {string} vkladId - ID накопительного счёта
+ * @param {string} vkladName - Название накопительного счёта
+ */
+function saveTBankVklad_(hashedUsername, vkladId, vkladName) {
+  try {
+    console.log('[TBANK] saveTBankVklad_ START: user=' + hashedUsername + ', id=' + vkladId + ', name=' + vkladName);
+
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
+
+    // Сохраняем ID в колонку I (9)
+    prefsSheet.getRange(row, 9).setValue(vkladId);
+
+    // Сохраняем название в колонку L (12)
+    prefsSheet.getRange(row, 12).setValue(vkladName);
+
+    console.log('[TBANK] ✅ Successfully saved vklad data to row ' + row);
+  } catch (e) {
+    console.error('[TBANK] ❌ Error saving vklad: ' + e.message);
+    console.error('[TBANK] Error stack: ' + e.stack);
+  }
+}
+
+/**
+ * Получает данные о накопительном счёте из HB_UserPrefs
+ * @param {string} hashedUsername - Хешированное имя пользователя
+ * @returns {Object} Объект {vkladId, vkladName}
+ */
+function getTBankVklad_(hashedUsername) {
+  try {
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, false);
+
+    const vkladId = prefsSheet.getRange(row, 9).getValue();
+    const vkladName = prefsSheet.getRange(row, 12).getValue();
+
+    console.log('[TBANK] Retrieved vklad for user ' + hashedUsername + ':', JSON.stringify({vkladId, vkladName}));
+    return {
+      vkladId: vkladId || null,
+      vkladName: vkladName || null
+    };
+  } catch (e) {
+    console.error('[TBANK] Error retrieving vklad: ' + e.message);
+    return { vkladId: null, vkladName: null };
+  }
+}
+
+/**
+ * Сохраняет расписание переводов на/с накопительного счёта
+ * @param {string} hashedUsername - Хешированное имя пользователя
+ * @param {string} transferToTime - Время перевода на вклад (HH:MM)
+ * @param {string} transferFromTime - Время перевода с вклада (HH:MM)
+ */
+function saveTBankTransferSchedule_(hashedUsername, transferToTime, transferFromTime) {
+  try {
+    console.log('[TBANK] saveTBankTransferSchedule_ START: user=' + hashedUsername);
+    console.log('[TBANK] To: ' + transferToTime + ', From: ' + transferFromTime);
+
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
+
+    // Сохраняем время перевода на вклад в колонку J (10)
+    if (transferToTime) {
+      prefsSheet.getRange(row, 10).setValue(transferToTime);
+    }
+
+    // Сохраняем время перевода с вклада в колонку K (11)
+    if (transferFromTime) {
+      prefsSheet.getRange(row, 11).setValue(transferFromTime);
+    }
+
+    console.log('[TBANK] ✅ Successfully saved transfer schedule to row ' + row);
+  } catch (e) {
+    console.error('[TBANK] ❌ Error saving transfer schedule: ' + e.message);
+    console.error('[TBANK] Error stack: ' + e.stack);
+  }
+}
+
+/**
+ * Получает расписание переводов из HB_UserPrefs
+ * @param {string} hashedUsername - Хешированное имя пользователя
+ * @returns {Object} Объект {transferToTime, transferFromTime}
+ */
+function getTBankTransferSchedule_(hashedUsername) {
+  try {
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, false);
+
+    const transferToTime = prefsSheet.getRange(row, 10).getValue();
+    const transferFromTime = prefsSheet.getRange(row, 11).getValue();
+
+    console.log('[TBANK] Retrieved schedule for user ' + hashedUsername + ':', JSON.stringify({transferToTime, transferFromTime}));
+    return {
+      transferToTime: transferToTime || null,
+      transferFromTime: transferFromTime || null
+    };
+  } catch (e) {
+    console.error('[TBANK] Error retrieving transfer schedule: ' + e.message);
+    return { transferToTime: null, transferFromTime: null };
+  }
+}
+
+/**
+ * Прокси-функция для сохранения данных о накопительном счёте
+ */
+function tbankSaveVklad(hashedUsername, vkladId, vkladName) {
+  try {
+    saveTBankVklad_(hashedUsername, vkladId, vkladName);
+    return { success: true };
+  } catch (e) {
+    console.error('tbankSaveVklad error:', e);
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Прокси-функция для получения данных о накопительном счёте
+ */
+function tbankGetVklad(hashedUsername) {
+  try {
+    return getTBankVklad_(hashedUsername);
+  } catch (e) {
+    console.error('tbankGetVklad error:', e);
+    return { vkladId: null, vkladName: null };
+  }
+}
+
+/**
+ * Прокси-функция для сохранения расписания переводов
+ */
+function tbankSaveTransferSchedule(hashedUsername, transferToTime, transferFromTime) {
+  try {
+    saveTBankTransferSchedule_(hashedUsername, transferToTime, transferFromTime);
+    return { success: true };
+  } catch (e) {
+    console.error('tbankSaveTransferSchedule error:', e);
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Прокси-функция для получения расписания переводов
+ */
+function tbankGetTransferSchedule(hashedUsername) {
+  try {
+    return getTBankTransferSchedule_(hashedUsername);
+  } catch (e) {
+    console.error('tbankGetTransferSchedule error:', e);
+    return { transferToTime: null, transferFromTime: null };
+  }
+}
+
 function ensureRequestsSheet_() {
     const ss = SpreadsheetApp.openById(SHEET_ID);
     let sh = ss.getSheetByName(REQ_SHEET);
@@ -1582,12 +1750,37 @@ function ensurePrefsSheet_() {
     if (!sh) {
         sh = ss.insertSheet(PREFS_SHEET);
         // ВАЖНО: displayName НЕ хранится (соблюдение 152-ФЗ)
-        sh.getRange(1, 1, 1, 7).setValues([['hashedUsername', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency', 'autoRenew', 'tbankSessionId']]);
+        sh.getRange(1, 1, 1, 12).setValues([['hashedUsername', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency', 'autoRenew', 'tbankSessionId', 'tbankBalances (JSON)', 'tbankVkladId', 'transferToVkladTime', 'transferFromVkladTime', 'tbankVkladName']]);
     } else {
-        // Проверяем, есть ли уже колонка G (tbankSessionId), если нет - обновляем заголовок
-        var header = sh.getRange(1, 7).getValue();
-        if (!header || header === 'tbankCard' || header !== 'tbankSessionId') {
+        // Проверяем, есть ли уже новые колонки, если нет - добавляем заголовки
+        var header7 = sh.getRange(1, 7).getValue();
+        if (!header7 || header7 === 'tbankCard' || header7 !== 'tbankSessionId') {
             sh.getRange(1, 7).setValue('tbankSessionId');
+        }
+
+        var header8 = sh.getRange(1, 8).getValue();
+        if (!header8 || header8 !== 'tbankBalances (JSON)') {
+            sh.getRange(1, 8).setValue('tbankBalances (JSON)');
+        }
+
+        var header9 = sh.getRange(1, 9).getValue();
+        if (!header9 || header9 !== 'tbankVkladId') {
+            sh.getRange(1, 9).setValue('tbankVkladId');
+        }
+
+        var header10 = sh.getRange(1, 10).getValue();
+        if (!header10 || header10 !== 'transferToVkladTime') {
+            sh.getRange(1, 10).setValue('transferToVkladTime');
+        }
+
+        var header11 = sh.getRange(1, 11).getValue();
+        if (!header11 || header11 !== 'transferFromVkladTime') {
+            sh.getRange(1, 11).setValue('transferFromVkladTime');
+        }
+
+        var header12 = sh.getRange(1, 12).getValue();
+        if (!header12 || header12 !== 'tbankVkladName') {
+            sh.getRange(1, 12).setValue('tbankVkladName');
         }
     }
     return sh;

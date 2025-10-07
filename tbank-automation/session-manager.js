@@ -1,13 +1,23 @@
 import crypto from 'crypto';
+import { shouldExecuteNow, formatTime, calculateNextExecutionTime } from './time-utils.js';
 
 /**
  * Manages user sessions and active browser instances
+ * Also handles scheduled transfers to/from saving accounts
  */
 export class SessionManager {
   constructor() {
     this.sessions = new Map();
     this.SESSION_TIMEOUT = Infinity; // Infinite - sessions never expire automatically
     this.MAX_SESSIONS = 3; // Maximum concurrent sessions to prevent memory overflow
+
+    // Track last execution times for scheduled transfers
+    this.lastTransferToSaving = new Map(); // username -> timestamp
+    this.lastTransferFromSaving = new Map(); // username -> timestamp
+
+    // Interval for checking scheduled transfers (every 5 minutes)
+    this.schedulerInterval = null;
+    this.SCHEDULER_CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
   }
 
   /**
@@ -206,6 +216,225 @@ export class SessionManager {
       authenticated: session.authenticated,
       createdAt: session.createdAt,
       lastActivity: session.lastActivity
+    };
+  }
+
+  /**
+   * Start the scheduler for automatic transfers
+   */
+  startScheduler() {
+    if (this.schedulerInterval) {
+      console.log('[SCHEDULER] Already running');
+      return;
+    }
+
+    console.log(`[SCHEDULER] Starting with check interval: ${this.SCHEDULER_CHECK_INTERVAL / 1000}s`);
+
+    this.schedulerInterval = setInterval(() => {
+      this.checkScheduledTransfers().catch(err => {
+        console.error('[SCHEDULER] Error checking scheduled transfers:', err);
+      });
+    }, this.SCHEDULER_CHECK_INTERVAL);
+
+    // Run immediately on start
+    this.checkScheduledTransfers().catch(err => {
+      console.error('[SCHEDULER] Error on initial check:', err);
+    });
+  }
+
+  /**
+   * Stop the scheduler
+   */
+  stopScheduler() {
+    if (this.schedulerInterval) {
+      clearInterval(this.schedulerInterval);
+      this.schedulerInterval = null;
+      console.log('[SCHEDULER] Stopped');
+    }
+  }
+
+  /**
+   * Check and execute scheduled transfers for all authenticated sessions
+   */
+  async checkScheduledTransfers() {
+    console.log('[SCHEDULER] Checking scheduled transfers...');
+
+    for (const [sessionId, session] of this.sessions.entries()) {
+      if (!session.authenticated || !session.automation) {
+        continue;
+      }
+
+      try {
+        // Get user preferences from the session (should be fetched from Google Sheets)
+        // For now, we'll need to pass these as session metadata
+        const { transferToVkladTime, transferFromVkladTime, tbankVkladId, tbankVkladName } = session.metadata || {};
+
+        if (!transferToVkladTime && !transferFromVkladTime) {
+          continue; // No schedule configured for this user
+        }
+
+        const username = session.username;
+
+        // Check if it's time to transfer TO saving account
+        if (transferToVkladTime) {
+          const lastTransferTo = this.lastTransferToSaving.get(username);
+          if (shouldExecuteNow(transferToVkladTime, lastTransferTo)) {
+            console.log(`[SCHEDULER] Executing transfer TO saving account for ${username}...`);
+            await this.executeTransferToSaving(session);
+            this.lastTransferToSaving.set(username, new Date());
+          }
+        }
+
+        // Check if it's time to transfer FROM saving account
+        if (transferFromVkladTime) {
+          const lastTransferFrom = this.lastTransferFromSaving.get(username);
+          if (shouldExecuteNow(transferFromVkladTime, lastTransferFrom)) {
+            console.log(`[SCHEDULER] Executing transfer FROM saving account for ${username}...`);
+            await this.executeTransferFromSaving(session);
+            this.lastTransferFromSaving.set(username, new Date());
+          }
+        }
+
+      } catch (error) {
+        console.error(`[SCHEDULER] Error processing transfers for session ${sessionId}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Execute transfer TO saving account
+   * @param {Object} session - Session object
+   */
+  async executeTransferToSaving(session) {
+    const { automation, metadata } = session;
+    const { tbankVkladName } = metadata || {};
+
+    if (!tbankVkladName) {
+      console.log('[SCHEDULER] No saving account configured, skipping transfer TO saving');
+      return;
+    }
+
+    try {
+      // Get current debit accounts with balances
+      const debitAccounts = await automation.getAccounts();
+
+      if (!debitAccounts || debitAccounts.length === 0) {
+        console.log('[SCHEDULER] No debit accounts found');
+        return;
+      }
+
+      // Store current balances in session metadata for later restoration
+      const balanceSnapshot = debitAccounts.map(acc => ({
+        name: acc.name,
+        balance: acc.balance
+      }));
+
+      session.metadata.balanceSnapshot = balanceSnapshot;
+
+      // Transfer all funds from each debit account to saving account
+      for (const debitAccount of debitAccounts) {
+        if (debitAccount.balance > 0) {
+          console.log(`[SCHEDULER] Transferring ${debitAccount.balance} RUB from "${debitAccount.name}" to "${tbankVkladName}"`);
+
+          const result = await automation.transferToSavingAccount(
+            debitAccount.name,
+            tbankVkladName,
+            debitAccount.balance
+          );
+
+          if (result.success) {
+            console.log(`[SCHEDULER] ✅ Transfer successful: ${debitAccount.name} -> ${tbankVkladName}`);
+          } else {
+            console.error(`[SCHEDULER] ❌ Transfer failed: ${result.error}`);
+          }
+
+          // Add delay between transfers to appear more human-like
+          await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
+        }
+      }
+
+      console.log('[SCHEDULER] ✅ All transfers TO saving account completed');
+
+    } catch (error) {
+      console.error('[SCHEDULER] Error executing transfer TO saving:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute transfer FROM saving account back to debit accounts
+   * @param {Object} session - Session object
+   */
+  async executeTransferFromSaving(session) {
+    const { automation, metadata } = session;
+    const { tbankVkladName, balanceSnapshot } = metadata || {};
+
+    if (!tbankVkladName) {
+      console.log('[SCHEDULER] No saving account configured, skipping transfer FROM saving');
+      return;
+    }
+
+    if (!balanceSnapshot || balanceSnapshot.length === 0) {
+      console.log('[SCHEDULER] No balance snapshot found, cannot restore balances');
+      return;
+    }
+
+    try {
+      // Transfer funds back to each debit account according to the snapshot
+      for (const accountSnapshot of balanceSnapshot) {
+        if (accountSnapshot.balance > 0) {
+          console.log(`[SCHEDULER] Transferring ${accountSnapshot.balance} RUB from "${tbankVkladName}" to "${accountSnapshot.name}"`);
+
+          const result = await automation.transferFromSavingAccount(
+            tbankVkladName,
+            accountSnapshot.name,
+            accountSnapshot.balance
+          );
+
+          if (result.success) {
+            console.log(`[SCHEDULER] ✅ Transfer successful: ${tbankVkladName} -> ${accountSnapshot.name}`);
+          } else {
+            console.error(`[SCHEDULER] ❌ Transfer failed: ${result.error}`);
+          }
+
+          // Add delay between transfers
+          await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000));
+        }
+      }
+
+      // Clear balance snapshot after restoration
+      delete session.metadata.balanceSnapshot;
+
+      console.log('[SCHEDULER] ✅ All transfers FROM saving account completed');
+
+    } catch (error) {
+      console.error('[SCHEDULER] Error executing transfer FROM saving:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update session metadata (for storing user preferences)
+   * @param {string} sessionId - Session identifier
+   * @param {Object} metadata - Metadata object
+   */
+  updateSessionMetadata(sessionId, metadata) {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.metadata = { ...session.metadata, ...metadata };
+      console.log(`[SESSION] Updated metadata for session ${sessionId}`);
+    }
+  }
+
+  /**
+   * Get last transfer times for a user
+   * @param {string} username - User identifier
+   * @returns {Object} Last transfer timestamps
+   */
+  getLastTransferTimes(username) {
+    return {
+      lastTransferToSaving: this.lastTransferToSaving.get(username) || null,
+      lastTransferFromSaving: this.lastTransferFromSaving.get(username) || null
     };
   }
 }

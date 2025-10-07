@@ -668,7 +668,636 @@ export class TBankAutomation {
   }
 
   /**
-   * Transfer money between own accounts
+   * Get all saving accounts (накопительные счета) from /mybank/ page
+   */
+  async getSavingAccounts() {
+    try {
+      if (!this.sessionActive) {
+        throw new Error('Not logged in');
+      }
+
+      console.log('[TBANK] Fetching saving accounts...');
+
+      // Ensure we're on /mybank/ page
+      const currentUrl = this.page.url();
+      if (!currentUrl.includes('/mybank/')) {
+        console.log('[TBANK] Not on /mybank/ page, navigating...');
+        await this.page.goto('https://www.tbank.ru/mybank/', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+      }
+
+      // Wait for page to fully load
+      console.log('[TBANK] Waiting for page to fully load...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Wait for account widgets to load
+      console.log('[TBANK] Waiting for account widgets...');
+      await this.page.waitForSelector('[data-qa-type^="atomPanel widget"]', {
+        timeout: 20000
+      });
+
+      // Extract saving account information
+      const savingAccounts = await this.page.evaluate(() => {
+        const widgets = Array.from(
+          document.querySelectorAll('[data-qa-type^="atomPanel widget"]')
+        );
+
+        const savings = [];
+
+        widgets.forEach(widget => {
+          const widgetClass = widget.getAttribute('data-qa-type');
+
+          // Only process saving accounts (widget-savings)
+          if (widgetClass.includes('widget-savings')) {
+            const nameEl = widget.querySelector('[data-qa-type="subtitle"] span');
+            const balanceEl = widget.querySelector('[data-qa-type="title"] [data-sensitive="true"]');
+
+            if (nameEl && balanceEl) {
+              const name = nameEl.textContent.trim();
+              const balanceText = balanceEl.textContent.trim();
+
+              // Extract widget ID
+              const widgetId = widgetClass.match(/widget-savings widget-(\d+)/)?.[1] ||
+                              widgetClass.match(/widget-(\d+)/)?.[1] || 'unknown';
+
+              // Parse balance (remove &nbsp; and convert to number)
+              const balanceClean = balanceText.replace(/\u00A0/g, '').replace(/\s/g, '');
+              const balanceValue = parseFloat(balanceClean.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+
+              savings.push({
+                id: widgetId,
+                name: name,
+                balance: balanceValue,
+                balanceFormatted: balanceText,
+                type: 'saving',
+                currency: 'RUB'
+              });
+            }
+          }
+        });
+
+        return savings;
+      });
+
+      console.log(`[TBANK] ✅ Found ${savingAccounts.length} saving accounts`);
+
+      // Log each saving account
+      savingAccounts.forEach(acc => {
+        console.log(`[TBANK] ✅ [SAVING] ${acc.name}: ${acc.balanceFormatted} (ID: ${acc.id})`);
+      });
+
+      console.log('[TBANK] 📊 Saving account details:', JSON.stringify(savingAccounts, null, 2));
+
+      return savingAccounts;
+
+    } catch (error) {
+      console.error('[TBANK] Error getting saving accounts:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new saving account (накопительный счёт)
+   * Follows the path: /mybank/ -> "Новый счет или продукт" -> "Открыть накопительный счет" -> "Открыть счет"
+   */
+  async createSavingAccount() {
+    try {
+      if (!this.sessionActive) {
+        throw new Error('Not logged in');
+      }
+
+      console.log('[TBANK] Creating new saving account...');
+
+      // Ensure we're on /mybank/ page
+      const currentUrl = this.page.url();
+      if (!currentUrl.includes('/mybank/')) {
+        console.log('[TBANK] Not on /mybank/ page, navigating...');
+        await this.page.goto('https://www.tbank.ru/mybank/', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+      }
+
+      // Wait for page to fully load
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Step 1: Click "Новый счет или продукт" button
+      console.log('[TBANK] Step 1: Looking for "Новый счет или продукт" button...');
+
+      // Find button by text content
+      const newAccountButton = await this.page.evaluateHandle(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        return buttons.find(btn => btn.textContent.includes('Новый счет или продукт'));
+      });
+
+      if (!newAccountButton || newAccountButton.asElement() === null) {
+        throw new Error('Could not find "Новый счет или продукт" button');
+      }
+
+      console.log('[TBANK] ✅ Found "Новый счет или продукт" button, clicking...');
+      await newAccountButton.asElement().click();
+      await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+
+      // Step 2: Click "Открыть накопительный счет" link
+      console.log('[TBANK] Step 2: Looking for "Открыть накопительный счет" link...');
+
+      // Wait for the panel to appear and find the link
+      await this.page.waitForSelector('a[href*="/deposit/create-saving/"]', {
+        timeout: 10000
+      });
+
+      const savingAccountLink = await this.page.$('a[href*="/deposit/create-saving/"]');
+      if (!savingAccountLink) {
+        throw new Error('Could not find "Открыть накопительный счет" link');
+      }
+
+      console.log('[TBANK] ✅ Found "Открыть накопительный счет" link, clicking...');
+      await savingAccountLink.click();
+
+      // Wait for navigation
+      await this.page.waitForNavigation({
+        waitUntil: 'networkidle2',
+        timeout: 15000
+      }).catch(e => {
+        console.log('[TBANK] Navigation timeout or no navigation needed:', e.message);
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Step 3: Click "Открыть счет" submit button
+      console.log('[TBANK] Step 3: Looking for "Открыть счет" submit button...');
+
+      // Find the submit button by data-qa-file and text
+      const submitButton = await this.page.evaluateHandle(() => {
+        const buttons = Array.from(document.querySelectorAll('button[data-qa-file="CreateSavingForm"]'));
+        return buttons.find(btn => btn.textContent.includes('Открыть счет'));
+      });
+
+      if (!submitButton || submitButton.asElement() === null) {
+        throw new Error('Could not find "Открыть счет" submit button');
+      }
+
+      console.log('[TBANK] ✅ Found "Открыть счет" button, clicking...');
+      await submitButton.asElement().click();
+
+      // Wait for account creation to complete
+      await this.page.waitForNavigation({
+        waitUntil: 'networkidle2',
+        timeout: 15000
+      }).catch(e => {
+        console.log('[TBANK] Navigation timeout:', e.message);
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Verify we're back on /mybank/ or a success page
+      const finalUrl = this.page.url();
+      console.log('[TBANK] Final URL after creating saving account:', finalUrl);
+
+      // Navigate back to /mybank/ if needed
+      if (!finalUrl.includes('/mybank/')) {
+        console.log('[TBANK] Navigating back to /mybank/...');
+        await this.page.goto('https://www.tbank.ru/mybank/', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
+      // Fetch the newly created saving account
+      console.log('[TBANK] Fetching newly created saving account...');
+      const savingAccounts = await this.getSavingAccounts();
+
+      if (savingAccounts.length === 0) {
+        throw new Error('Saving account was not created or could not be found');
+      }
+
+      // Return the first saving account (newly created one)
+      const newAccount = savingAccounts[0];
+      console.log('[TBANK] ✅ Saving account created successfully!');
+      console.log(`[TBANK] Account ID: ${newAccount.id}, Name: ${newAccount.name}`);
+
+      return {
+        success: true,
+        account: newAccount
+      };
+
+    } catch (error) {
+      console.error('[TBANK] Error creating saving account:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Transfer money from a debit account to saving account
+   * @param {string} debitAccountName - Name of the debit account (e.g., "Совместный счет")
+   * @param {string} savingAccountName - Name of the saving account (e.g., "Накопительный счет")
+   * @param {number} amount - Amount to transfer
+   */
+  async transferToSavingAccount(debitAccountName, savingAccountName, amount) {
+    try {
+      if (!this.sessionActive) {
+        throw new Error('Not logged in');
+      }
+
+      console.log(`[TBANK] Transferring ${amount} RUB from "${debitAccountName}" to "${savingAccountName}"...`);
+
+      // Ensure we're on /mybank/ page
+      const currentUrl = this.page.url();
+      if (!currentUrl.includes('/mybank/')) {
+        console.log('[TBANK] Not on /mybank/ page, navigating...');
+        await this.page.goto('https://www.tbank.ru/mybank/', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
+      // Step 1: Click on the debit account widget
+      console.log(`[TBANK] Step 1: Looking for debit account widget "${debitAccountName}"...`);
+
+      const debitAccountWidget = await this.page.evaluateHandle((accountName) => {
+        const widgets = Array.from(document.querySelectorAll('[data-qa-type^="atomPanel widget widget-debit"]'));
+        return widgets.find(widget => {
+          const nameEl = widget.querySelector('[data-qa-type="subtitle"] span');
+          return nameEl && nameEl.textContent.trim() === accountName;
+        });
+      }, debitAccountName);
+
+      if (!debitAccountWidget || debitAccountWidget.asElement() === null) {
+        throw new Error(`Could not find debit account with name "${debitAccountName}"`);
+      }
+
+      console.log('[TBANK] ✅ Found debit account, clicking...');
+      const debitLink = await debitAccountWidget.asElement().$('a[data-qa-type="link click-area"]');
+      if (!debitLink) {
+        throw new Error('Could not find link in debit account widget');
+      }
+
+      await debitLink.click();
+      await this.page.waitForNavigation({
+        waitUntil: 'networkidle2',
+        timeout: 15000
+      }).catch(e => console.log('[TBANK] Navigation timeout:', e.message));
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Step 2: Click "Перевести" button
+      console.log('[TBANK] Step 2: Looking for "Перевести" button...');
+
+      const transferButton = await this.page.evaluateHandle(() => {
+        const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="transferButton"]'));
+        return buttons.find(btn => btn.textContent.includes('Перевести'));
+      });
+
+      if (!transferButton || transferButton.asElement() === null) {
+        throw new Error('Could not find "Перевести" button');
+      }
+
+      console.log('[TBANK] ✅ Found "Перевести" button, clicking...');
+      await transferButton.asElement().click();
+      await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+
+      // Step 3: Click "Между счетами" link
+      console.log('[TBANK] Step 3: Looking for "Между счетами" link...');
+
+      const betweenAccountsLink = await this.page.evaluateHandle(() => {
+        const links = Array.from(document.querySelectorAll('a[href*="transfer-between-accounts"]'));
+        return links.find(link => link.textContent.includes('Между счетами'));
+      });
+
+      if (!betweenAccountsLink || betweenAccountsLink.asElement() === null) {
+        throw new Error('Could not find "Между счетами" link');
+      }
+
+      console.log('[TBANK] ✅ Found "Между счетами" link, clicking...');
+      await betweenAccountsLink.asElement().click();
+      await this.page.waitForNavigation({
+        waitUntil: 'networkidle2',
+        timeout: 15000
+      }).catch(e => console.log('[TBANK] Navigation timeout:', e.message));
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Step 4: Select saving account in the dropdown
+      console.log(`[TBANK] Step 4: Selecting saving account "${savingAccountName}" in dropdown...`);
+
+      // Find the selectAccount wrapper
+      const selectSuccess = await this.page.evaluate((accountName) => {
+        // Find all selectAccount wrappers
+        const selects = Array.from(document.querySelectorAll('[data-qa-type="uikit/selectAccount.wrapper.main"]'));
+
+        for (const select of selects) {
+          // Click to open dropdown
+          const labelContainer = select.querySelector('[data-style-layer="labelContainer"]');
+          if (labelContainer) {
+            labelContainer.click();
+
+            // Wait a bit for dropdown to open
+            setTimeout(() => {
+              // Find the option with our saving account name
+              const options = Array.from(document.querySelectorAll('[data-qa-type="uikit/selectAccount.wrapper.label"]'));
+              const targetOption = options.find(opt => opt.textContent.trim() === accountName);
+
+              if (targetOption) {
+                // Click on the parent clickable element
+                const clickable = targetOption.closest('[data-qa-type="uikit/clickable"]') ||
+                                 targetOption.closest('a') ||
+                                 targetOption.closest('button');
+                if (clickable) {
+                  clickable.click();
+                  return true;
+                }
+              }
+            }, 500);
+          }
+        }
+        return false;
+      }, savingAccountName);
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      if (!selectSuccess) {
+        console.log('[TBANK] ⚠️ Could not select saving account via dropdown, trying alternative method...');
+      }
+
+      // Step 5: Enter amount
+      console.log(`[TBANK] Step 5: Entering amount ${amount}...`);
+
+      await this.page.waitForSelector('input[data-qa-type="amount-from.input"]', {
+        timeout: 10000
+      });
+
+      const amountInput = await this.page.$('input[data-qa-type="amount-from.input"]');
+      if (!amountInput) {
+        throw new Error('Could not find amount input field');
+      }
+
+      // Clear and enter amount
+      await amountInput.click({ clickCount: 3 }); // Select all
+      await this.page.keyboard.press('Backspace');
+      await this.typeWithHumanDelay('input[data-qa-type="amount-from.input"]', amount.toString());
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      console.log('[TBANK] ✅ Amount entered');
+
+      // Step 6: Click "Перевести" submit button
+      console.log('[TBANK] Step 6: Looking for "Перевести" submit button...');
+
+      const submitButton = await this.page.$('button[data-qa-type="submit-button"][type="submit"]');
+      if (!submitButton) {
+        throw new Error('Could not find "Перевести" submit button');
+      }
+
+      console.log('[TBANK] ✅ Found submit button, clicking...');
+      await submitButton.click();
+
+      // Wait for transfer to complete
+      await this.page.waitForNavigation({
+        waitUntil: 'networkidle2',
+        timeout: 15000
+      }).catch(e => console.log('[TBANK] Navigation timeout:', e.message));
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Step 7: Navigate back to /mybank/
+      console.log('[TBANK] Step 7: Navigating back to /mybank/...');
+
+      const homeLink = await this.page.$('a[data-qa-type="desktop-ib-navigation-menu-link"][href="/mybank/"]');
+      if (homeLink) {
+        await homeLink.click();
+        await this.page.waitForNavigation({
+          waitUntil: 'networkidle2',
+          timeout: 15000
+        }).catch(e => console.log('[TBANK] Navigation timeout:', e.message));
+      } else {
+        // Fallback: navigate directly
+        await this.page.goto('https://www.tbank.ru/mybank/', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      console.log('[TBANK] ✅ Transfer to saving account completed successfully!');
+
+      return {
+        success: true,
+        message: `Transferred ${amount} RUB from "${debitAccountName}" to "${savingAccountName}"`,
+        fromAccount: debitAccountName,
+        toAccount: savingAccountName,
+        amount: amount
+      };
+
+    } catch (error) {
+      console.error('[TBANK] Error transferring to saving account:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Transfer money from saving account back to debit account
+   * @param {string} savingAccountName - Name of the saving account
+   * @param {string} debitAccountName - Name of the debit account
+   * @param {number} amount - Amount to transfer
+   */
+  async transferFromSavingAccount(savingAccountName, debitAccountName, amount) {
+    try {
+      if (!this.sessionActive) {
+        throw new Error('Not logged in');
+      }
+
+      console.log(`[TBANK] Transferring ${amount} RUB from "${savingAccountName}" back to "${debitAccountName}"...`);
+
+      // Ensure we're on /mybank/ page
+      const currentUrl = this.page.url();
+      if (!currentUrl.includes('/mybank/')) {
+        console.log('[TBANK] Not on /mybank/ page, navigating...');
+        await this.page.goto('https://www.tbank.ru/mybank/', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
+      // Step 1: Click on the saving account widget
+      console.log(`[TBANK] Step 1: Looking for saving account widget "${savingAccountName}"...`);
+
+      const savingAccountWidget = await this.page.evaluateHandle((accountName) => {
+        const widgets = Array.from(document.querySelectorAll('[data-qa-type^="atomPanel widget widget-savings"]'));
+        return widgets.find(widget => {
+          const nameEl = widget.querySelector('[data-qa-type="subtitle"] span');
+          return nameEl && nameEl.textContent.trim() === accountName;
+        });
+      }, savingAccountName);
+
+      if (!savingAccountWidget || savingAccountWidget.asElement() === null) {
+        throw new Error(`Could not find saving account with name "${savingAccountName}"`);
+      }
+
+      console.log('[TBANK] ✅ Found saving account, clicking...');
+      const savingLink = await savingAccountWidget.asElement().$('a[data-qa-type="link click-area"]');
+      if (!savingLink) {
+        throw new Error('Could not find link in saving account widget');
+      }
+
+      await savingLink.click();
+      await this.page.waitForNavigation({
+        waitUntil: 'networkidle2',
+        timeout: 15000
+      }).catch(e => console.log('[TBANK] Navigation timeout:', e.message));
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Step 2: Click "Перевести" button
+      console.log('[TBANK] Step 2: Looking for "Перевести" button...');
+
+      const transferButton = await this.page.evaluateHandle(() => {
+        const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="transferButton"]'));
+        return buttons.find(btn => btn.textContent.includes('Перевести'));
+      });
+
+      if (!transferButton || transferButton.asElement() === null) {
+        throw new Error('Could not find "Перевести" button');
+      }
+
+      console.log('[TBANK] ✅ Found "Перевести" button, clicking...');
+      await transferButton.asElement().click();
+      await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+
+      // Step 3: Click "Между счетами" link
+      console.log('[TBANK] Step 3: Looking for "Между счетами" link...');
+
+      const betweenAccountsLink = await this.page.evaluateHandle(() => {
+        const links = Array.from(document.querySelectorAll('a[href*="transfer-between-accounts"]'));
+        return links.find(link => link.textContent.includes('Между счетами'));
+      });
+
+      if (!betweenAccountsLink || betweenAccountsLink.asElement() === null) {
+        throw new Error('Could not find "Между счетами" link');
+      }
+
+      console.log('[TBANK] ✅ Found "Между счетами" link, clicking...');
+      await betweenAccountsLink.asElement().click();
+      await this.page.waitForNavigation({
+        waitUntil: 'networkidle2',
+        timeout: 15000
+      }).catch(e => console.log('[TBANK] Navigation timeout:', e.message));
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Step 4: Select debit account in the dropdown
+      console.log(`[TBANK] Step 4: Selecting debit account "${debitAccountName}" in dropdown...`);
+
+      const selectSuccess = await this.page.evaluate((accountName) => {
+        const selects = Array.from(document.querySelectorAll('[data-qa-type="uikit/selectAccount.wrapper.main"]'));
+
+        for (const select of selects) {
+          const labelContainer = select.querySelector('[data-style-layer="labelContainer"]');
+          if (labelContainer) {
+            labelContainer.click();
+
+            setTimeout(() => {
+              const options = Array.from(document.querySelectorAll('[data-qa-type="uikit/selectAccount.wrapper.label"]'));
+              const targetOption = options.find(opt => opt.textContent.trim() === accountName);
+
+              if (targetOption) {
+                const clickable = targetOption.closest('[data-qa-type="uikit/clickable"]') ||
+                                 targetOption.closest('a') ||
+                                 targetOption.closest('button');
+                if (clickable) {
+                  clickable.click();
+                  return true;
+                }
+              }
+            }, 500);
+          }
+        }
+        return false;
+      }, debitAccountName);
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Step 5: Enter amount
+      console.log(`[TBANK] Step 5: Entering amount ${amount}...`);
+
+      await this.page.waitForSelector('input[data-qa-type="amount-from.input"]', {
+        timeout: 10000
+      });
+
+      const amountInput = await this.page.$('input[data-qa-type="amount-from.input"]');
+      if (!amountInput) {
+        throw new Error('Could not find amount input field');
+      }
+
+      await amountInput.click({ clickCount: 3 });
+      await this.page.keyboard.press('Backspace');
+      await this.typeWithHumanDelay('input[data-qa-type="amount-from.input"]', amount.toString());
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      console.log('[TBANK] ✅ Amount entered');
+
+      // Step 6: Click "Перевести" submit button
+      console.log('[TBANK] Step 6: Looking for "Перевести" submit button...');
+
+      const submitButton = await this.page.$('button[data-qa-type="submit-button"][type="submit"]');
+      if (!submitButton) {
+        throw new Error('Could not find "Перевести" submit button');
+      }
+
+      console.log('[TBANK] ✅ Found submit button, clicking...');
+      await submitButton.click();
+
+      await this.page.waitForNavigation({
+        waitUntil: 'networkidle2',
+        timeout: 15000
+      }).catch(e => console.log('[TBANK] Navigation timeout:', e.message));
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // Step 7: Navigate back to /mybank/
+      console.log('[TBANK] Step 7: Navigating back to /mybank/...');
+
+      const homeLink = await this.page.$('a[data-qa-type="desktop-ib-navigation-menu-link"][href="/mybank/"]');
+      if (homeLink) {
+        await homeLink.click();
+        await this.page.waitForNavigation({
+          waitUntil: 'networkidle2',
+          timeout: 15000
+        }).catch(e => console.log('[TBANK] Navigation timeout:', e.message));
+      } else {
+        await this.page.goto('https://www.tbank.ru/mybank/', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      console.log('[TBANK] ✅ Transfer from saving account completed successfully!');
+
+      return {
+        success: true,
+        message: `Transferred ${amount} RUB from "${savingAccountName}" to "${debitAccountName}"`,
+        fromAccount: savingAccountName,
+        toAccount: debitAccountName,
+        amount: amount
+      };
+
+    } catch (error) {
+      console.error('[TBANK] Error transferring from saving account:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Transfer money between own accounts (old generic method - kept for backwards compatibility)
    */
   async transferBetweenAccounts(fromAccountId, toAccountId, amount) {
     try {
