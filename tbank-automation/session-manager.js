@@ -6,7 +6,7 @@ import crypto from 'crypto';
 export class SessionManager {
   constructor() {
     this.sessions = new Map();
-    this.SESSION_TIMEOUT = 3600000; // 1 hour
+    this.SESSION_TIMEOUT = Infinity; // Infinite - sessions never expire automatically
   }
 
   /**
@@ -114,6 +114,33 @@ export class SessionManager {
     this.sessions.clear();
 
     console.log('[SESSION] All sessions closed');
+  }
+
+  /**
+   * Mark session as authenticated
+   * @param {string} sessionId - Session identifier
+   */
+  markAuthenticated(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      session.authenticated = true;
+      console.log(`[SESSION] Session ${sessionId} marked as authenticated`);
+    }
+  }
+
+  /**
+   * Find active session by username
+   * @param {string} username - User identifier
+   * @returns {string|null} Session ID if found
+   */
+  findSessionByUsername(username) {
+    for (const [sessionId, session] of this.sessions.entries()) {
+      if (session.username === username && session.authenticated) {
+        console.log(`[SESSION] Found existing active session ${sessionId} for user ${username}`);
+        return sessionId;
+      }
+    }
+    return null;
   }
 
   /**

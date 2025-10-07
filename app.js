@@ -630,6 +630,19 @@ async function initializeApp() {
     displayName = data.displayName || username;
     userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
     serverState = { ...serverState, ...data };
+
+    // Получаем сохранённый T-Bank sessionId (если есть)
+    try {
+      const sessionResp = await apiGet(`?action=tbankGetSessionId&username=${encodeURIComponent(username)}`);
+      if (sessionResp && sessionResp.success && sessionResp.sessionId) {
+        tbankSessionId = sessionResp.sessionId;
+        console.log('[TBANK] Restored sessionId from Google Sheets:', tbankSessionId);
+      } else {
+        console.log('[TBANK] No saved sessionId found');
+      }
+    } catch (e) {
+      console.error('[TBANK] Error restoring sessionId:', e);
+    }
     if (!serverState.balance) serverState.balance = 0;
     if (!serverState.rate) serverState.rate = 16;
     if (!serverState.monthBase) serverState.monthBase = 0;
@@ -1696,6 +1709,7 @@ function showTBankStep(step, data = null) {
 }
 
 let tbankPollingInterval = null;
+let lastShownQuestion = null; // Track last shown question to avoid re-rendering
 
 async function connectTBank() {
   const phoneInput = document.getElementById('tbankPhone');
@@ -1788,32 +1802,52 @@ function startTBankInputPolling() {
 
       if (resp && resp.success) {
         if (resp.pendingType === 'sms') {
-          showTBankStep('sms');
+          if (lastShownQuestion !== 'sms') {
+            showTBankStep('sms');
+            lastShownQuestion = 'sms';
+          }
         } else if (resp.pendingType === 'dynamic-question') {
           // Dynamic question - extract question text and show appropriate input
           const questionData = resp.pendingData;
-          console.log('[TBANK] Dynamic question received:', questionData);
 
-          if (questionData && questionData.question) {
-            // Show dynamic question step with the question text
-            showTBankStep('dynamic-question', questionData);
+          // Only show if question changed
+          const questionKey = questionData?.question || '';
+          if (lastShownQuestion !== questionKey) {
+            console.log('[TBANK] Dynamic question received:', questionData);
+            if (questionData && questionData.question) {
+              // Show dynamic question step with the question text
+              showTBankStep('dynamic-question', questionData);
+              lastShownQuestion = questionKey;
+            }
           }
         } else if (resp.pendingType === 'card') {
           // Legacy card type (backwards compatibility)
-          showTBankStep('card');
+          if (lastShownQuestion !== 'card') {
+            showTBankStep('card');
+            lastShownQuestion = 'card';
+          }
         } else if (resp.pendingType === 'security-question') {
           // Legacy security question (backwards compatibility)
-          showTBankStep('security-question', resp.pendingData);
+          const questionKey = resp.pendingData || '';
+          if (lastShownQuestion !== questionKey) {
+            showTBankStep('security-question', resp.pendingData);
+            lastShownQuestion = questionKey;
+          }
         } else if (resp.pendingType === 'waiting') {
           // Login in progress, keep polling
-          console.log('Login in progress, waiting for next step...');
+          if (lastShownQuestion !== 'waiting') {
+            console.log('Login in progress, waiting for next step...');
+            lastShownQuestion = 'waiting';
+          }
         } else if (resp.pendingType === 'error') {
           // Login failed
           stopTBankInputPolling();
           showPopup('Ошибка входа в Т-Банк. Попробуйте снова.');
+          lastShownQuestion = null;
         } else if (resp.pendingType === null) {
           // Login complete, fetch accounts
           stopTBankInputPolling();
+          lastShownQuestion = null;
           await onTBankConnected();
         }
       }
@@ -1845,7 +1879,8 @@ async function submitTBankSMS() {
     );
 
     if (resp && resp.success) {
-      input.value = '';
+      if (input) input.value = '';
+      lastShownQuestion = null;
       showPopup('Код принят, продолжаем...');
     } else {
       showPopup('Ошибка отправки кода');
@@ -1870,7 +1905,8 @@ async function submitTBankCard() {
     );
 
     if (resp && resp.success) {
-      input.value = '';
+      if (input) input.value = '';
+      lastShownQuestion = null;
       showPopup('Номер карты принят, продолжаем...');
     } else {
       showPopup('Ошибка отправки номера карты');
@@ -1895,7 +1931,9 @@ async function submitTBankSecurityAnswer() {
     );
 
     if (resp && resp.success) {
-      input.value = '';
+      if (input) input.value = '';
+      // Reset last shown question so next question will be displayed
+      lastShownQuestion = null;
       showPopup('Ответ принят, продолжаем...');
     } else {
       showPopup('Ошибка отправки ответа');

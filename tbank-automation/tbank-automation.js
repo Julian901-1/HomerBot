@@ -476,9 +476,24 @@ export class TBankAutomation {
 
       console.log('[TBANK] Fetching accounts...');
 
+      // Ensure we're on /mybank/ page
+      const currentUrl = this.page.url();
+      if (!currentUrl.includes('/mybank/')) {
+        console.log('[TBANK] Not on /mybank/ page, navigating...');
+        await this.page.goto('https://www.tbank.ru/mybank/', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+      }
+
+      // Wait for page to fully load - increased timeout for slow loading
+      console.log('[TBANK] Waiting for page to fully load...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
       // Wait for account widgets to load
+      console.log('[TBANK] Waiting for account widgets...');
       await this.page.waitForSelector('[data-qa-type^="atomPanel widget"]', {
-        timeout: 10000
+        timeout: 20000
       });
 
       // Extract account information

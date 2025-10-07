@@ -44,6 +44,17 @@ app.post('/api/auth/login', async (req, res) => {
 
     console.log(`[AUTH] Login request for user: ${username}`);
 
+    // Check if there's already an active session for this user
+    const existingSessionId = sessionManager.findSessionByUsername(username);
+    if (existingSessionId) {
+      console.log(`[AUTH] Reusing existing session ${existingSessionId} for user ${username}`);
+      return res.json({
+        success: true,
+        sessionId: existingSessionId,
+        message: 'Using existing active session'
+      });
+    }
+
     // Encrypt credentials
     const encryptedPhone = encryptionService.encrypt(phone);
 
@@ -59,7 +70,14 @@ app.post('/api/auth/login', async (req, res) => {
     const sessionId = sessionManager.createSession(username, automation);
 
     // Start login process asynchronously (don't wait for it)
-    automation.login().catch(error => {
+    automation.login().then(result => {
+      if (result && result.success) {
+        console.log(`[AUTH] Login successful for session ${sessionId}, marking as authenticated`);
+        sessionManager.markAuthenticated(sessionId);
+      } else {
+        console.error(`[AUTH] Login failed for session ${sessionId}:`, result?.error);
+      }
+    }).catch(error => {
       console.error(`[AUTH] Login error for session ${sessionId}:`, error);
     });
 

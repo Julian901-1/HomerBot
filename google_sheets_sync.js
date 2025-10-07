@@ -1226,6 +1226,13 @@ function tbankLogin(hashedUsername, phone) {
     }
 
     var result = JSON.parse(responseText);
+
+    // Если логин успешен и есть sessionId - сохраняем его
+    if (result && result.success && result.sessionId) {
+      console.log('[TBANK] Login successful, saving sessionId: ' + result.sessionId);
+      saveTBankSessionId_(hashedUsername, result.sessionId);
+    }
+
     return result;
   } catch (e) {
     console.error('tbankLogin error:', e);
@@ -1300,11 +1307,11 @@ function tbankSubmitInput(hashedUsername, sessionId, value) {
 }
 
 /**
- * Сохраняет номер карты T-Bank в HB_UserPrefs (колонка G)
+ * Сохраняет sessionId T-Bank в HB_UserPrefs (колонка G)
  */
-function saveTBankCard_(hashedUsername, cardNumber) {
+function saveTBankSessionId_(hashedUsername, sessionId) {
   try {
-    console.log('[TBANK] saveTBankCard_ START: user=' + hashedUsername + ', card=' + cardNumber);
+    console.log('[TBANK] saveTBankSessionId_ START: user=' + hashedUsername + ', sessionId=' + sessionId);
 
     const prefsSheet = ensurePrefsSheet_();
     console.log('[TBANK] Got prefs sheet');
@@ -1312,32 +1319,51 @@ function saveTBankCard_(hashedUsername, cardNumber) {
     const { row } = findOrCreatePrefsRow_(hashedUsername);
     console.log('[TBANK] Got row: ' + row);
 
-    prefsSheet.getRange(row, 7).setValue(cardNumber); // Колонка G = 7
-    console.log('[TBANK] ✅ Successfully saved card to row ' + row + ', column G');
+    prefsSheet.getRange(row, 7).setValue(sessionId); // Колонка G = 7
+    console.log('[TBANK] ✅ Successfully saved sessionId to row ' + row + ', column G');
 
     // Проверяем что сохранилось
     const savedValue = prefsSheet.getRange(row, 7).getValue();
     console.log('[TBANK] Verification: saved value = ' + savedValue);
   } catch (e) {
-    console.error('[TBANK] ❌ Error saving card: ' + e.message);
+    console.error('[TBANK] ❌ Error saving sessionId: ' + e.message);
     console.error('[TBANK] Error stack: ' + e.stack);
   }
 }
 
 /**
- * Получает сохранённый номер карты T-Bank из HB_UserPrefs (колонка G)
+ * Получает сохранённый sessionId T-Bank из HB_UserPrefs (колонка G)
  */
-function getTBankCard_(hashedUsername) {
+function getTBankSessionId_(hashedUsername) {
   try {
     const prefsSheet = ensurePrefsSheet_();
     const { row } = findOrCreatePrefsRow_(hashedUsername);
 
-    const cardNumber = prefsSheet.getRange(row, 7).getValue();
-    Logger.log('[TBANK] Retrieved card for user ' + hashedUsername + ': ' + (cardNumber || 'none'));
-    return cardNumber || null;
+    const sessionId = prefsSheet.getRange(row, 7).getValue();
+    console.log('[TBANK] Retrieved sessionId for user ' + hashedUsername + ': ' + (sessionId || 'none'));
+    return sessionId || null;
   } catch (e) {
-    Logger.log('[TBANK] Error retrieving card: ' + e.message);
+    console.error('[TBANK] Error retrieving sessionId: ' + e.message);
     return null;
+  }
+}
+
+/**
+ * Получить сохранённый sessionId из Google Sheets
+ */
+function tbankGetSessionId(hashedUsername) {
+  try {
+    const sessionId = getTBankSessionId_(hashedUsername);
+    return {
+      success: true,
+      sessionId: sessionId
+    };
+  } catch (e) {
+    console.error('[TBANK] Error getting sessionId:', e);
+    return {
+      success: false,
+      error: String(e)
+    };
   }
 }
 
@@ -1459,12 +1485,12 @@ function ensurePrefsSheet_() {
     if (!sh) {
         sh = ss.insertSheet(PREFS_SHEET);
         // ВАЖНО: displayName НЕ хранится (соблюдение 152-ФЗ)
-        sh.getRange(1, 1, 1, 7).setValues([['hashedUsername', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency', 'autoRenew', 'tbankCard']]);
+        sh.getRange(1, 1, 1, 7).setValues([['hashedUsername', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency', 'autoRenew', 'tbankSessionId']]);
     } else {
-        // Проверяем, есть ли уже колонка G (tbankCard), если нет - добавляем заголовок
+        // Проверяем, есть ли уже колонка G (tbankSessionId), если нет - обновляем заголовок
         var header = sh.getRange(1, 7).getValue();
-        if (!header || header !== 'tbankCard') {
-            sh.getRange(1, 7).setValue('tbankCard');
+        if (!header || header === 'tbankCard' || header !== 'tbankSessionId') {
+            sh.getRange(1, 7).setValue('tbankSessionId');
         }
     }
     return sh;
