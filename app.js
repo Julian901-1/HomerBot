@@ -1783,6 +1783,20 @@ async function connectTBank() {
         return;
       }
 
+      // Сохраняем Session ID в Google Sheets отдельным запросом
+      console.log('[TBANK] Saving Session ID to Google Sheets...');
+      apiGet(
+        `?action=tbankSaveSessionId&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}`
+      ).then(saveResp => {
+        if (saveResp && saveResp.success) {
+          console.log('[TBANK] ✅ Session ID saved to Google Sheets successfully');
+        } else {
+          console.error('[TBANK] ❌ Failed to save Session ID:', saveResp?.error);
+        }
+      }).catch(err => {
+        console.error('[TBANK] ❌ Error saving Session ID:', err);
+      });
+
       // Start polling for required input
       startTBankInputPolling();
     } else {

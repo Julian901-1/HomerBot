@@ -241,6 +241,9 @@ function doGet(e) {
       case 'tbankLogout':
         return jsonOk(tbankLogout(hashedUsername, p.sessionId));
 
+      case 'tbankSaveSessionId':
+        return jsonOk(tbankSaveSessionId(hashedUsername, p.sessionId));
+
       default:
         return jsonErr('Unknown action');
     }
@@ -1226,13 +1229,6 @@ function tbankLogin(hashedUsername, phone) {
     }
 
     var result = JSON.parse(responseText);
-
-    // Если логин успешен и есть sessionId - сохраняем его
-    if (result && result.success && result.sessionId) {
-      console.log('[TBANK] Login successful, saving sessionId: ' + result.sessionId);
-      saveTBankSessionId_(hashedUsername, result.sessionId);
-    }
-
     return result;
   } catch (e) {
     console.error('tbankLogin error:', e);
@@ -1383,6 +1379,25 @@ function tbankGetSessionId(hashedUsername) {
     };
   } catch (e) {
     console.error('[TBANK] Error getting sessionId:', e);
+    return {
+      success: false,
+      error: String(e)
+    };
+  }
+}
+
+/**
+ * Сохранить sessionId в Google Sheets (вызывается отдельным action)
+ */
+function tbankSaveSessionId(hashedUsername, sessionId) {
+  try {
+    saveTBankSessionId_(hashedUsername, sessionId);
+    return {
+      success: true,
+      message: 'Session ID saved successfully'
+    };
+  } catch (e) {
+    console.error('[TBANK] Error saving sessionId:', e);
     return {
       success: false,
       error: String(e)
