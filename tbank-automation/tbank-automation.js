@@ -36,9 +36,9 @@ export class TBankAutomation {
 
     console.log(`[TBANK] Initializing browser for user ${this.username}`);
 
-    // Use Puppeteer's bundled Chromium
+    // Use Puppeteer's bundled Chromium with minimal memory footprint
     const launchOptions = {
-      headless: process.env.PUPPETEER_HEADLESS === 'true',
+      headless: true, // Always headless to save memory
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -46,11 +46,28 @@ export class TBankAutomation {
         '--disable-blink-features=AutomationControlled',
         '--disable-features=IsolateOrigins,site-per-process',
         '--disable-gpu',
-        '--window-size=1920,1080'
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-background-timer-throttling',
+        '--disable-hang-monitor',
+        '--disable-client-side-phishing-detection',
+        '--disable-sync',
+        '--disable-extensions',
+        '--disable-translate',
+        '--metrics-recording-only',
+        '--mute-audio',
+        '--no-first-run',
+        '--safebrowsing-disable-auto-update',
+        '--disable-default-apps',
+        '--no-zygote',
+        '--single-process', // CRITICAL: Run in single process to save memory
+        '--window-size=800,600' // Smaller viewport
       ],
       defaultViewport: {
-        width: 1920,
-        height: 1080
+        width: 800,
+        height: 600
       }
     };
 
@@ -62,6 +79,18 @@ export class TBankAutomation {
     this.browser = await puppeteer.launch(launchOptions);
 
     this.page = await this.browser.newPage();
+
+    // Block images, fonts, and stylesheets to save memory
+    await this.page.setRequestInterception(true);
+    this.page.on('request', (request) => {
+      const resourceType = request.resourceType();
+      // Block images, fonts, media to save memory and bandwidth
+      if (['image', 'font', 'media'].includes(resourceType)) {
+        request.abort();
+      } else {
+        request.continue();
+      }
+    });
 
     // Set realistic user agent
     await this.page.setUserAgent(
@@ -115,12 +144,6 @@ export class TBankAutomation {
       try {
         await this.page.waitForSelector('[automation-id="otp-input"]', { timeout: 10000 });
         console.log('[TBANK] ✅ Found OTP input field');
-
-        const pageHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
-        console.log('[TBANK] ========== SMS PAGE HTML START ==========');
-        console.log(pageHtml);
-        console.log('[TBANK] ========== SMS PAGE HTML END ==========');
-
         console.log('[TBANK] Step 2: Waiting for SMS code from user...');
         const smsCode = await this.waitForUserInput('sms');
         console.log('[TBANK] Received SMS code, typing into field...');
@@ -137,12 +160,6 @@ export class TBankAutomation {
             console.log('[TBANK] Navigation after SMS timeout or no navigation occurred:', e.message);
           });
           console.log('[TBANK] ✅ SMS step completed, navigation finished');
-
-          // Логируем HTML страницы после навигации
-          const afterNavHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
-          console.log('[TBANK] ========== AFTER SMS SUBMIT HTML START ==========');
-          console.log(afterNavHtml);
-          console.log('[TBANK] ========== AFTER SMS SUBMIT HTML END ==========');
         }
         await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (e) {
@@ -168,6 +185,17 @@ export class TBankAutomation {
         // Check for login success indicators
         if (currentUrl.includes('/mybank/') || currentUrl.includes('/accounts') || currentUrl.includes('/main')) {
           console.log('[TBANK] ✅ Detected /mybank/ or accounts page');
+
+          // DEBUG: Log HTML after successful login to /mybank/
+          try {
+            const mybankHtml = await this.page.evaluate(() => document.documentElement.outerHTML);
+            console.log('[TBANK] ========== /mybank/ PAGE HTML START (DEBUG) ==========');
+            console.log(mybankHtml);
+            console.log('[TBANK] ========== /mybank/ PAGE HTML END (DEBUG) ==========');
+          } catch (e) {
+            console.log('[TBANK] Could not retrieve /mybank/ HTML:', e.message);
+          }
+
           this.sessionActive = true;
           this.pendingInputType = null;
           this.startKeepAlive();
@@ -199,16 +227,12 @@ export class TBankAutomation {
           continue;
         }
 
-        // Get page content to analyze what we're looking at
-        const pageHtml = await this.page.evaluate(() => document.documentElement.outerHTML).catch(() => null);
+        // Get page content to analyze what we're looking at (minimal logging to save memory)
         const formTitle = await this.page.$eval('[automation-id="form-title"]', el => el.textContent.trim()).catch(() => null);
         const formDescription = await this.page.$eval('[automation-id="form-description"]', el => el.textContent.trim()).catch(() => null);
 
         console.log('[TBANK] Detected form title:', formTitle);
         console.log('[TBANK] Detected form description:', formDescription);
-        console.log('[TBANK] ========== CURRENT PAGE HTML START ==========');
-        console.log(pageHtml || 'Unable to get page HTML');
-        console.log('[TBANK] ========== CURRENT PAGE HTML END ==========');
 
         // Check if there's a "Не сейчас" / "Cancel" button to skip optional steps
         const cancelButton = await this.page.$('[automation-id="cancel-button"]');
@@ -644,12 +668,42 @@ export class TBankAutomation {
       this.keepAliveInterval = null;
     }
 
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
+    // Clear pending input resolvers to prevent memory leaks
+    if (this.pendingInputResolve) {
+      this.pendingInputResolve = null;
+    }
+    this.pendingInputType = null;
+    this.pendingInputData = null;
+
+    // Close page first to free memory
+    if (this.page) {
+      try {
+        // Remove all listeners
+        await this.page.removeAllListeners();
+        // Close page
+        await this.page.close();
+      } catch (e) {
+        console.error('[TBANK] Error closing page:', e.message);
+      }
       this.page = null;
     }
 
-    console.log('[TBANK] Browser closed');
+    // Close browser
+    if (this.browser) {
+      try {
+        await this.browser.close();
+      } catch (e) {
+        console.error('[TBANK] Error closing browser:', e.message);
+      }
+      this.browser = null;
+    }
+
+    // Force garbage collection hint (if available)
+    if (global.gc) {
+      global.gc();
+      console.log('[TBANK] Garbage collection triggered');
+    }
+
+    console.log('[TBANK] Browser and resources cleaned up');
   }
 }

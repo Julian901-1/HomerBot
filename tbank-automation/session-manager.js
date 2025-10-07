@@ -7,6 +7,7 @@ export class SessionManager {
   constructor() {
     this.sessions = new Map();
     this.SESSION_TIMEOUT = Infinity; // Infinite - sessions never expire automatically
+    this.MAX_SESSIONS = 3; // Maximum concurrent sessions to prevent memory overflow
   }
 
   /**
@@ -15,7 +16,44 @@ export class SessionManager {
    * @param {TBankAutomation} automation - Automation instance
    * @returns {string} Session ID
    */
-  createSession(username, automation) {
+  async createSession(username, automation) {
+    // Check if we're at the session limit
+    if (this.sessions.size >= this.MAX_SESSIONS) {
+      console.log(`[SESSION] ⚠️ Max sessions (${this.MAX_SESSIONS}) reached, cleaning up oldest unauthenticated session`);
+
+      // Find and close oldest unauthenticated session
+      let oldestSession = null;
+      let oldestTime = Date.now();
+
+      for (const [sid, session] of this.sessions.entries()) {
+        if (!session.authenticated && session.createdAt < oldestTime) {
+          oldestSession = sid;
+          oldestTime = session.createdAt;
+        }
+      }
+
+      // If no unauthenticated sessions, close oldest session regardless
+      if (!oldestSession) {
+        for (const [sid, session] of this.sessions.entries()) {
+          if (session.createdAt < oldestTime) {
+            oldestSession = sid;
+            oldestTime = session.createdAt;
+          }
+        }
+      }
+
+      if (oldestSession) {
+        const session = this.sessions.get(oldestSession);
+        console.log(`[SESSION] Closing oldest session ${oldestSession} for user ${session.username}`);
+        try {
+          await session.automation.close();
+        } catch (e) {
+          console.error(`[SESSION] Error closing session ${oldestSession}:`, e);
+        }
+        this.deleteSession(oldestSession);
+      }
+    }
+
     const sessionId = crypto.randomBytes(32).toString('hex');
 
     this.sessions.set(sessionId, {
@@ -26,7 +64,7 @@ export class SessionManager {
       lastActivity: Date.now()
     });
 
-    console.log(`[SESSION] Created session ${sessionId} for user ${username}`);
+    console.log(`[SESSION] Created session ${sessionId} for user ${username} (${this.sessions.size}/${this.MAX_SESSIONS})`);
     return sessionId;
   }
 
