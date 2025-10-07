@@ -1339,7 +1339,7 @@ function saveTBankSessionId_(hashedUsername, sessionId) {
     const prefsSheet = ensurePrefsSheet_();
     console.log('[TBANK] Got prefs sheet');
 
-    const { row } = findOrCreatePrefsRow_(hashedUsername);
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
     console.log('[TBANK] Got row: ' + row);
 
     prefsSheet.getRange(row, 7).setValue(sessionId); // Колонка G = 7
@@ -1360,7 +1360,7 @@ function saveTBankSessionId_(hashedUsername, sessionId) {
 function getTBankSessionId_(hashedUsername) {
   try {
     const prefsSheet = ensurePrefsSheet_();
-    const { row } = findOrCreatePrefsRow_(hashedUsername);
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, false);
 
     const sessionId = prefsSheet.getRange(row, 7).getValue();
     console.log('[TBANK] Retrieved sessionId for user ' + hashedUsername + ': ' + (sessionId || 'none'));
@@ -1391,6 +1391,59 @@ function tbankGetSessionId(hashedUsername) {
 }
 
 /**
+ * Сохраняет балансы счетов T-Bank в HB_UserPrefs (колонка H)
+ * @param {string} hashedUsername - Хешированное имя пользователя
+ * @param {Array} accounts - Массив объектов счетов [{id, balance}, ...]
+ */
+function saveTBankBalances_(hashedUsername, accounts) {
+  try {
+    console.log('[TBANK] saveTBankBalances_ START: user=' + hashedUsername);
+    console.log('[TBANK] Accounts to save:', JSON.stringify(accounts));
+
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
+
+    // Создаём объект {accountId: balance}
+    const balancesMap = {};
+    accounts.forEach(function(acc) {
+      balancesMap[acc.id] = acc.balance;
+    });
+
+    const balancesJson = JSON.stringify(balancesMap);
+    prefsSheet.getRange(row, 8).setValue(balancesJson); // Колонка H = 8
+
+    console.log('[TBANK] ✅ Successfully saved balances to row ' + row + ', column H: ' + balancesJson);
+  } catch (e) {
+    console.error('[TBANK] ❌ Error saving balances: ' + e.message);
+    console.error('[TBANK] Error stack: ' + e.stack);
+  }
+}
+
+/**
+ * Получает сохранённые балансы T-Bank из HB_UserPrefs (колонка H)
+ * @returns {Object} Объект {accountId: balance}
+ */
+function getTBankBalances_(hashedUsername) {
+  try {
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, false);
+
+    const balancesJson = prefsSheet.getRange(row, 8).getValue();
+    if (!balancesJson) {
+      console.log('[TBANK] No saved balances for user ' + hashedUsername);
+      return {};
+    }
+
+    const balances = JSON.parse(balancesJson);
+    console.log('[TBANK] Retrieved balances for user ' + hashedUsername + ':', JSON.stringify(balances));
+    return balances;
+  } catch (e) {
+    console.error('[TBANK] Error retrieving balances: ' + e.message);
+    return {};
+  }
+}
+
+/**
  * Прокси-функция для получения списка счетов T-Bank
  */
 function tbankGetAccounts(hashedUsername, sessionId) {
@@ -1406,6 +1459,12 @@ function tbankGetAccounts(hashedUsername, sessionId) {
 
     var response = UrlFetchApp.fetch(url, options);
     var result = JSON.parse(response.getContentText());
+
+    // Если получены счета успешно - сохраняем балансы в HB_UserPrefs
+    if (result && result.success && result.accounts && result.accounts.length > 0) {
+      console.log('[TBANK] Saving ' + result.accounts.length + ' account balances to Google Sheets');
+      saveTBankBalances_(hashedUsername, result.accounts);
+    }
 
     return result;
   } catch (e) {
@@ -2548,4 +2607,47 @@ function setupEveningPercentTrigger() {
     .create();
 
   console.log('Evening percent trigger created (every hour)');
+}
+
+/****************************
+ * RENDER HEARTBEAT
+ * Пингует Render сервер чтобы он не засыпал (Free Tier засыпает через 15 мин бездействия)
+ ****************************/
+
+/**
+ * Пингует Render сервер чтобы он не засыпал
+ * Должен запускаться триггером каждые 5 минут
+ *
+ * Для настройки триггера:
+ * 1. В Apps Script Editor: Triggers (иконка часов слева)
+ * 2. + Add Trigger
+ * 3. Function: pingRenderService
+ * 4. Event source: Time-driven
+ * 5. Type: Minutes timer
+ * 6. Interval: Every 5 minutes
+ */
+function pingRenderService() {
+  try {
+    var pingUrl = TBANK_SERVICE_URL.replace('/api', '') + '/ping';
+
+    var options = {
+      method: 'get',
+      muteHttpExceptions: true,
+      timeout: 5000 // 5 секунд таймаут
+    };
+
+    var response = UrlFetchApp.fetch(pingUrl, options);
+    var responseCode = response.getResponseCode();
+
+    if (responseCode === 200) {
+      var result = JSON.parse(response.getContentText());
+      console.log('[HEARTBEAT] ✅ Render ping successful:', result.timestamp, '| Active sessions:', result.activeSessions);
+    } else {
+      console.warn('[HEARTBEAT] ⚠️ Render ping returned code:', responseCode);
+    }
+
+  } catch (e) {
+    console.error('[HEARTBEAT] ❌ Ping failed:', e.message);
+    // Не бросаем ошибку, просто логируем - следующий пинг попробует снова
+  }
 }

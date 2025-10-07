@@ -136,7 +136,8 @@ export class TBankAutomation {
       // Step 1: Enter phone number
       await this.page.waitForSelector('[automation-id="phone-input"]', { timeout: 10000 });
       console.log('[TBANK] Step 1: Entering phone number...');
-      await this.page.type('[automation-id="phone-input"]', phone, { delay: 100 });
+      await this.typeWithHumanDelay('[automation-id="phone-input"]', phone);
+      await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
       await this.page.click('[automation-id="button-submit"]');
       await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -148,8 +149,8 @@ export class TBankAutomation {
         const smsCode = await this.waitForUserInput('sms');
         console.log('[TBANK] Received SMS code, typing into field...');
 
-        await this.page.type('[automation-id="otp-input"]', smsCode, { delay: 150 });
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await this.typeWithHumanDelay('[automation-id="otp-input"]', smsCode);
+        await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 700));
 
         const submitButton = await this.page.$('[automation-id="button-submit"]');
         if (submitButton) {
@@ -282,10 +283,10 @@ export class TBankAutomation {
 
           console.log('[TBANK] Received answer from user, typing into field...');
 
-          // Type the answer into the field
+          // Type the answer into the field with human-like delays
           const inputSelector = `[automation-id="${firstInput.automationId}"]`;
-          await this.page.type(inputSelector, userAnswer, { delay: 100 });
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await this.typeWithHumanDelay(inputSelector, userAnswer);
+          await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 800));
 
           // Submit the form
           const submitButton = await this.page.$('[automation-id="button-submit"]');
@@ -431,6 +432,42 @@ export class TBankAutomation {
   }
 
   /**
+   * Simulate realistic mouse movement (Bezier curve)
+   */
+  async simulateRealisticMouseMovement(fromX, fromY, toX, toY) {
+    const steps = 10 + Math.floor(Math.random() * 10); // 10-20 steps
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+
+      // Quadratic Bezier curve for natural movement
+      const controlX = fromX + (toX - fromX) / 2 + (Math.random() - 0.5) * 100;
+      const controlY = fromY + (toY - fromY) / 2 + (Math.random() - 0.5) * 100;
+
+      const x = Math.pow(1 - t, 2) * fromX + 2 * (1 - t) * t * controlX + Math.pow(t, 2) * toX;
+      const y = Math.pow(1 - t, 2) * fromY + 2 * (1 - t) * t * controlY + Math.pow(t, 2) * toY;
+
+      await this.page.mouse.move(x, y);
+      await new Promise(resolve => setTimeout(resolve, 10 + Math.random() * 20));
+    }
+  }
+
+  /**
+   * Type text with realistic human delays
+   */
+  async typeWithHumanDelay(selector, text) {
+    await this.page.click(selector);
+    await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
+
+    for (const char of text) {
+      await this.page.keyboard.type(char);
+      // Variable delay between keystrokes (50-150ms)
+      const delay = 50 + Math.random() * 100;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  /**
    * Start keep-alive mechanism to prevent session timeout
    */
   startKeepAlive() {
@@ -451,29 +488,67 @@ export class TBankAutomation {
       try {
         console.log('[TBANK] Keep-alive: simulating user activity');
 
-        // Simulate mouse movement
-        await this.page.mouse.move(
-          Math.random() * 1000,
-          Math.random() * 800
-        );
+        // Get viewport dimensions
+        const viewport = this.page.viewport();
+        const maxX = viewport.width;
+        const maxY = viewport.height;
 
         // Random actions to keep session alive
         const actions = [
-          // Scroll page
+          // Realistic mouse movement with random scroll
           async () => {
+            const currentPos = await this.page.evaluate(() => ({
+              x: window.innerWidth / 2,
+              y: window.innerHeight / 2
+            }));
+
+            const targetX = 100 + Math.random() * (maxX - 200);
+            const targetY = 100 + Math.random() * (maxY - 200);
+
+            await this.simulateRealisticMouseMovement(
+              currentPos.x,
+              currentPos.y,
+              targetX,
+              targetY
+            );
+
+            // Random scroll after mouse movement
             await this.page.evaluate(() => {
-              window.scrollBy(0, Math.random() * 200);
+              window.scrollBy({
+                top: (Math.random() - 0.5) * 300,
+                behavior: 'smooth'
+              });
             });
           },
-          // Move mouse and hover
+          // Hover over elements (simulate reading)
           async () => {
-            const x = Math.random() * 1500;
-            const y = Math.random() * 900;
-            await this.page.mouse.move(x, y);
+            const elements = await this.page.$$('div, span, a');
+            if (elements.length > 0) {
+              const randomElement = elements[Math.floor(Math.random() * Math.min(elements.length, 10))];
+              const box = await randomElement.boundingBox();
+              if (box) {
+                await this.simulateRealisticMouseMovement(
+                  Math.random() * maxX,
+                  Math.random() * maxY,
+                  box.x + box.width / 2,
+                  box.y + box.height / 2
+                );
+                await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+              }
+            }
           },
-          // Click somewhere safe (body)
+          // Subtle scroll simulation (reading page)
           async () => {
-            await this.page.mouse.click(100, 100, { button: 'left' });
+            const scrollSteps = 3 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < scrollSteps; i++) {
+              await this.page.evaluate(() => {
+                window.scrollBy({
+                  top: 50 + Math.random() * 100,
+                  behavior: 'smooth'
+                });
+              });
+              await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
+            }
           }
         ];
 

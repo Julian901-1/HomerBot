@@ -26,6 +26,15 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Ping endpoint for external heartbeat (prevents Render free tier sleep)
+app.get('/ping', (req, res) => {
+  res.json({
+    status: 'alive',
+    timestamp: new Date().toISOString(),
+    activeSessions: sessionManager.getSessionCount()
+  });
+});
+
 /**
  * Authenticate user and create session
  * POST /api/auth/login
@@ -72,7 +81,9 @@ app.post('/api/auth/login', async (req, res) => {
     // Start login process asynchronously (don't wait for it)
     automation.login().then(result => {
       if (result && result.success) {
-        console.log(`[AUTH] Login successful for session ${sessionId}, marking as authenticated`);
+        console.log(`[AUTH] ✅ Login successful for user ${username}`);
+        console.log(`[AUTH] 🔑 Session ID: ${sessionId}`);
+        console.log(`[AUTH] 💾 This Session ID should be saved to Google Sheets column G for user ${username}`);
         sessionManager.markAuthenticated(sessionId);
       } else {
         console.error(`[AUTH] Login failed for session ${sessionId}:`, result?.error);
