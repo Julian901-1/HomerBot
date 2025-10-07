@@ -211,7 +211,7 @@ app.post('/api/auth/submit-input', (req, res) => {
 });
 
 /**
- * Get user accounts
+ * Get user accounts (debit + saving)
  * GET /api/accounts?sessionId=xxx
  */
 app.get('/api/accounts', async (req, res) => {
@@ -233,11 +233,23 @@ app.get('/api/accounts', async (req, res) => {
       });
     }
 
+    // Get debit accounts
     const accounts = await session.automation.getAccounts();
+
+    // Get saving accounts
+    let savingAccounts = [];
+    try {
+      savingAccounts = await session.automation.getSavingAccounts();
+      console.log(`[API] Found ${savingAccounts.length} saving accounts`);
+    } catch (error) {
+      console.error('[API] Error getting saving accounts:', error);
+      // Don't fail the request if saving accounts fail
+    }
 
     res.json({
       success: true,
-      accounts
+      accounts,
+      savingAccounts
     });
 
   } catch (error) {

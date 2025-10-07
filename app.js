@@ -2033,17 +2033,26 @@ async function applyEveningPercent() {
   if (btn) btn.disabled = true;
 
   try {
+    // Форматируем время в HH:MM для сохранения в Google Sheets
+    const transferToTime = String(startTime).padStart(2, '0') + ':00';
+    const transferFromTime = String(endTime).padStart(2, '0') + ':00';
+
+    // Сохраняем расписание переводов в Google Sheets
     const resp = await apiGet(
-      `?action=setEveningPercent&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}&startTime=${startTime}&endTime=${endTime}&agreed=${agreeEl.checked}`
+      `?action=tbankSaveTransferSchedule&username=${encodeURIComponent(username)}&transferToTime=${encodeURIComponent(transferToTime)}&transferFromTime=${encodeURIComponent(transferFromTime)}`
     );
 
     if (resp && resp.success) {
-      showPopup('График вечернего процента применён!');
+      showPopup('График применён!');
       closeModal('eveningPercent');
+
+      // Также обновляем локальное состояние для session manager (если нужно)
+      console.log('[TBANK] Transfer schedule saved:', { transferToTime, transferFromTime });
     } else {
       showPopup('Ошибка: ' + ((resp && resp.error) || 'unknown'));
     }
   } catch (e) {
+    console.error('[TBANK] Error saving transfer schedule:', e);
     showPopup('Ошибка сети.');
   } finally {
     if (btn) btn.disabled = false;

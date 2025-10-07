@@ -1421,7 +1421,7 @@ function tbankSaveSessionId(hashedUsername, sessionId) {
 /**
  * Сохраняет балансы счетов T-Bank в HB_UserPrefs (колонка H)
  * @param {string} hashedUsername - Хешированное имя пользователя
- * @param {Array} accounts - Массив объектов счетов [{id, balance}, ...]
+ * @param {Array} accounts - Массив объектов счетов [{id, name, balance}, ...]
  */
 function saveTBankBalances_(hashedUsername, accounts) {
   try {
@@ -1431,10 +1431,13 @@ function saveTBankBalances_(hashedUsername, accounts) {
     const prefsSheet = ensurePrefsSheet_();
     const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
 
-    // Создаём объект {accountId: balance}
+    // Создаём объект {accountId: {balance, name}}
     const balancesMap = {};
     accounts.forEach(function(acc) {
-      balancesMap[acc.id] = acc.balance;
+      balancesMap[acc.id] = {
+        balance: acc.balance,
+        name: acc.name || acc.id
+      };
     });
 
     const balancesJson = JSON.stringify(balancesMap);
@@ -1449,7 +1452,7 @@ function saveTBankBalances_(hashedUsername, accounts) {
 
 /**
  * Получает сохранённые балансы T-Bank из HB_UserPrefs (колонка H)
- * @returns {Object} Объект {accountId: balance}
+ * @returns {Object} Объект {accountId: {balance, name}}
  */
 function getTBankBalances_(hashedUsername) {
   try {
@@ -1490,8 +1493,21 @@ function tbankGetAccounts(hashedUsername, sessionId) {
 
     // Если получены счета успешно - сохраняем балансы в HB_UserPrefs
     if (result && result.success && result.accounts && result.accounts.length > 0) {
-      console.log('[TBANK] Saving ' + result.accounts.length + ' account balances to Google Sheets');
+      console.log('[TBANK] Saving ' + result.accounts.length + ' debit account balances to Google Sheets');
       saveTBankBalances_(hashedUsername, result.accounts);
+    }
+
+    // Если получены накопительные счета - сохраняем первый в HB_UserPrefs
+    if (result && result.success && result.savingAccounts && result.savingAccounts.length > 0) {
+      console.log('[TBANK] Found ' + result.savingAccounts.length + ' saving accounts');
+
+      // Берем первый накопительный счёт
+      var firstSaving = result.savingAccounts[0];
+      console.log('[TBANK] Saving vklad data: id=' + firstSaving.id + ', name=' + firstSaving.name);
+
+      saveTBankVklad_(hashedUsername, firstSaving.id, firstSaving.name);
+    } else {
+      console.log('[TBANK] No saving accounts found');
     }
 
     return result;
