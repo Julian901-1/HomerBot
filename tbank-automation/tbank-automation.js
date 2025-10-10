@@ -163,8 +163,71 @@ export class TBankAutomation {
         timeout: parseInt(process.env.PUPPETEER_TIMEOUT)
       });
 
+      console.log(`[TBANK] ✅ Page loaded, current URL: ${this.page.url()}`);
+
+      // Log page HTML for debugging
+      const html = await this.page.content();
+      console.log('[TBANK] 📄 Page HTML length:', html.length, 'characters');
+      console.log('[TBANK] 📄 Page title:', await this.page.title());
+
+      // Log first 2000 characters of HTML for debugging
+      console.log('[TBANK] 📄 HTML preview (first 2000 chars):');
+      console.log(html.substring(0, 2000));
+
+      // Check what input fields are available
+      const inputFields = await this.page.evaluate(() => {
+        const inputs = Array.from(document.querySelectorAll('input'));
+        return inputs.map(input => ({
+          type: input.type,
+          name: input.name,
+          id: input.id,
+          automationId: input.getAttribute('automation-id'),
+          placeholder: input.placeholder,
+          className: input.className
+        }));
+      });
+      console.log('[TBANK] 📋 Found input fields:', JSON.stringify(inputFields, null, 2));
+
+      // Take screenshot for debugging (base64 encoded)
+      try {
+        const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
+        console.log('[TBANK] 📸 Screenshot captured (base64, length:', screenshot.length, ')');
+        console.log('[TBANK] 📸 === SCREENSHOT BASE64 START ===');
+        console.log(screenshot);
+        console.log('[TBANK] 📸 === SCREENSHOT BASE64 END ===');
+        console.log('[TBANK] 💡 To view: paste the base64 string to https://base64.guru/converter/decode/image');
+        console.log('[TBANK] 💡 Or open in browser: data:image/png;base64,' + screenshot.substring(0, 100) + '...');
+      } catch (e) {
+        console.log('[TBANK] ⚠️ Could not capture screenshot:', e.message);
+      }
+
       // Step 1: Enter phone number
-      await this.page.waitForSelector('[automation-id="phone-input"]', { timeout: 10000 });
+      console.log('[TBANK] Step 1: Waiting for phone input field...');
+      try {
+        await this.page.waitForSelector('[automation-id="phone-input"]', { timeout: 10000 });
+      } catch (error) {
+        console.error('[TBANK] ❌ Phone input selector not found!');
+        console.error('[TBANK] Error:', error.message);
+
+        // Try alternative selectors
+        console.log('[TBANK] Trying alternative selectors...');
+        const altSelectors = [
+          'input[type="tel"]',
+          'input[name="phone"]',
+          'input[placeholder*="телефон"]',
+          'input[placeholder*="номер"]'
+        ];
+
+        for (const selector of altSelectors) {
+          const found = await this.page.$(selector);
+          if (found) {
+            console.log(`[TBANK] ✅ Found alternative selector: ${selector}`);
+            break;
+          }
+        }
+
+        throw error;
+      }
       console.log('[TBANK] Step 1: Entering phone number...');
       await this.typeWithHumanDelay('[automation-id="phone-input"]', phone);
       await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
