@@ -178,14 +178,17 @@ export class SessionManager {
   }
 
   /**
-   * Find active session by username
+   * Find active session by username (authenticated or in-progress)
    * @param {string} username - User identifier
    * @returns {string|null} Session ID if found
    */
   findSessionByUsername(username) {
     for (const [sessionId, session] of this.sessions.entries()) {
-      if (session.username === username && session.authenticated) {
-        console.log(`[SESSION] Found existing active session ${sessionId} for user ${username}`);
+      // Return ANY session for this user (authenticated or not)
+      // This prevents creating duplicate sessions during login process
+      if (session.username === username) {
+        const status = session.authenticated ? 'authenticated' : 'in-progress';
+        console.log(`[SESSION] Found existing ${status} session ${sessionId} for user ${username}`);
         return sessionId;
       }
     }
