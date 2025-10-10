@@ -165,30 +165,13 @@ export class TBankAutomation {
 
       console.log(`[TBANK] ✅ Page loaded, current URL: ${this.page.url()}`);
 
-      // Log page HTML for debugging
-      const html = await this.page.content();
-      console.log('[TBANK] 📄 Page HTML length:', html.length, 'characters');
-      console.log('[TBANK] 📄 Page title:', await this.page.title());
+      // Wait for possible redirects to complete
+      console.log('[TBANK] ⏳ Waiting for page to stabilize (potential redirects)...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Log first 2000 characters of HTML for debugging
-      console.log('[TBANK] 📄 HTML preview (first 2000 chars):');
-      console.log(html.substring(0, 2000));
+      console.log(`[TBANK] 📍 Final URL after stabilization: ${this.page.url()}`);
 
-      // Check what input fields are available
-      const inputFields = await this.page.evaluate(() => {
-        const inputs = Array.from(document.querySelectorAll('input'));
-        return inputs.map(input => ({
-          type: input.type,
-          name: input.name,
-          id: input.id,
-          automationId: input.getAttribute('automation-id'),
-          placeholder: input.placeholder,
-          className: input.className
-        }));
-      });
-      console.log('[TBANK] 📋 Found input fields:', JSON.stringify(inputFields, null, 2));
-
-      // Take screenshot for debugging (base64 encoded)
+      // Take screenshot for debugging FIRST (before any evaluate calls)
       try {
         const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
         console.log('[TBANK] 📸 Screenshot captured (base64, length:', screenshot.length, ')');
@@ -199,6 +182,42 @@ export class TBankAutomation {
         console.log('[TBANK] 💡 Or open in browser: data:image/png;base64,' + screenshot.substring(0, 100) + '...');
       } catch (e) {
         console.log('[TBANK] ⚠️ Could not capture screenshot:', e.message);
+      }
+
+      // Now safely get page info
+      try {
+        const title = await this.page.title();
+        console.log('[TBANK] 📄 Page title:', title);
+      } catch (e) {
+        console.log('[TBANK] ⚠️ Could not get page title:', e.message);
+      }
+
+      // Log page HTML for debugging (with error handling)
+      try {
+        const html = await this.page.content();
+        console.log('[TBANK] 📄 Page HTML length:', html.length, 'characters');
+        console.log('[TBANK] 📄 HTML preview (first 2000 chars):');
+        console.log(html.substring(0, 2000));
+      } catch (e) {
+        console.log('[TBANK] ⚠️ Could not get page HTML:', e.message);
+      }
+
+      // Check what input fields are available (with error handling)
+      try {
+        const inputFields = await this.page.evaluate(() => {
+          const inputs = Array.from(document.querySelectorAll('input'));
+          return inputs.map(input => ({
+            type: input.type,
+            name: input.name,
+            id: input.id,
+            automationId: input.getAttribute('automation-id'),
+            placeholder: input.placeholder,
+            className: input.className
+          }));
+        });
+        console.log('[TBANK] 📋 Found input fields:', JSON.stringify(inputFields, null, 2));
+      } catch (e) {
+        console.log('[TBANK] ⚠️ Could not get input fields:', e.message);
       }
 
       // Step 1: Enter phone number
