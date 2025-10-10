@@ -303,13 +303,52 @@ app.post('/api/transfer', async (req, res) => {
 });
 
 /**
+ * Get session statistics
+ * GET /api/session/stats?sessionId=xxx
+ */
+app.get('/api/session/stats', (req, res) => {
+  try {
+    const { sessionId } = req.query;
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing sessionId'
+      });
+    }
+
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        error: 'Session not found'
+      });
+    }
+
+    const stats = session.automation.getSessionStats();
+
+    res.json({
+      success: true,
+      stats
+    });
+
+  } catch (error) {
+    console.error('[API] Get session stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * Logout and destroy session
  * POST /api/auth/logout
- * Body: { sessionId }
+ * Body: { sessionId, deleteSession }
  */
 app.post('/api/auth/logout', async (req, res) => {
   try {
-    const { sessionId } = req.body;
+    const { sessionId, deleteSession = false } = req.body;
 
     if (!sessionId) {
       return res.status(400).json({
@@ -320,7 +359,7 @@ app.post('/api/auth/logout', async (req, res) => {
 
     const session = sessionManager.getSession(sessionId);
     if (session) {
-      await session.automation.close();
+      await session.automation.close(deleteSession);
       sessionManager.deleteSession(sessionId);
     }
 

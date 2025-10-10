@@ -1,6 +1,7 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import dotenv from 'dotenv';
+import { SessionPersistence } from './session-persistence.js';
 
 dotenv.config();
 
@@ -21,6 +22,9 @@ export class TBankAutomation {
     this.page = null;
     this.keepAliveInterval = null;
     this.sessionActive = false;
+
+    // Session persistence manager
+    this.sessionPersistence = new SessionPersistence(username, encryptionService);
 
     // Pending input system - now fully dynamic
     this.pendingInputResolve = null;
@@ -125,6 +129,32 @@ export class TBankAutomation {
     try {
       await this.init();
 
+      // Try to restore existing session first
+      const hasStoredSession = await this.sessionPersistence.hasStoredSession();
+      if (hasStoredSession) {
+        console.log(`[TBANK] 🔄 Found stored session, attempting to restore...`);
+        const restored = await this.sessionPersistence.restoreSession(this.page);
+
+        if (restored) {
+          console.log(`[TBANK] ✅ Session restored successfully, skipping login`);
+          this.sessionActive = true;
+          this.pendingInputType = null;
+          this.startKeepAlive();
+
+          // Log session stats
+          const stats = this.sessionPersistence.getSessionStats();
+          console.log(`[TBANK] 📊 Session Stats:`, stats);
+
+          return {
+            success: true,
+            message: 'Session restored from storage',
+            restored: true
+          };
+        } else {
+          console.log(`[TBANK] ⚠️ Session restore failed, proceeding with normal login`);
+        }
+      }
+
       const phone = this.encryptionService.decrypt(this.encryptedPhone);
 
       console.log(`[TBANK] Navigating to login page...`);
@@ -191,7 +221,19 @@ export class TBankAutomation {
 
           this.sessionActive = true;
           this.pendingInputType = null;
+
+          // Mark login success timestamp
+          this.sessionPersistence.markLoginSuccess();
+
+          // Save session after successful login
+          await this.sessionPersistence.saveSession(this.page);
+
           this.startKeepAlive();
+
+          // Log session stats
+          const stats = this.sessionPersistence.getSessionStats();
+          console.log(`[TBANK] 📊 Session Stats after login:`, stats);
+
           return {
             success: true,
             message: 'Login successful'
@@ -211,7 +253,16 @@ export class TBankAutomation {
             console.log('[TBANK] ✅ Successfully navigated to /mybank/');
             this.sessionActive = true;
             this.pendingInputType = null;
+
+            // Mark login success and save session
+            this.sessionPersistence.markLoginSuccess();
+            await this.sessionPersistence.saveSession(this.page);
+
             this.startKeepAlive();
+
+            const stats = this.sessionPersistence.getSessionStats();
+            console.log(`[TBANK] 📊 Session Stats:`, stats);
+
             return {
               success: true,
               message: 'Login successful'
@@ -317,7 +368,16 @@ export class TBankAutomation {
         console.log('[TBANK] ✅ Final URL check passed - logged in successfully');
         this.sessionActive = true;
         this.pendingInputType = null;
+
+        // Mark login success and save session
+        this.sessionPersistence.markLoginSuccess();
+        await this.sessionPersistence.saveSession(this.page);
+
         this.startKeepAlive();
+
+        const stats = this.sessionPersistence.getSessionStats();
+        console.log(`[TBANK] 📊 Session Stats:`, stats);
+
         return {
           success: true,
           message: 'Login successful'
@@ -330,7 +390,16 @@ export class TBankAutomation {
         console.log('[TBANK] ✅ Login status check passed');
         this.sessionActive = true;
         this.pendingInputType = null;
+
+        // Mark login success and save session
+        this.sessionPersistence.markLoginSuccess();
+        await this.sessionPersistence.saveSession(this.page);
+
         this.startKeepAlive();
+
+        const stats = this.sessionPersistence.getSessionStats();
+        console.log(`[TBANK] 📊 Session Stats:`, stats);
+
         return {
           success: true,
           message: 'Login successful'
@@ -471,6 +540,8 @@ export class TBankAutomation {
 
     console.log(`[TBANK] Starting keep-alive (interval: ${interval}ms)`);
 
+    let keepAliveCount = 0;
+
     this.keepAliveInterval = setInterval(async () => {
       if (!this.sessionActive || !this.page) {
         clearInterval(this.keepAliveInterval);
@@ -478,14 +549,16 @@ export class TBankAutomation {
       }
 
       try {
-        console.log('[TBANK] Keep-alive: simulating user activity');
+        keepAliveCount++;
+        const lifetime = this.sessionPersistence.getSessionLifetime();
+        console.log(`[TBANK] Keep-alive #${keepAliveCount}: simulating user activity (session lifetime: ${lifetime} min)`);
 
         // Get viewport dimensions
         const viewport = this.page.viewport();
         const maxX = viewport.width;
         const maxY = viewport.height;
 
-        // Random actions to keep session alive
+        // Enhanced random actions to keep session alive and appear more human-like
         const actions = [
           // Realistic mouse movement with random scroll
           async () => {
@@ -512,12 +585,12 @@ export class TBankAutomation {
               });
             });
           },
-          // Hover over elements (simulate reading)
+          // Hover over account widgets (simulate checking balances)
           async () => {
-            const elements = await this.page.$$('div, span, a');
-            if (elements.length > 0) {
-              const randomElement = elements[Math.floor(Math.random() * Math.min(elements.length, 10))];
-              const box = await randomElement.boundingBox();
+            const widgets = await this.page.$$('[data-qa-type^="atomPanel widget"]');
+            if (widgets.length > 0) {
+              const randomWidget = widgets[Math.floor(Math.random() * widgets.length)];
+              const box = await randomWidget.boundingBox();
               if (box) {
                 await this.simulateRealisticMouseMovement(
                   Math.random() * maxX,
@@ -525,7 +598,8 @@ export class TBankAutomation {
                   box.x + box.width / 2,
                   box.y + box.height / 2
                 );
-                await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+                // Pause as if reading the balance
+                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
               }
             }
           },
@@ -541,6 +615,46 @@ export class TBankAutomation {
               });
               await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
             }
+          },
+          // Simulate hovering over navigation menu
+          async () => {
+            const navLinks = await this.page.$$('[data-qa-type="desktop-ib-navigation-menu-link"]');
+            if (navLinks.length > 0) {
+              const randomLink = navLinks[Math.floor(Math.random() * navLinks.length)];
+              const box = await randomLink.boundingBox();
+              if (box) {
+                await this.simulateRealisticMouseMovement(
+                  Math.random() * maxX,
+                  Math.random() * maxY,
+                  box.x + box.width / 2,
+                  box.y + box.height / 2
+                );
+                await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
+              }
+            }
+          },
+          // Random page reload (very occasional)
+          async () => {
+            // Only 10% chance of reload to not be too aggressive
+            if (Math.random() < 0.1) {
+              console.log('[TBANK] Keep-alive: performing soft page reload');
+              await this.page.evaluate(() => {
+                // Soft reload - just navigate to current URL
+                window.location.href = window.location.href;
+              });
+              await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+          },
+          // Simulate clicking on balance visibility toggle (if present)
+          async () => {
+            const visibilityToggle = await this.page.$('[data-qa-type*="visibility"]');
+            if (visibilityToggle) {
+              await visibilityToggle.click();
+              await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 500));
+              // Click again to toggle back
+              await visibilityToggle.click();
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
           }
         ];
 
@@ -549,6 +663,12 @@ export class TBankAutomation {
         await randomAction();
 
         console.log('[TBANK] Keep-alive action completed');
+
+        // Save session every 3rd keep-alive cycle (every 15 minutes if interval is 5 min)
+        if (keepAliveCount % 3 === 0) {
+          console.log(`[TBANK] 💾 Periodic session save (keep-alive #${keepAliveCount})`);
+          await this.sessionPersistence.saveSession(this.page);
+        }
 
       } catch (error) {
         console.error('[TBANK] Keep-alive error:', error);
@@ -1335,8 +1455,9 @@ export class TBankAutomation {
 
   /**
    * Close browser and cleanup
+   * @param {boolean} deleteSession - Whether to delete saved session (default: false)
    */
-  async close() {
+  async close(deleteSession = false) {
     console.log(`[TBANK] Closing browser for user ${this.username}`);
 
     this.sessionActive = false;
@@ -1344,6 +1465,22 @@ export class TBankAutomation {
     if (this.keepAliveInterval) {
       clearInterval(this.keepAliveInterval);
       this.keepAliveInterval = null;
+    }
+
+    // Save session one last time before closing (unless explicitly deleting)
+    if (this.page && !deleteSession) {
+      try {
+        console.log(`[TBANK] 💾 Final session save before closing...`);
+        await this.sessionPersistence.saveSession(this.page);
+      } catch (e) {
+        console.error('[TBANK] Error saving session before close:', e.message);
+      }
+    }
+
+    // Delete saved session if requested
+    if (deleteSession) {
+      console.log(`[TBANK] 🗑️ Deleting saved session as requested`);
+      await this.sessionPersistence.deleteSession();
     }
 
     // Clear pending input resolvers to prevent memory leaks
@@ -1382,6 +1519,18 @@ export class TBankAutomation {
       console.log('[TBANK] Garbage collection triggered');
     }
 
+    // Log final session stats
+    const stats = this.sessionPersistence.getSessionStats();
+    console.log('[TBANK] 📊 Final Session Stats:', stats);
+
     console.log('[TBANK] Browser and resources cleaned up');
+  }
+
+  /**
+   * Get session statistics
+   * @returns {Object} Session statistics
+   */
+  getSessionStats() {
+    return this.sessionPersistence.getSessionStats();
   }
 }
