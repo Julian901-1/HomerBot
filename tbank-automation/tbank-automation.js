@@ -1,12 +1,8 @@
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { connect } from 'puppeteer-real-browser';
 import dotenv from 'dotenv';
 import { SessionPersistence } from './session-persistence.js';
 
 dotenv.config();
-
-// Use stealth plugin to avoid detection
-puppeteer.use(StealthPlugin());
 
 /**
  * T-Bank automation using Puppeteer with anti-detection
@@ -33,30 +29,30 @@ export class TBankAutomation {
   }
 
   /**
-   * Initialize browser instance
+   * Initialize browser instance with puppeteer-real-browser
    */
   async init() {
     if (this.browser) return;
 
-    console.log(`[TBANK] Initializing browser for user ${this.username}`);
+    console.log(`[TBANK] Initializing browser with puppeteer-real-browser for user ${this.username}`);
 
-    // Use Puppeteer's bundled Chromium with minimal memory footprint
-    const launchOptions = {
-      headless: true, // Always headless to save memory
+    // Use persistent user data directory for better session persistence
+    const userDataDir = `./user-data/${this.username}`;
+    console.log(`[TBANK] Using user data directory: ${userDataDir}`);
+
+    // puppeteer-real-browser configuration
+    const { browser, page } = await connect({
+      headless: false, // real-browser works best in headless: false but can work in 'new' mode
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-features=IsolateOrigins,site-per-process',
         '--disable-gpu',
         '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
         '--disable-backgrounding-occluded-windows',
         '--disable-renderer-backgrounding',
         '--disable-background-timer-throttling',
         '--disable-hang-monitor',
-        '--disable-client-side-phishing-detection',
         '--disable-sync',
         '--disable-extensions',
         '--disable-translate',
@@ -65,9 +61,7 @@ export class TBankAutomation {
         '--no-first-run',
         '--safebrowsing-disable-auto-update',
         '--disable-default-apps',
-        '--no-zygote',
-        '--single-process', // CRITICAL: Run in single process to save memory
-        '--window-size=1366,768', // More realistic viewport size
+        '--window-size=1366,768',
         // WebRTC leak protection
         '--disable-webrtc',
         '--disable-webrtc-hw-encoding',
@@ -76,28 +70,27 @@ export class TBankAutomation {
         '--lang=ru-RU',
         '--timezone=Europe/Moscow'
       ],
-      defaultViewport: {
-        width: 1366,
-        height: 768
+      customConfig: {
+        userDataDir: userDataDir
+      },
+      turnstile: true,
+      connectOption: {
+        defaultViewport: {
+          width: 1366,
+          height: 768
+        }
       }
-    };
+    });
 
-    // Only set executablePath if explicitly provided
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-    }
+    this.browser = browser;
+    this.page = page;
 
-    // Use persistent user data directory for better session persistence
-    // This saves IndexedDB, Service Workers, and full Chrome profile
-    const userDataDir = `./user-data/${this.username}`;
-    launchOptions.userDataDir = userDataDir;
-    console.log(`[TBANK] Using user data directory: ${userDataDir}`);
+    console.log('[TBANK] puppeteer-real-browser initialized successfully');
 
-    this.browser = await puppeteer.launch(launchOptions);
+    // Note: puppeteer-real-browser handles most stealth measures automatically
+    // Including: webdriver, plugins, languages, user-agent, etc.
 
-    this.page = await this.browser.newPage();
-
-    // Block images, fonts, and stylesheets to save memory
+    // Block images, fonts to save memory (optional)
     await this.page.setRequestInterception(true);
     this.page.on('request', (request) => {
       const resourceType = request.resourceType();
@@ -109,43 +102,14 @@ export class TBankAutomation {
       }
     });
 
-    // Set realistic user agent
-    await this.page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
-
     // Set extra HTTP headers to appear more realistic
     await this.page.setExtraHTTPHeaders({
       'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
       'Accept-Encoding': 'gzip, deflate, br',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      'Sec-Fetch-Site': 'none',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-User': '?1',
-      'Sec-Fetch-Dest': 'document',
-      'Upgrade-Insecure-Requests': '1',
-      'Cache-Control': 'max-age=0'
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
     });
 
-    // Additional stealth measures
-    await this.page.evaluateOnNewDocument(() => {
-      // Override navigator.webdriver
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => false
-      });
-
-      // Override plugins
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => [1, 2, 3, 4, 5]
-      });
-
-      // Override languages
-      Object.defineProperty(navigator, 'languages', {
-        get: () => ['ru-RU', 'ru', 'en-US', 'en']
-      });
-    });
-
-    console.log('[TBANK] Browser initialized successfully');
+    console.log('[TBANK] Browser initialized with advanced stealth protection');
   }
 
   /**
