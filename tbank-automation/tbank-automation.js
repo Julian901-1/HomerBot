@@ -138,12 +138,13 @@ export class TBankAutomation {
         if (restored) {
           console.log(`[TBANK] ✅ Session restored successfully, skipping login`);
           this.sessionActive = true;
-          this.pendingInputType = null;
+          this.pendingInputType = 'completed'; // Session is ready to use
           this.startKeepAlive();
 
           // Log session stats
           const stats = this.sessionPersistence.getSessionStats();
           console.log(`[TBANK] 📊 Session Stats:`, stats);
+          console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - session restored and ready`);
 
           return {
             success: true,
@@ -302,7 +303,7 @@ export class TBankAutomation {
           // Login successful - HTML logging removed for performance
 
           this.sessionActive = true;
-          this.pendingInputType = null;
+          this.pendingInputType = 'completed'; // Signal that login is complete
 
           // Mark login success timestamp
           this.sessionPersistence.markLoginSuccess();
@@ -315,6 +316,7 @@ export class TBankAutomation {
           // Log session stats
           const stats = this.sessionPersistence.getSessionStats();
           console.log(`[TBANK] 📊 Session Stats after login:`, stats);
+          console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
           return {
             success: true,
@@ -334,7 +336,7 @@ export class TBankAutomation {
           if (newUrl.includes('/mybank/') || newUrl.includes('/accounts') || newUrl.includes('/main')) {
             console.log('[TBANK] ✅ Successfully navigated to /mybank/');
             this.sessionActive = true;
-            this.pendingInputType = null;
+            this.pendingInputType = 'completed'; // Signal that login is complete
 
             // Mark login success and save session
             this.sessionPersistence.markLoginSuccess();
@@ -344,6 +346,7 @@ export class TBankAutomation {
 
             const stats = this.sessionPersistence.getSessionStats();
             console.log(`[TBANK] 📊 Session Stats:`, stats);
+            console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
             return {
               success: true,
@@ -449,7 +452,7 @@ export class TBankAutomation {
       if (finalUrl.includes('/mybank/') || finalUrl.includes('/accounts') || finalUrl.includes('/main')) {
         console.log('[TBANK] ✅ Final URL check passed - logged in successfully');
         this.sessionActive = true;
-        this.pendingInputType = null;
+        this.pendingInputType = 'completed'; // Signal that login is complete
 
         // Mark login success and save session
         this.sessionPersistence.markLoginSuccess();
@@ -459,6 +462,7 @@ export class TBankAutomation {
 
         const stats = this.sessionPersistence.getSessionStats();
         console.log(`[TBANK] 📊 Session Stats:`, stats);
+        console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
         return {
           success: true,
@@ -471,7 +475,7 @@ export class TBankAutomation {
       if (checkLoginStatus) {
         console.log('[TBANK] ✅ Login status check passed');
         this.sessionActive = true;
-        this.pendingInputType = null;
+        this.pendingInputType = 'completed'; // Signal that login is complete
 
         // Mark login success and save session
         this.sessionPersistence.markLoginSuccess();
@@ -481,6 +485,7 @@ export class TBankAutomation {
 
         const stats = this.sessionPersistence.getSessionStats();
         console.log(`[TBANK] 📊 Session Stats:`, stats);
+        console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
         return {
           success: true,
@@ -640,8 +645,12 @@ export class TBankAutomation {
     const interval = parseInt(process.env.KEEP_ALIVE_INTERVAL) || 300000; // 5 minutes
 
     console.log(`[TBANK] Starting keep-alive (interval: ${interval}ms)`);
+    console.log(`[TBANK] 🕐 First keep-alive cycle will run in ${interval / 1000} seconds`);
 
     let keepAliveCount = 0;
+
+    // Log initial state
+    console.log(`[TBANK] 📊 Initial keep-alive state: sessionActive=${this.sessionActive}, URL=${this.page ? this.page.url() : 'no page'}`);
 
     this.keepAliveInterval = setInterval(async () => {
       if (!this.sessionActive || !this.page) {
