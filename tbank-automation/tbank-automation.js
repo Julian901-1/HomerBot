@@ -67,11 +67,18 @@ export class TBankAutomation {
         '--disable-default-apps',
         '--no-zygote',
         '--single-process', // CRITICAL: Run in single process to save memory
-        '--window-size=800,600' // Smaller viewport
+        '--window-size=1366,768', // More realistic viewport size
+        // WebRTC leak protection
+        '--disable-webrtc',
+        '--disable-webrtc-hw-encoding',
+        '--disable-webrtc-hw-decoding',
+        // Timezone
+        '--lang=ru-RU',
+        '--timezone=Europe/Moscow'
       ],
       defaultViewport: {
-        width: 800,
-        height: 600
+        width: 1366,
+        height: 768
       }
     };
 
@@ -79,6 +86,12 @@ export class TBankAutomation {
     if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
     }
+
+    // Use persistent user data directory for better session persistence
+    // This saves IndexedDB, Service Workers, and full Chrome profile
+    const userDataDir = `./user-data/${this.username}`;
+    launchOptions.userDataDir = userDataDir;
+    console.log(`[TBANK] Using user data directory: ${userDataDir}`);
 
     this.browser = await puppeteer.launch(launchOptions);
 
@@ -100,6 +113,19 @@ export class TBankAutomation {
     await this.page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
+
+    // Set extra HTTP headers to appear more realistic
+    await this.page.setExtraHTTPHeaders({
+      'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Sec-Fetch-Site': 'none',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-User': '?1',
+      'Sec-Fetch-Dest': 'document',
+      'Upgrade-Insecure-Requests': '1',
+      'Cache-Control': 'max-age=0'
+    });
 
     // Additional stealth measures
     await this.page.evaluateOnNewDocument(() => {
@@ -764,6 +790,40 @@ export class TBankAutomation {
               // Click again to toggle back
               await visibilityToggle.click();
               await new Promise(resolve => setTimeout(resolve, 200));
+            }
+          },
+          // Make API requests to mimic real user activity
+          async () => {
+            try {
+              console.log('[TBANK] Keep-alive: making API request to check accounts');
+              // Navigate to a banking page or refresh data
+              const response = await this.page.evaluate(() => {
+                // Trigger any XHR/fetch that would normally happen
+                return fetch(window.location.href, {
+                  method: 'GET',
+                  credentials: 'include'
+                }).then(r => r.status);
+              });
+              console.log(`[TBANK] Keep-alive: API request completed with status ${response}`);
+            } catch (e) {
+              console.log('[TBANK] Keep-alive: API request failed (non-critical):', e.message);
+            }
+          },
+          // Click on different sections to trigger real navigation
+          async () => {
+            try {
+              const sections = await this.page.$$('a[href*="/mybank/"]');
+              if (sections.length > 0) {
+                const randomSection = sections[Math.floor(Math.random() * Math.min(sections.length, 5))];
+                const href = await randomSection.evaluate(el => el.getAttribute('href'));
+                if (href && !href.includes('logout')) {
+                  console.log(`[TBANK] Keep-alive: navigating to ${href}`);
+                  await randomSection.click();
+                  await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
+                }
+              }
+            } catch (e) {
+              console.log('[TBANK] Keep-alive: navigation failed (non-critical):', e.message);
             }
           }
         ];
