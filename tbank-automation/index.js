@@ -27,11 +27,51 @@ app.get('/health', (req, res) => {
 });
 
 // Ping endpoint for external heartbeat (prevents Render free tier sleep)
-app.get('/ping', (req, res) => {
+// Also checks session health and takes screenshots
+app.get('/ping', async (req, res) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[PING] Health check at ${timestamp}`);
+
+  const sessionCount = sessionManager.getSessionCount();
+  const sessionHealth = [];
+
+  // Check health of all active sessions
+  for (const [sessionId, session] of sessionManager.sessions.entries()) {
+    if (session.authenticated && session.automation) {
+      try {
+        console.log(`[PING] Checking session ${sessionId} for user ${session.username}`);
+
+        // Take screenshot of each active session
+        await session.automation.takeDebugScreenshot(`ping-${timestamp}`);
+
+        // Get session stats
+        const stats = session.automation.getSessionStats();
+
+        sessionHealth.push({
+          sessionId,
+          username: session.username,
+          lifetimeMinutes: stats.lifetimeMinutes,
+          healthy: true
+        });
+
+        console.log(`[PING] ✅ Session ${sessionId} healthy (lifetime: ${stats.lifetimeMinutes} min)`);
+      } catch (error) {
+        console.error(`[PING] ❌ Session ${sessionId} error:`, error.message);
+        sessionHealth.push({
+          sessionId,
+          username: session.username,
+          healthy: false,
+          error: error.message
+        });
+      }
+    }
+  }
+
   res.json({
     status: 'alive',
-    timestamp: new Date().toISOString(),
-    activeSessions: sessionManager.getSessionCount()
+    timestamp,
+    activeSessions: sessionCount,
+    sessionHealth
   });
 });
 
@@ -142,10 +182,19 @@ app.get('/api/auth/pending-input', (req, res) => {
     const pendingType = session.automation.getPendingInputType();
     const pendingData = session.automation.getPendingInputData();
 
+    // If session is authenticated (login completed), take screenshot to confirm
+    if (session.authenticated) {
+      console.log('[AUTH] Session is authenticated - taking screenshot for verification');
+      session.automation.takeDebugScreenshot('pending-input-authenticated').catch(e => {
+        console.error('[AUTH] Screenshot error:', e.message);
+      });
+    }
+
     res.json({
       success: true,
       pendingType: pendingType || null,
-      pendingData: pendingData || null // Question text for security-question
+      pendingData: pendingData || null, // Question text for security-question
+      authenticated: session.authenticated || false
     });
 
   } catch (error) {

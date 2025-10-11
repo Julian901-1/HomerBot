@@ -508,6 +508,25 @@ export class TBankAutomation {
 
 
   /**
+   * Take and log screenshot for debugging
+   * @param {string} context - Context description (e.g., "keep-alive", "login-check")
+   */
+  async takeDebugScreenshot(context = 'unknown') {
+    if (!this.page) return;
+
+    try {
+      const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
+      const timestamp = new Date().toISOString();
+      console.log(`[TBANK] 📸 [${context}] Screenshot at ${timestamp} (length: ${screenshot.length})`);
+      console.log(`[TBANK] 📸 === SCREENSHOT BASE64 START [${context}] ===`);
+      console.log(screenshot);
+      console.log(`[TBANK] 📸 === SCREENSHOT BASE64 END [${context}] ===`);
+    } catch (e) {
+      console.log(`[TBANK] ⚠️ [${context}] Could not capture screenshot:`, e.message);
+    }
+  }
+
+  /**
    * Wait for user input dynamically
    * @param {string} type - Type of input ('sms', 'dynamic-question')
    * @param {object|string} [data] - Additional data (e.g., question object for dynamic questions)
@@ -746,6 +765,19 @@ export class TBankAutomation {
 
         console.log('[TBANK] Keep-alive action completed');
 
+        // Take screenshot every keep-alive cycle for monitoring
+        console.log(`[TBANK] 📸 Taking keep-alive screenshot #${keepAliveCount}`);
+        await this.takeDebugScreenshot(`keep-alive-${keepAliveCount}`);
+
+        // Check if we're still logged in by verifying URL
+        const currentUrl = this.page.url();
+        if (!currentUrl.includes('/mybank/') && !currentUrl.includes('/accounts') && !currentUrl.includes('/main')) {
+          console.error(`[TBANK] ⚠️ Session appears to be logged out! Current URL: ${currentUrl}`);
+          console.error(`[TBANK] ⚠️ Keep-alive #${keepAliveCount} detected logout - session may be expired`);
+        } else {
+          console.log(`[TBANK] ✅ Session still active (URL check passed)`);
+        }
+
         // Save session every 3rd keep-alive cycle (every 15 minutes if interval is 5 min)
         if (keepAliveCount % 3 === 0) {
           console.log(`[TBANK] 💾 Periodic session save (keep-alive #${keepAliveCount})`);
@@ -754,6 +786,8 @@ export class TBankAutomation {
 
       } catch (error) {
         console.error('[TBANK] Keep-alive error:', error);
+        // Take screenshot on error
+        await this.takeDebugScreenshot(`keep-alive-error-${keepAliveCount}`);
       }
     }, interval);
   }
