@@ -122,12 +122,25 @@ app.post('/api/auth/login', async (req, res) => {
     const sessionId = sessionManager.createSession(username, automation);
 
     // Start login process asynchronously (don't wait for it)
-    automation.login().then(result => {
+    automation.login().then(async (result) => {
       if (result && result.success) {
         console.log(`[AUTH] ✅ Login successful for user ${username}`);
         console.log(`[AUTH] 🔑 Session ID: ${sessionId}`);
         console.log(`[AUTH] 💾 This Session ID should be saved to Google Sheets column G for user ${username}`);
         sessionManager.markAuthenticated(sessionId);
+
+        // Automatically fetch accounts after successful login
+        try {
+          console.log(`[AUTH] 📋 Fetching accounts automatically after login...`);
+          const accounts = await automation.getAccounts();
+          console.log(`[AUTH] ✅ Auto-fetched ${accounts.length} accounts`);
+
+          const savingAccounts = await automation.getSavingAccounts();
+          console.log(`[AUTH] ✅ Auto-fetched ${savingAccounts.length} saving accounts`);
+        } catch (error) {
+          console.error(`[AUTH] ⚠️ Error auto-fetching accounts:`, error.message);
+          // Non-critical error, don't fail the login
+        }
       } else {
         console.error(`[AUTH] Login failed for session ${sessionId}:`, result?.error);
       }
