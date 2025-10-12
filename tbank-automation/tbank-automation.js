@@ -12,11 +12,12 @@ puppeteer.use(StealthPlugin());
  * T-Bank automation using Puppeteer with anti-detection
  */
 export class TBankAutomation {
-  constructor({ username, phone, password, encryptionService }) {
+  constructor({ username, phone, password, encryptionService, onAuthenticated }) {
     this.username = username;
     this.encryptedPhone = phone;
     this.encryptedPassword = password;
     this.encryptionService = encryptionService;
+    this.onAuthenticated = onAuthenticated; // Callback to mark session as authenticated
 
     this.browser = null;
     this.page = null;
@@ -293,6 +294,12 @@ export class TBankAutomation {
           this.sessionActive = true;
           this.pendingInputType = 'completed'; // Signal that login is complete
 
+          // Mark session as authenticated via callback (BEFORE any async operations)
+          if (this.onAuthenticated) {
+            this.onAuthenticated();
+            console.log(`[TBANK] ✅ Called onAuthenticated callback`);
+          }
+
           // Mark login success timestamp
           this.sessionPersistence.markLoginSuccess();
 
@@ -325,6 +332,12 @@ export class TBankAutomation {
             console.log('[TBANK] ✅ Successfully navigated to /mybank/');
             this.sessionActive = true;
             this.pendingInputType = 'completed'; // Signal that login is complete
+
+            // Mark session as authenticated via callback
+            if (this.onAuthenticated) {
+              this.onAuthenticated();
+              console.log(`[TBANK] ✅ Called onAuthenticated callback`);
+            }
 
             // Mark login success and save session
             this.sessionPersistence.markLoginSuccess();
@@ -442,6 +455,12 @@ export class TBankAutomation {
         this.sessionActive = true;
         this.pendingInputType = 'completed'; // Signal that login is complete
 
+        // Mark session as authenticated via callback
+        if (this.onAuthenticated) {
+          this.onAuthenticated();
+          console.log(`[TBANK] ✅ Called onAuthenticated callback`);
+        }
+
         // Mark login success and save session
         this.sessionPersistence.markLoginSuccess();
         await this.sessionPersistence.saveSession(this.page);
@@ -464,6 +483,12 @@ export class TBankAutomation {
         console.log('[TBANK] ✅ Login status check passed');
         this.sessionActive = true;
         this.pendingInputType = 'completed'; // Signal that login is complete
+
+        // Mark session as authenticated via callback
+        if (this.onAuthenticated) {
+          this.onAuthenticated();
+          console.log(`[TBANK] ✅ Called onAuthenticated callback`);
+        }
 
         // Mark login success and save session
         this.sessionPersistence.markLoginSuccess();

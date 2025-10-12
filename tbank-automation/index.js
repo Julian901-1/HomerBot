@@ -110,28 +110,35 @@ app.post('/api/auth/login', async (req, res) => {
     // Encrypt credentials
     const encryptedPhone = encryptionService.encrypt(phone);
 
-    // Create automation instance
+    // Store session immediately (before login starts) to get sessionId
+    let sessionId = null;
+
+    // Create automation instance with callback
     const automation = new TBankAutomation({
       username,
       phone: encryptedPhone,
       password: '', // Not used anymore
-      encryptionService
+      encryptionService,
+      onAuthenticated: () => {
+        // This callback is called SYNCHRONOUSLY when login succeeds
+        if (sessionId) {
+          sessionManager.markAuthenticated(sessionId);
+          console.log(`[AUTH] ✅ Session ${sessionId} marked as AUTHENTICATED via callback`);
+        }
+      }
     });
 
-    // Store session immediately (before login starts)
-    const sessionId = sessionManager.createSession(username, automation);
+    // Create session after automation instance
+    sessionId = sessionManager.createSession(username, automation);
 
     // Start login process asynchronously (don't wait for it)
     automation.login().then(async (result) => {
       if (result && result.success) {
         console.log(`[AUTH] ✅ Login successful for user ${username}`);
-
-        // Mark as authenticated FIRST before anything else
-        sessionManager.markAuthenticated(sessionId);
-        console.log(`[AUTH] ✅ Session ${sessionId} marked as AUTHENTICATED`);
-
         console.log(`[AUTH] 🔑 Session ID: ${sessionId}`);
         console.log(`[AUTH] 💾 This Session ID should be saved to Google Sheets column G for user ${username}`);
+
+        // Note: Session is already marked as authenticated via onAuthenticated callback
 
         // Automatically fetch accounts after successful login
         try {
