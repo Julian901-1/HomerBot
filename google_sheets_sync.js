@@ -1289,7 +1289,7 @@ function tbankCheckPendingInput(hashedUsername, sessionId) {
  */
 function tbankCheckPendingInput(hashedUsername, sessionId) {
   try {
-    var url = TBANK_SERVICE_URL + '/auth/pending-input?sessionId=' + encodeURIComponent(sessionId);
+    var url = TBANK_SERVICE_URL + '/auth/pending-input?sessionId=' + encodeURIComponent(sessionId) + '&username=' + encodeURIComponent(hashedUsername);
 
     var options = {
       method: 'get',

@@ -185,6 +185,13 @@ app.get('/api/auth/pending-input', (req, res) => {
     const pendingType = session.automation.getPendingInputType();
     const pendingData = session.automation.getPendingInputData();
 
+    console.log(`[AUTH] Pending type: ${pendingType}`);
+    console.log(`[AUTH] SMS queue size: ${smsCodeQueue.size}`);
+    console.log(`[AUTH] SMS queue has key "${session.username}": ${smsCodeQueue.has(session.username)}`);
+    if (smsCodeQueue.size > 0) {
+      console.log(`[AUTH] SMS queue keys:`, Array.from(smsCodeQueue.keys()));
+    }
+
     // Check if there's a queued SMS code for this user
     if (pendingType === 'sms' && smsCodeQueue.has(session.username)) {
       const queuedData = smsCodeQueue.get(session.username);
