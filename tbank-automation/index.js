@@ -21,6 +21,9 @@ app.use(bodyParser.urlencoded({ extended: true }));
 const encryptionService = new EncryptionService(process.env.ENCRYPTION_SECRET_KEY || process.env.ENCRYPTION_KEY);
 const sessionManager = new SessionManager();
 
+// SMS code queue - stores codes that arrived before session was ready
+const smsCodeQueue = new Map(); // username -> { code, timestamp }
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -181,6 +184,28 @@ app.get('/api/auth/pending-input', (req, res) => {
 
     const pendingType = session.automation.getPendingInputType();
     const pendingData = session.automation.getPendingInputData();
+
+    // Check if there's a queued SMS code for this user
+    if (pendingType === 'sms' && smsCodeQueue.has(session.username)) {
+      const queuedData = smsCodeQueue.get(session.username);
+
+      // Check if code is still valid (not expired)
+      if (Date.now() < queuedData.expiresAt) {
+        console.log(`[AUTH] 🎯 Found queued SMS code for ${session.username}, auto-submitting: ${queuedData.code}`);
+
+        // Submit the code automatically
+        session.automation.submitUserInput(queuedData.code);
+
+        // Clear from queue
+        smsCodeQueue.delete(session.username);
+
+        console.log(`[AUTH] ✅ Auto-submitted queued SMS code ${queuedData.code}`);
+      } else {
+        // Code expired, remove it
+        console.log(`[AUTH] ⏰ Queued SMS code for ${session.username} expired, removing from queue`);
+        smsCodeQueue.delete(session.username);
+      }
+    }
 
     res.json({
       success: true,
@@ -395,16 +420,40 @@ app.post('/api/auth/auto-sms', async (req, res) => {
     }
 
     if (!targetSession) {
-      console.log('[AUTO-SMS] No session waiting for SMS code');
-      return res.status(404).json({
-        success: false,
-        error: 'No active session waiting for SMS code'
-      });
+      console.log('[AUTO-SMS] No session waiting for SMS code yet - adding to queue');
+
+      // Store code in queue with 5-minute TTL
+      if (username) {
+        smsCodeQueue.set(username, {
+          code,
+          timestamp: Date.now(),
+          expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes
+        });
+        console.log(`[AUTO-SMS] Code ${code} queued for user ${username}, will expire in 5 minutes`);
+
+        return res.json({
+          success: true,
+          message: 'SMS code queued, will be submitted when session is ready',
+          code: code,
+          queued: true
+        });
+      } else {
+        // No username provided and no active session
+        return res.status(404).json({
+          success: false,
+          error: 'No active session waiting for SMS code and no username provided'
+        });
+      }
     }
 
-    // Submit the code
-    console.log('[AUTO-SMS] Submitting code to session');
+    // Submit the code immediately
+    console.log('[AUTO-SMS] Submitting code to session immediately');
     targetSession.automation.submitUserInput(code);
+
+    // Clear from queue if it was there
+    if (username) {
+      smsCodeQueue.delete(username);
+    }
 
     res.json({
       success: true,
@@ -505,6 +554,24 @@ app.listen(PORT, () => {
   cron.schedule('0 * * * *', () => {
     console.log('[CRON] Running session cleanup...');
     sessionManager.cleanupExpiredSessions();
+  });
+
+  // Schedule SMS queue cleanup every 5 minutes
+  cron.schedule('*/5 * * * *', () => {
+    const now = Date.now();
+    let expiredCount = 0;
+
+    for (const [username, data] of smsCodeQueue.entries()) {
+      if (now >= data.expiresAt) {
+        console.log(`[CRON] Removing expired SMS code for user ${username}`);
+        smsCodeQueue.delete(username);
+        expiredCount++;
+      }
+    }
+
+    if (expiredCount > 0) {
+      console.log(`[CRON] Cleaned up ${expiredCount} expired SMS codes`);
+    }
   });
 
   // Start the transfer scheduler
