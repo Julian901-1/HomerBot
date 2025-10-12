@@ -141,32 +141,8 @@ export class TBankAutomation {
     try {
       await this.init();
 
-      // Try to restore existing session first
-      const hasStoredSession = await this.sessionPersistence.hasStoredSession();
-      if (hasStoredSession) {
-        console.log(`[TBANK] 🔄 Found stored session, attempting to restore...`);
-        const restored = await this.sessionPersistence.restoreSession(this.page);
-
-        if (restored) {
-          console.log(`[TBANK] ✅ Session restored successfully, skipping login`);
-          this.sessionActive = true;
-          this.pendingInputType = 'completed'; // Session is ready to use
-          this.startKeepAlive();
-
-          // Log session stats
-          const stats = this.sessionPersistence.getSessionStats();
-          console.log(`[TBANK] 📊 Session Stats:`, stats);
-          console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - session restored and ready`);
-
-          return {
-            success: true,
-            message: 'Session restored from storage',
-            restored: true
-          };
-        } else {
-          console.log(`[TBANK] ⚠️ Session restore failed, proceeding with normal login`);
-        }
-      }
+      // Session restore disabled - always login fresh
+      console.log(`[TBANK] 🔄 Session persistence disabled - starting fresh login`);
 
       const phone = this.encryptionService.decrypt(this.encryptedPhone);
 
