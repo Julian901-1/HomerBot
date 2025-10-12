@@ -125,9 +125,13 @@ app.post('/api/auth/login', async (req, res) => {
     automation.login().then(async (result) => {
       if (result && result.success) {
         console.log(`[AUTH] ✅ Login successful for user ${username}`);
+
+        // Mark as authenticated FIRST before anything else
+        sessionManager.markAuthenticated(sessionId);
+        console.log(`[AUTH] ✅ Session ${sessionId} marked as AUTHENTICATED`);
+
         console.log(`[AUTH] 🔑 Session ID: ${sessionId}`);
         console.log(`[AUTH] 💾 This Session ID should be saved to Google Sheets column G for user ${username}`);
-        sessionManager.markAuthenticated(sessionId);
 
         // Automatically fetch accounts after successful login
         try {
@@ -194,11 +198,13 @@ app.get('/api/auth/pending-input', (req, res) => {
     }
 
     console.log('[AUTH] Session found for user:', session.username);
+    console.log(`[AUTH] Session.authenticated: ${session.authenticated}`);
 
     const pendingType = session.automation.getPendingInputType();
     const pendingData = session.automation.getPendingInputData();
 
     console.log(`[AUTH] Pending type: ${pendingType}`);
+    console.log(`[AUTH] Returning authenticated: ${session.authenticated || false}`);
     console.log(`[AUTH] SMS queue size: ${smsCodeQueue.size}`);
     console.log(`[AUTH] SMS queue has key "${session.username}": ${smsCodeQueue.has(session.username)}`);
     if (smsCodeQueue.size > 0) {
