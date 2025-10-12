@@ -592,7 +592,7 @@ app.post('/api/auth/logout', async (req, res) => {
  * POST /api/transfer/to-saving?sessionId=xxx
  * Body: { force: true }
  */
-app.post('/transfer/to-saving', async (req, res) => {
+app.post('/api/transfer/to-saving', async (req, res) => {
   try {
     const { sessionId } = req.query;
     const { force } = req.body;
