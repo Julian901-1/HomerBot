@@ -257,8 +257,13 @@ function doGet(e) {
       case 'tbankGetTransferSchedule':
         return jsonOk(tbankGetTransferSchedule(hashedUsername));
 
-      case 'tbankForceTransferToSaving':
-        return jsonOk(tbankForceTransferToSaving(hashedUsername, p.sessionId));
+      case 'tbankForceTransferToSaving': {
+        const result = tbankForceTransferToSaving(hashedUsername, p.sessionId);
+        if (result && result.success === false) {
+          return jsonErr(result.error || 'Ошибка при переводе средств');
+        }
+        return jsonOk(result);
+      }
 
       default:
         return jsonErr('Unknown action');
@@ -1710,6 +1715,10 @@ function tbankForceTransferToSaving(hashedUsername, sessionId) {
   try {
     console.log('[TBANK] tbankForceTransferToSaving called for user:', hashedUsername);
 
+    if (!sessionId) {
+      return { success: false, error: 'Отсутствует sessionId. Пожалуйста, войдите в Т-Банк заново.' };
+    }
+
     // Отправляем запрос на Puppeteer сервер для выполнения перевода
     var url = TBANK_SERVICE_URL + '/transfer/to-saving?sessionId=' + encodeURIComponent(sessionId);
 
@@ -1723,13 +1732,32 @@ function tbankForceTransferToSaving(hashedUsername, sessionId) {
 
     console.log('[TBANK] Sending force transfer request to:', url);
     var response = UrlFetchApp.fetch(url, options);
+    var responseCode = response.getResponseCode();
+
+    console.log('[TBANK] Response code:', responseCode);
+
+    if (responseCode !== 200) {
+      console.error('[TBANK] Non-200 response:', response.getContentText());
+      return {
+        success: false,
+        error: 'Сервис автоматизации Т-Банка временно недоступен. Код: ' + responseCode
+      };
+    }
+
     var result = JSON.parse(response.getContentText());
 
     console.log('[TBANK] Force transfer result:', JSON.stringify(result));
     return result;
   } catch (e) {
     console.error('[TBANK] tbankForceTransferToSaving error:', e);
-    return { success: false, error: String(e) };
+    var errorMessage = String(e);
+
+    // Более понятные сообщения об ошибках
+    if (errorMessage.indexOf('DNS') !== -1 || errorMessage.indexOf('timeout') !== -1) {
+      return { success: false, error: 'Сервис автоматизации Т-Банка временно недоступен. Попробуйте позже.' };
+    }
+
+    return { success: false, error: 'Ошибка при переводе средств: ' + errorMessage };
   }
 }
 

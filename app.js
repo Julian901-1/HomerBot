@@ -549,6 +549,15 @@ async function apiGet(path) {
      const fullPath = initData ? `${path}${separator}initData=${encodeURIComponent(initData)}` : path;
      const r = await fetch(`${SCRIPT_URL}${fullPath}`);
      if (!r.ok) throw new Error(`Network error: ${r.statusText}`);
+
+     // Проверяем, что ответ действительно JSON
+     const contentType = r.headers.get('content-type');
+     if (!contentType || !contentType.includes('application/json')) {
+       const text = await r.text();
+       console.error("Non-JSON response received:", text.substring(0, 200));
+       throw new Error("Сервер вернул некорректный ответ (не JSON). Возможно, произошла ошибка на сервере.");
+     }
+
      const data = await r.json();
      if (!data) throw new Error("Empty response from server");
      return data;
