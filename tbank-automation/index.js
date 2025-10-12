@@ -182,18 +182,10 @@ app.get('/api/auth/pending-input', (req, res) => {
     const pendingType = session.automation.getPendingInputType();
     const pendingData = session.automation.getPendingInputData();
 
-    // If session is authenticated (login completed), take screenshot to confirm
-    if (session.authenticated) {
-      console.log('[AUTH] Session is authenticated - taking screenshot for verification');
-      session.automation.takeDebugScreenshot('pending-input-authenticated').catch(e => {
-        console.error('[AUTH] Screenshot error:', e.message);
-      });
-    }
-
     res.json({
       success: true,
       pendingType: pendingType || null,
-      pendingData: pendingData || null, // Question text for security-question
+      pendingData: pendingData || null,
       authenticated: session.authenticated || false
     });
 
@@ -344,6 +336,84 @@ app.post('/api/transfer', async (req, res) => {
 
   } catch (error) {
     console.error('[API] Transfer error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Auto-submit SMS code from MacroDroid
+ * POST /api/auth/auto-sms
+ * Body: { message: "Никому не говорите код 4399. Вход в Т-Банк..." }
+ */
+app.post('/api/auth/auto-sms', async (req, res) => {
+  try {
+    const { message, username } = req.body;
+
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing message'
+      });
+    }
+
+    console.log('[AUTO-SMS] Received SMS message:', message);
+
+    // Extract code using regex (4 digits)
+    const codeMatch = message.match(/код\s+(\d{4})/i);
+
+    if (!codeMatch) {
+      console.log('[AUTO-SMS] No code found in message');
+      return res.status(400).json({
+        success: false,
+        error: 'Could not extract code from message'
+      });
+    }
+
+    const code = codeMatch[1];
+    console.log(`[AUTO-SMS] Extracted code: ${code}`);
+
+    // Find active session waiting for SMS
+    let targetSession = null;
+
+    if (username) {
+      // If username provided, find by username
+      const sessionId = sessionManager.findSessionByUsername(username);
+      if (sessionId) {
+        targetSession = sessionManager.getSession(sessionId);
+      }
+    } else {
+      // Otherwise find any session waiting for SMS
+      for (const [sessionId, session] of sessionManager.sessions.entries()) {
+        if (session.automation.getPendingInputType() === 'sms') {
+          targetSession = session;
+          break;
+        }
+      }
+    }
+
+    if (!targetSession) {
+      console.log('[AUTO-SMS] No session waiting for SMS code');
+      return res.status(404).json({
+        success: false,
+        error: 'No active session waiting for SMS code'
+      });
+    }
+
+    // Submit the code
+    console.log('[AUTO-SMS] Submitting code to session');
+    targetSession.automation.submitInput(code);
+
+    res.json({
+      success: true,
+      message: 'SMS code submitted successfully',
+      code: code
+    });
+
+  } catch (error) {
+    console.error('[AUTO-SMS] Error:', error);
     res.status(500).json({
       success: false,
       error: error.message

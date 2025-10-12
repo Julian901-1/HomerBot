@@ -237,6 +237,18 @@ function openModal(modalId) {
     if (autoRenewToggle) autoRenewToggle.checked = userPrefs.autoRenew !== false;
   }
 
+  // Special logic for "Evening Percent" - check if already authenticated
+  if (modalId === 'eveningPercent') {
+    if (tbankConnected && tbankSessionId) {
+      // Already authenticated - skip to time configuration
+      console.log('[TBANK] Already authenticated, showing time configuration');
+      showTBankStep('connected');
+    } else {
+      // Not authenticated - show login step
+      showTBankStep('step1');
+    }
+  }
+
         // Special logic for "Withdraw"
  if (modalId === 'withdraw') {
    // New entry into modal — forget previous "Add new credentials"
@@ -1837,8 +1849,9 @@ function startTBankInputPolling() {
 
       if (resp && resp.success) {
         if (resp.pendingType === 'sms') {
+          // SMS is now automated via MacroDroid - don't show to user
           if (lastShownQuestion !== 'sms') {
-            showTBankStep('sms');
+            console.log('[TBANK] SMS step automated, waiting for MacroDroid to submit code...');
             lastShownQuestion = 'sms';
           }
         } else if (resp.pendingType === 'dynamic-question') {
@@ -1879,8 +1892,8 @@ function startTBankInputPolling() {
           stopTBankInputPolling();
           showPopup('Ошибка входа в Т-Банк. Попробуйте снова.');
           lastShownQuestion = null;
-        } else if (resp.pendingType === null && !tbankConnectionHandled) {
-          // Login complete, fetch accounts (only once)
+        } else if ((resp.pendingType === 'completed' || resp.authenticated === true) && !tbankConnectionHandled) {
+          // Login complete (authenticated or explicitly marked as completed), fetch accounts (only once)
           tbankConnectionHandled = true;
           stopTBankInputPolling();
           lastShownQuestion = null;
