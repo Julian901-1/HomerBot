@@ -1223,6 +1223,29 @@ function tbankHealthCheck() {
  */
 function tbankLogin(hashedUsername, phone) {
   try {
+    console.log('[TBANK] tbankLogin called for user:', hashedUsername);
+
+    // Проверяем, есть ли активная сессия для этого пользователя
+    var existingSessionId = getTBankSessionId_(hashedUsername);
+    console.log('[TBANK] Existing sessionId:', existingSessionId);
+
+    // Если есть активная сессия, пытаемся её закрыть
+    if (existingSessionId) {
+      console.log('[TBANK] Found existing session, attempting to close it...');
+      try {
+        var logoutResult = tbankLogout(hashedUsername, existingSessionId);
+        console.log('[TBANK] Logout result:', JSON.stringify(logoutResult));
+
+        // Очищаем sessionId в базе независимо от результата logout
+        saveTBankSessionId_(hashedUsername, '');
+        console.log('[TBANK] Cleared sessionId in database');
+      } catch (logoutError) {
+        console.error('[TBANK] Error during logout, but continuing:', logoutError);
+        // Очищаем sessionId в базе даже если logout упал
+        saveTBankSessionId_(hashedUsername, '');
+      }
+    }
+
     var payload = JSON.stringify({
       username: hashedUsername,
       phone: phone
@@ -1236,6 +1259,7 @@ function tbankLogin(hashedUsername, phone) {
       timeout: TBANK_REQUEST_TIMEOUT
     };
 
+    console.log('[TBANK] Sending login request...');
     var response = UrlFetchApp.fetch(TBANK_SERVICE_URL + '/auth/login', options);
     var responseCode = response.getResponseCode();
     var responseText = response.getContentText();
@@ -1250,6 +1274,7 @@ function tbankLogin(hashedUsername, phone) {
     }
 
     var result = JSON.parse(responseText);
+    console.log('[TBANK] Login successful, sessionId:', result.sessionId);
     return result;
   } catch (e) {
     console.error('tbankLogin error:', e);

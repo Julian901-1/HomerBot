@@ -99,12 +99,21 @@ app.post('/api/auth/login', async (req, res) => {
     // Check if there's already an active session for this user
     const existingSessionId = sessionManager.findSessionByUsername(username);
     if (existingSessionId) {
-      console.log(`[AUTH] Reusing existing session ${existingSessionId} for user ${username}`);
-      return res.json({
-        success: true,
-        sessionId: existingSessionId,
-        message: 'Using existing active session'
-      });
+      console.log(`[AUTH] Found existing session ${existingSessionId} for user ${username}, closing it...`);
+
+      try {
+        const existingSession = sessionManager.getSession(existingSessionId);
+        if (existingSession) {
+          // Close the existing session and delete user data
+          await existingSession.automation.close(true); // true = delete session data
+          sessionManager.deleteSession(existingSessionId);
+          console.log(`[AUTH] ✅ Successfully closed existing session ${existingSessionId}`);
+        }
+      } catch (closeError) {
+        console.error(`[AUTH] Error closing existing session, continuing anyway:`, closeError.message);
+        // Continue with login even if close failed
+        sessionManager.deleteSession(existingSessionId);
+      }
     }
 
     // Encrypt credentials
