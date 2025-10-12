@@ -404,7 +404,7 @@ app.post('/api/auth/auto-sms', async (req, res) => {
 
     // Submit the code
     console.log('[AUTO-SMS] Submitting code to session');
-    targetSession.automation.submitInput(code);
+    targetSession.automation.submitUserInput(code);
 
     res.json({
       success: true,
