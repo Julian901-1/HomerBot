@@ -552,6 +552,49 @@ app.post('/api/auth/logout', async (req, res) => {
   }
 });
 
+/**
+ * Force transfer to saving account
+ * POST /api/transfer/to-saving?sessionId=xxx
+ * Body: { force: true }
+ */
+app.post('/transfer/to-saving', async (req, res) => {
+  try {
+    const { sessionId } = req.query;
+    const { force } = req.body;
+
+    console.log(`[TRANSFER] Force transfer to saving account - sessionId: ${sessionId}`);
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing sessionId'
+      });
+    }
+
+    const session = sessionManager.getSession(sessionId);
+    if (!session || !session.authenticated) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized or session not found'
+      });
+    }
+
+    console.log(`[TRANSFER] Starting transfer for user ${session.username}`);
+
+    // Execute the transfer with screenshots
+    const result = await session.automation.executeTransferToSaving(force);
+
+    res.json(result);
+
+  } catch (error) {
+    console.error('[TRANSFER] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 T-Bank Automation Service running on port ${PORT}`);

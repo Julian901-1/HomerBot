@@ -1538,6 +1538,103 @@ export class TBankAutomation {
   }
 
   /**
+   * Execute forced transfer to saving account (для кнопки "Вечерний процент")
+   * Transfers ALL available balance from all debit accounts to first saving account
+   * Takes screenshots at each step for logging
+   */
+  async executeTransferToSaving(force = false) {
+    try {
+      if (!this.sessionActive) {
+        throw new Error('Not logged in');
+      }
+
+      console.log('[TRANSFER] 🚀 === STARTING FORCED TRANSFER TO SAVING ===' );
+
+      // Step 1: Take initial screenshot
+      await this.takeDebugScreenshot('transfer-start-mybank');
+
+      // Step 2: Get all debit accounts
+      console.log('[TRANSFER] 📋 Fetching all debit accounts...');
+      const debitAccounts = await this.getAccounts();
+
+      if (debitAccounts.length === 0) {
+        throw new Error('No debit accounts found');
+      }
+
+      console.log(`[TRANSFER] ✅ Found ${debitAccounts.length} debit accounts`);
+
+      // Step 3: Get all saving accounts
+      console.log('[TRANSFER] 📋 Fetching saving accounts...');
+      const savingAccounts = await this.getSavingAccounts();
+
+      if (savingAccounts.length === 0) {
+        throw new Error('No saving accounts found - please create one first');
+      }
+
+      const targetSavingAccount = savingAccounts[0];
+      console.log(`[TRANSFER] 🎯 Target saving account: "${targetSavingAccount.name}" (ID: ${targetSavingAccount.id})`);
+
+      // Step 4: Transfer from each debit account
+      const transfers = [];
+
+      for (const debitAccount of debitAccounts) {
+        if (debitAccount.balance > 0) {
+          console.log(`[TRANSFER] 💸 Transferring ${debitAccount.balance} RUB from "${debitAccount.name}"...`);
+
+          // Take screenshot before transfer
+          await this.takeDebugScreenshot(`transfer-before-${debitAccount.id}`);
+
+          const result = await this.transferToSavingAccount(
+            debitAccount.name,
+            targetSavingAccount.name,
+            debitAccount.balance
+          );
+
+          // Take screenshot after transfer
+          await this.takeDebugScreenshot(`transfer-after-${debitAccount.id}`);
+
+          transfers.push({
+            from: debitAccount.name,
+            amount: debitAccount.balance,
+            result: result
+          });
+
+          if (result.success) {
+            console.log(`[TRANSFER] ✅ Successfully transferred ${debitAccount.balance} RUB from "${debitAccount.name}"`);
+          } else {
+            console.error(`[TRANSFER] ❌ Failed to transfer from "${debitAccount.name}":`, result.error);
+          }
+        } else {
+          console.log(`[TRANSFER] ⏭️ Skipping "${debitAccount.name}" - balance is 0`);
+        }
+      }
+
+      // Step 5: Take final screenshot
+      await this.takeDebugScreenshot('transfer-completed-final');
+
+      console.log('[TRANSFER] 🎉 === FORCED TRANSFER COMPLETED ===');
+
+      return {
+        success: true,
+        message: `Transferred funds from ${transfers.length} accounts to "${targetSavingAccount.name}"`,
+        transfers: transfers,
+        targetAccount: targetSavingAccount.name
+      };
+
+    } catch (error) {
+      console.error('[TRANSFER] ❌ Error executing forced transfer:', error);
+
+      // Take error screenshot
+      await this.takeDebugScreenshot('transfer-error');
+
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
    * Transfer money between own accounts (old generic method - kept for backwards compatibility)
    */
   async transferBetweenAccounts(fromAccountId, toAccountId, amount) {

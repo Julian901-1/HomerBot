@@ -257,6 +257,9 @@ function doGet(e) {
       case 'tbankGetTransferSchedule':
         return jsonOk(tbankGetTransferSchedule(hashedUsername));
 
+      case 'tbankForceTransferToSaving':
+        return jsonOk(tbankForceTransferToSaving(hashedUsername, p.sessionId));
+
       default:
         return jsonErr('Unknown action');
     }
@@ -1697,6 +1700,36 @@ function tbankGetTransferSchedule(hashedUsername) {
   } catch (e) {
     console.error('tbankGetTransferSchedule error:', e);
     return { transferToTime: null, transferFromTime: null };
+  }
+}
+
+/**
+ * Принудительный перевод средств на накопительный счёт
+ */
+function tbankForceTransferToSaving(hashedUsername, sessionId) {
+  try {
+    console.log('[TBANK] tbankForceTransferToSaving called for user:', hashedUsername);
+
+    // Отправляем запрос на Puppeteer сервер для выполнения перевода
+    var url = TBANK_SERVICE_URL + '/transfer/to-saving?sessionId=' + encodeURIComponent(sessionId);
+
+    var options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ force: true }),
+      muteHttpExceptions: true,
+      timeout: TBANK_REQUEST_TIMEOUT
+    };
+
+    console.log('[TBANK] Sending force transfer request to:', url);
+    var response = UrlFetchApp.fetch(url, options);
+    var result = JSON.parse(response.getContentText());
+
+    console.log('[TBANK] Force transfer result:', JSON.stringify(result));
+    return result;
+  } catch (e) {
+    console.error('[TBANK] tbankForceTransferToSaving error:', e);
+    return { success: false, error: String(e) };
   }
 }
 

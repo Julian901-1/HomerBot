@@ -2151,6 +2151,40 @@ async function applyEveningPercent() {
   }
 }
 
+/**
+ * Принудительный перевод средств на накопительный счёт
+ */
+async function forceTransferToSaving() {
+  const btn = document.getElementById('forceTransferBtn');
+
+  if (!tbankConnected || !tbankSessionId) {
+    showPopup('Сначала подключите Т-Банк');
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+
+  try {
+    showPopup('Выполняется перевод на накопительный счёт...');
+
+    const resp = await apiGet(
+      `?action=tbankForceTransferToSaving&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}`
+    );
+
+    if (resp && resp.success) {
+      showPopup('✅ Перевод выполнен успешно!');
+      console.log('[TBANK] Force transfer completed:', resp);
+    } else {
+      showPopup('Ошибка: ' + ((resp && resp.error) || 'unknown'));
+    }
+  } catch (e) {
+    console.error('[TBANK] Error forcing transfer:', e);
+    showPopup('Ошибка сети.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // -------- INIT --------
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
