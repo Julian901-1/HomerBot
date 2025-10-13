@@ -15,6 +15,7 @@ const SYNC_BACKOFF_MAX = 60000;  // max 60s
 let lastDepositAmount = 0;
 let lastDepositShortId = null;
 let hasPendingDeposit = false;
+let lastDepositCreatedTime = 0; // Время создания последнего депозита (для предотвращения дубликатов pop-up)
 
 // Status: show loading/synced only once
 let hasShownInitialStatus = false;
@@ -791,14 +792,27 @@ async function syncBalance(fromScheduler = false) {
           .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
 
         if (last && (last.status === 'APPROVED' || last.status === 'REJECTED')) {
-          const msg = last.status === 'APPROVED' ?
-            'Средства зачислены на счёт' : 'Депозит отклонён';
+          // ЗАЩИТА: Не показываем pop-up если депозит был создан только что (меньше 5 секунд назад)
+          const timeSinceCreated = Date.now() - lastDepositCreatedTime;
+          const isJustCreated = lastDepositCreatedTime > 0 && timeSinceCreated < 5000;
 
-          // Очищаем старые данные депозита
-          lastDepositAmount = 0;
-          lastDepositShortId = null;
+          if (!isJustCreated) {
+            const msg = last.status === 'APPROVED' ?
+              'Средства зачислены на счёт' : 'Депозит отклонён';
 
-          closeDepositFlowWithPopup(msg);
+            // Очищаем старые данные депозита
+            lastDepositAmount = 0;
+            lastDepositShortId = null;
+            lastDepositCreatedTime = 0;
+
+            closeDepositFlowWithPopup(msg);
+          } else {
+            console.log('Skipping deposit notification - deposit was just created');
+            // Очищаем флаги без pop-up
+            lastDepositAmount = 0;
+            lastDepositShortId = null;
+            lastDepositCreatedTime = 0;
+          }
         }
         // CANCELED не обрабатывается здесь - обрабатывается только в cancelDeposit()
       }
@@ -811,15 +825,25 @@ async function syncBalance(fromScheduler = false) {
           .filter(x => x.type === 'DEPOSIT')
           .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
 
-        if (lastDeposit && lastDeposit.status === 'APPROVED') {
-          lastDepositAmount = 0;
-          lastDepositShortId = null;
-          closeDepositFlowWithPopup('Средства зачислены на счёт');
-        } else if (lastDeposit && lastDeposit.status === 'REJECTED') {
-          // ТОЛЬКО для REJECTED (отклонено админом), не для CANCELED (отменено пользователем)
-          lastDepositAmount = 0;
-          lastDepositShortId = null;
-          closeDepositFlowWithPopup('Депозит отклонён');
+        // ЗАЩИТА: Не показываем pop-up если депозит был создан только что (меньше 5 секунд назад)
+        const timeSinceCreated = Date.now() - lastDepositCreatedTime;
+        const isJustCreated = lastDepositCreatedTime > 0 && timeSinceCreated < 5000;
+
+        if (!isJustCreated) {
+          if (lastDeposit && lastDeposit.status === 'APPROVED') {
+            lastDepositAmount = 0;
+            lastDepositShortId = null;
+            lastDepositCreatedTime = 0;
+            closeDepositFlowWithPopup('Средства зачислены на счёт');
+          } else if (lastDeposit && lastDeposit.status === 'REJECTED') {
+            // ТОЛЬКО для REJECTED (отклонено админом), не для CANCELED (отменено пользователем)
+            lastDepositAmount = 0;
+            lastDepositShortId = null;
+            lastDepositCreatedTime = 0;
+            closeDepositFlowWithPopup('Депозит отклонён');
+          }
+        } else {
+          console.log('Skipping deposit modal closure - deposit was just created');
         }
         // CANCELED не обрабатывается здесь - обрабатывается только в cancelDeposit()
       }
@@ -1002,11 +1026,12 @@ onIf($id('depositConfirmBtn'), 'click', async function () {
       hasPendingDeposit = true;
       lastDepositAmount = amount;
       lastDepositShortId = resp && (resp.shortId || resp.requestShortId) || null;
+      lastDepositCreatedTime = Date.now(); // Запоминаем время создания
       const cleanAmount = lastDepositAmount.toString().replace(/[^\d]/g, '');
       amountEl.value = cleanAmount;
       hydrateDepositStep2(lastDepositAmount, lastDepositShortId);
       showDepositStep(2);
-      
+
       // Обновляем данные без полной переинициализации
       const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
       if (data && data.success) {
