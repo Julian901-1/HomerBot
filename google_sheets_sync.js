@@ -436,7 +436,7 @@ function getInitialData(hashedUsername) {
  * @returns {Object} Object containing all calculated balances.
  */
 function syncBalance(hashedUsername) {
-  console.log('=== syncBalance START v8.0-ON-DEMAND ===', hashedUsername, new Date().toISOString());
+  console.log('=== syncBalance START v9.0-FIXED-WITHDRAWAL ===', hashedUsername, new Date().toISOString());
 
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const usersSheet = ss.getSheetByName(SHEET_NAME);
@@ -494,6 +494,64 @@ function syncBalance(hashedUsername) {
       console.log(`Updated investment ${inv.shortId}: accrued=${round2(accrued)}`);
     }
 
+    // 3.5. Переносим разблокированные проценты 16% в userDeposits
+    console.log('Processing unlocked 16% interest...');
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const lastSyncDate = new Date(lastSync.getFullYear(), lastSync.getMonth(), lastSync.getDate(), 0, 0, 0, 0);
+
+    // Проверяем, прошла ли полночь с момента последней синхронизации
+    if (todayStart > lastSyncDate) {
+      console.log('Midnight has passed since last sync, unlocking 16% interest...');
+
+      let totalUnlockedInterest = 0;
+
+      for (const inv of investments) {
+        if (inv.rate !== 16) continue; // Обрабатываем только 16%
+
+        const reqRow = findRequestRowById_(investSheet, inv.requestId);
+        if (!reqRow) continue;
+
+        const createdAt = new Date(investSheet.getRange(reqRow, 1).getValue());
+        const amount = Number(investSheet.getRange(reqRow, 8).getValue());
+
+        // Вычисляем проценты, накопленные ДО сегодняшнего дня (которые должны разблокироваться)
+        const dailyRate = round8((inv.rate / 100) / 365.25);
+        const msUntilToday = Math.max(0, todayStart.getTime() - createdAt.getTime());
+        const daysUntilToday = round8(msUntilToday / (24 * 60 * 60 * 1000));
+        const accruedUntilToday = round8(amount * dailyRate * daysUntilToday);
+
+        // Разблокированные проценты = проценты до сегодняшнего дня минус уже разблокированные ранее
+        // (так как мы могли пропустить несколько дней)
+        const unlockedInterest = round2(accruedUntilToday);
+
+        if (unlockedInterest > 0) {
+          totalUnlockedInterest = round8(totalUnlockedInterest + unlockedInterest);
+
+          // Обнуляем accruedInterest для этой инвестиции (проценты теперь в userDeposits)
+          // НО! Оставляем проценты за СЕГОДНЯ (они разблокируются завтра)
+          const msElapsedToday = Math.max(0, now.getTime() - todayStart.getTime());
+          const daysElapsedToday = round8(msElapsedToday / (24 * 60 * 60 * 1000));
+          const todayInterestOnly = round8(amount * dailyRate * daysElapsedToday);
+
+          investSheet.getRange(reqRow, 11).setValue(round2(todayInterestOnly));
+
+          console.log(`Unlocked 16% interest for ${inv.shortId}: ${round2(unlockedInterest)}, today's interest: ${round2(todayInterestOnly)}`);
+        }
+      }
+
+      if (totalUnlockedInterest > 0) {
+        // Переносим разблокированные проценты в userDeposits (column 2)
+        const currentUserDeposits = Number(usersSheet.getRange(row, 2).getValue() || 0);
+        const newUserDeposits = round2(currentUserDeposits + totalUnlockedInterest);
+        usersSheet.getRange(row, 2).setValue(newUserDeposits);
+
+        // Дублируем в column 19 для обратной совместимости
+        usersSheet.getRange(row, 19).setValue(newUserDeposits);
+
+        console.log(`Total unlocked 16% interest: ${round2(totalUnlockedInterest)}, new userDeposits: ${newUserDeposits}`);
+      }
+    }
+
     // 4. Проверяем разморозку 17%/18%
     console.log('Checking for unfrozen investments...');
     const unfrozenInvestments = investments.filter(inv => {
@@ -542,26 +600,43 @@ function syncBalance(hashedUsername) {
               now,                          // A: createdAt
               hashedUsername,               // B: hashedUsername
               newRequestId,                 // C: requestId
-              shortIdFromUuid(newRequestId),// D: shortId
-              'APPROVED',                   // E: status
+              'APPROVED',                   // D: status (ИСПРАВЛЕНО!)
+              now,                          // E: decidedAt (ИСПРАВЛЕНО!)
               null,                         // F: delivered (null = заморожено)
-              null,                         // G: displayName
+              'INVEST',                     // G: type (ИСПРАВЛЕНО!)
               principal,                    // H: amount (только principal, БЕЗ процентов)
               newRateConfig.rate,           // I: rate (ТЕКУЩАЯ ставка из конфига!)
               newRateConfig.freezeDays > 0 ? newUnfreezeDate : null, // J: unfreezeDate
               0                             // K: accruedInterest
             ]]);
 
-            // Размороженные проценты добавляем в available16Interest (колонка U/21)
-            usersSheet.getRange(row, 21).setValue(
-              round2((usersSheet.getRange(row, 21).getValue() || 0) + frozenInterest)
-            );
+            // НОВАЯ ЛОГИКА: Размороженные проценты добавляем в userDeposits (колонка B/2)
+            const currentUserDeposits = Number(usersSheet.getRange(row, 2).getValue() || 0);
+            const newUserDeposits = round2(currentUserDeposits + frozenInterest);
+            usersSheet.getRange(row, 2).setValue(newUserDeposits);
 
-            console.log(`Auto-renewed investment ${inv.shortId} (${inv.rate}% → ${newRateConfig.rate}%) → new ${shortIdFromUuid(newRequestId)}, frozen interest ${round2(frozenInterest)} → available16Interest`);
+            // Дублируем в column 19 для обратной совместимости
+            usersSheet.getRange(row, 19).setValue(newUserDeposits);
+
+            console.log(`Auto-renewed investment ${inv.shortId} (${inv.rate}% → ${newRateConfig.rate}%) → new ${shortIdFromUuid(newRequestId)}, frozen interest ${round2(frozenInterest)} → userDeposits`);
           } else {
             // Без автопродления: просто размораживаем
             investSheet.getRange(reqRow, 6).setValue(now);
-            console.log(`Unfrozen investment ${inv.shortId}`);
+
+            // НОВАЯ ЛОГИКА: Переносим проценты в userDeposits
+            const frozenInterest = inv.accruedInterest || 0;
+            if (frozenInterest > 0) {
+              const currentUserDeposits = Number(usersSheet.getRange(row, 2).getValue() || 0);
+              const newUserDeposits = round2(currentUserDeposits + frozenInterest);
+              usersSheet.getRange(row, 2).setValue(newUserDeposits);
+
+              // Дублируем в column 19 для обратной совместимости
+              usersSheet.getRange(row, 19).setValue(newUserDeposits);
+
+              console.log(`Unfrozen investment ${inv.shortId}, frozen interest ${round2(frozenInterest)} → userDeposits`);
+            } else {
+              console.log(`Unfrozen investment ${inv.shortId}`);
+            }
           }
         }
       });
@@ -773,7 +848,12 @@ function getPortfolio(username) {
     if (lastRow < 2) return [];
     const data = sheet.getRange(2, 1, lastRow - 1, 11).getValues();
     return data
-        .filter(row => String(row[1]).trim() === username && String(row[6]).trim() === 'INVEST' && String(row[3]).trim() === 'APPROVED')
+        .filter(row =>
+            String(row[1]).trim() === username &&
+            String(row[6]).trim() === 'INVEST' &&
+            String(row[3]).trim() === 'APPROVED' &&
+            !row[5]  // ИСПРАВЛЕНИЕ: исключаем размороженные инвестиции (delivered != null)
+        )
         .map(row => ({
             createdAt: row[0] ? new Date(row[0]) : null,  // ДОБАВЛЕНО: timestamp создания
             requestId: String(row[2]),
@@ -969,9 +1049,12 @@ function calculateBalances(username) {
       locked1718Principal += inv.amount;
     } else {
       // РАЗБЛОКИРОВАННАЯ инвестиция (16% или разморозившаяся 17%/18%):
-      // Доступны для вывода ТОЛЬКО проценты до сегодня!
-      // Сегодняшние проценты станут доступны только после 00:00
-      availableForWithdrawal = round8(availableForWithdrawal + accruedUntilToday);
+      // НОВАЯ ЛОГИКА: Проценты 16% уже включены в userDeposits после разблокировки в полночь
+      // Для 17%/18% добавляем проценты до сегодня (они разблокируются вместе с основной суммой)
+      if (inv.rate === 17 || inv.rate === 18) {
+        availableForWithdrawal = round8(availableForWithdrawal + accruedUntilToday);
+      }
+      // Для 16% НЕ добавляем accruedUntilToday, так как они уже в userDeposits
     }
   }
 
@@ -1634,22 +1717,33 @@ function getTBankVklad_(hashedUsername) {
  * @param {string} transferToTime - Время перевода на вклад (HH:MM)
  * @param {string} transferFromTime - Время перевода с вклада (HH:MM)
  */
-function saveTBankTransferSchedule_(hashedUsername, transferToTime, transferFromTime) {
+function saveTBankTransferSchedule_(hashedUsername, transferToTime, transferFromTime, eveningTransferTime, morningTransferTime) {
   try {
     console.log('[TBANK] saveTBankTransferSchedule_ START: user=' + hashedUsername);
     console.log('[TBANK] To: ' + transferToTime + ', From: ' + transferFromTime);
+    console.log('[TBANK] Evening: ' + eveningTransferTime + ', Morning: ' + morningTransferTime);
 
     const prefsSheet = ensurePrefsSheet_();
     const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
 
-    // Сохраняем время перевода на вклад в колонку J (10)
-    if (transferToTime) {
-      prefsSheet.getRange(row, 10).setValue(transferToTime);
+    // OLD T-Bank vklad system: Сохраняем время перевода на вклад в колонку J (10)
+    if (transferToTime !== undefined) {
+      prefsSheet.getRange(row, 10).setValue(transferToTime || '');
     }
 
-    // Сохраняем время перевода с вклада в колонку K (11)
-    if (transferFromTime) {
-      prefsSheet.getRange(row, 11).setValue(transferFromTime);
+    // OLD T-Bank vklad system: Сохраняем время перевода с вклада в колонку K (11)
+    if (transferFromTime !== undefined) {
+      prefsSheet.getRange(row, 11).setValue(transferFromTime || '');
+    }
+
+    // NEW: Evening transfer time (T-Bank -> Alfa saving) в колонку R (18)
+    if (eveningTransferTime !== undefined) {
+      prefsSheet.getRange(row, 18).setValue(eveningTransferTime || '');
+    }
+
+    // NEW: Morning transfer time (Alfa saving -> T-Bank) в колонку S (19)
+    if (morningTransferTime !== undefined) {
+      prefsSheet.getRange(row, 19).setValue(morningTransferTime || '');
     }
 
     console.log('[TBANK] ✅ Successfully saved transfer schedule to row ' + row);
@@ -1669,17 +1763,37 @@ function getTBankTransferSchedule_(hashedUsername) {
     const prefsSheet = ensurePrefsSheet_();
     const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, false);
 
+    // OLD T-Bank vklad system (columns 10, 11)
     const transferToTime = prefsSheet.getRange(row, 10).getValue();
     const transferFromTime = prefsSheet.getRange(row, 11).getValue();
 
-    console.log('[TBANK] Retrieved schedule for user ' + hashedUsername + ':', JSON.stringify({transferToTime, transferFromTime}));
+    // NEW: Evening/morning transfers (T-Bank <-> Alfa-Bank, columns 18, 19)
+    const eveningTransferTime = prefsSheet.getRange(row, 18).getValue();
+    const morningTransferTime = prefsSheet.getRange(row, 19).getValue();
+
+    console.log('[TBANK] Retrieved schedule for user ' + hashedUsername + ':', JSON.stringify({
+      transferToTime,
+      transferFromTime,
+      eveningTransferTime,
+      morningTransferTime
+    }));
+
     return {
+      // OLD T-Bank vklad system
       transferToTime: transferToTime || null,
-      transferFromTime: transferFromTime || null
+      transferFromTime: transferFromTime || null,
+      // NEW: Evening/morning transfers
+      eveningTransferTime: eveningTransferTime || null,
+      morningTransferTime: morningTransferTime || null
     };
   } catch (e) {
     console.error('[TBANK] Error retrieving transfer schedule: ' + e.message);
-    return { transferToTime: null, transferFromTime: null };
+    return {
+      transferToTime: null,
+      transferFromTime: null,
+      eveningTransferTime: null,
+      morningTransferTime: null
+    };
   }
 }
 
@@ -1711,9 +1825,9 @@ function tbankGetVklad(hashedUsername) {
 /**
  * Прокси-функция для сохранения расписания переводов
  */
-function tbankSaveTransferSchedule(hashedUsername, transferToTime, transferFromTime) {
+function tbankSaveTransferSchedule(hashedUsername, transferToTime, transferFromTime, eveningTransferTime, morningTransferTime) {
   try {
-    saveTBankTransferSchedule_(hashedUsername, transferToTime, transferFromTime);
+    saveTBankTransferSchedule_(hashedUsername, transferToTime, transferFromTime, eveningTransferTime, morningTransferTime);
     return { success: true };
   } catch (e) {
     console.error('tbankSaveTransferSchedule error:', e);
@@ -1729,7 +1843,184 @@ function tbankGetTransferSchedule(hashedUsername) {
     return getTBankTransferSchedule_(hashedUsername);
   } catch (e) {
     console.error('tbankGetTransferSchedule error:', e);
-    return { transferToTime: null, transferFromTime: null };
+    return {
+      transferToTime: null,
+      transferFromTime: null,
+      eveningTransferTime: null,
+      morningTransferTime: null
+    };
+  }
+}
+
+/****************************
+ * ALFA-BANK CREDENTIALS & SETTINGS
+ * Колонки в HB_UserPrefs:
+ * M (13) - alfaPhone
+ * N (14) - alfaCardNumber
+ * O (15) - alfaSavingAccountId
+ * P (16) - alfaSavingAccountName
+ * Q (17) - userTimezone
+ ****************************/
+
+/**
+ * Сохраняет учётные данные Альфа-Банка в HB_UserPrefs
+ * @param {string} hashedUsername - Хешированное имя пользователя
+ * @param {string} phone - Номер телефона (хешированный)
+ * @param {string} cardNumber - Номер карты (хешированный)
+ * @param {string} savingAccountId - ID накопительного счёта
+ * @param {string} savingAccountName - Название накопительного счёта
+ */
+function saveAlfaBankCredentials_(hashedUsername, phone, cardNumber, savingAccountId, savingAccountName) {
+  try {
+    console.log('[ALFA] saveAlfaBankCredentials_ START: user=' + hashedUsername);
+
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
+
+    // Сохраняем телефон в колонку M (13)
+    if (phone) {
+      prefsSheet.getRange(row, 13).setValue(phone);
+    }
+
+    // Сохраняем номер карты в колонку N (14)
+    if (cardNumber) {
+      prefsSheet.getRange(row, 14).setValue(cardNumber);
+    }
+
+    // Сохраняем ID накопительного счёта в колонку O (15)
+    if (savingAccountId) {
+      prefsSheet.getRange(row, 15).setValue(savingAccountId);
+    }
+
+    // Сохраняем название накопительного счёта в колонку P (16)
+    if (savingAccountName) {
+      prefsSheet.getRange(row, 16).setValue(savingAccountName);
+    }
+
+    console.log('[ALFA] ✅ Successfully saved Alfa-Bank credentials to row ' + row);
+  } catch (e) {
+    console.error('[ALFA] ❌ Error saving Alfa credentials: ' + e.message);
+    console.error('[ALFA] Error stack: ' + e.stack);
+  }
+}
+
+/**
+ * Получает учётные данные Альфа-Банка из HB_UserPrefs
+ * @param {string} hashedUsername - Хешированное имя пользователя
+ * @returns {Object} Объект {phone, cardNumber, savingAccountId, savingAccountName}
+ */
+function getAlfaBankCredentials_(hashedUsername) {
+  try {
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, false);
+
+    const phone = prefsSheet.getRange(row, 13).getValue();
+    const cardNumber = prefsSheet.getRange(row, 14).getValue();
+    const savingAccountId = prefsSheet.getRange(row, 15).getValue();
+    const savingAccountName = prefsSheet.getRange(row, 16).getValue();
+
+    console.log('[ALFA] Retrieved credentials for user ' + hashedUsername);
+    return {
+      phone: phone || null,
+      cardNumber: cardNumber || null,
+      savingAccountId: savingAccountId || null,
+      savingAccountName: savingAccountName || null
+    };
+  } catch (e) {
+    console.error('[ALFA] Error retrieving credentials: ' + e.message);
+    return { phone: null, cardNumber: null, savingAccountId: null, savingAccountName: null };
+  }
+}
+
+/**
+ * Сохраняет timezone пользователя в HB_UserPrefs
+ * @param {string} hashedUsername - Хешированное имя пользователя
+ * @param {string} timezone - Timezone (например, "Europe/Moscow")
+ */
+function saveUserTimezone_(hashedUsername, timezone) {
+  try {
+    console.log('[TIMEZONE] saveUserTimezone_ START: user=' + hashedUsername + ', tz=' + timezone);
+
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, true);
+
+    // Сохраняем timezone в колонку Q (17)
+    prefsSheet.getRange(row, 17).setValue(timezone);
+
+    console.log('[TIMEZONE] ✅ Successfully saved timezone to row ' + row);
+  } catch (e) {
+    console.error('[TIMEZONE] ❌ Error saving timezone: ' + e.message);
+    console.error('[TIMEZONE] Error stack: ' + e.stack);
+  }
+}
+
+/**
+ * Получает timezone пользователя из HB_UserPrefs
+ * @param {string} hashedUsername - Хешированное имя пользователя
+ * @returns {string} Timezone или 'Europe/Moscow' по умолчанию
+ */
+function getUserTimezone_(hashedUsername) {
+  try {
+    const prefsSheet = ensurePrefsSheet_();
+    const { row } = findUserRowInSheet_(prefsSheet, hashedUsername, false);
+
+    const timezone = prefsSheet.getRange(row, 17).getValue();
+
+    console.log('[TIMEZONE] Retrieved timezone for user ' + hashedUsername + ':', timezone);
+    return timezone || 'Europe/Moscow';
+  } catch (e) {
+    console.error('[TIMEZONE] Error retrieving timezone: ' + e.message);
+    return 'Europe/Moscow';
+  }
+}
+
+/**
+ * Прокси-функция для сохранения учётных данных Альфа-Банка
+ */
+function alfaSaveCredentials(hashedUsername, phone, cardNumber, savingAccountId, savingAccountName) {
+  try {
+    saveAlfaBankCredentials_(hashedUsername, phone, cardNumber, savingAccountId, savingAccountName);
+    return { success: true };
+  } catch (e) {
+    console.error('alfaSaveCredentials error:', e);
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Прокси-функция для получения учётных данных Альфа-Банка
+ */
+function alfaGetCredentials(hashedUsername) {
+  try {
+    return getAlfaBankCredentials_(hashedUsername);
+  } catch (e) {
+    console.error('alfaGetCredentials error:', e);
+    return { phone: null, cardNumber: null, savingAccountId: null, savingAccountName: null };
+  }
+}
+
+/**
+ * Прокси-функция для сохранения timezone пользователя
+ */
+function saveUserTimezone(hashedUsername, timezone) {
+  try {
+    saveUserTimezone_(hashedUsername, timezone);
+    return { success: true };
+  } catch (e) {
+    console.error('saveUserTimezone error:', e);
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Прокси-функция для получения timezone пользователя
+ */
+function getUserTimezone(hashedUsername) {
+  try {
+    return { timezone: getUserTimezone_(hashedUsername) };
+  } catch (e) {
+    console.error('getUserTimezone error:', e);
+    return { timezone: 'Europe/Moscow' };
   }
 }
 
@@ -1852,7 +2143,7 @@ function ensurePrefsSheet_() {
     if (!sh) {
         sh = ss.insertSheet(PREFS_SHEET);
         // ВАЖНО: displayName НЕ хранится (соблюдение 152-ФЗ)
-        sh.getRange(1, 1, 1, 12).setValues([['hashedUsername', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency', 'autoRenew', 'tbankSessionId', 'tbankBalances (JSON)', 'tbankVkladId', 'transferToVkladTime', 'transferFromVkladTime', 'tbankVkladName']]);
+        sh.getRange(1, 1, 1, 19).setValues([['hashedUsername', 'sbpMethods (JSON)', 'cryptoWallet', 'bankAccount', 'currency', 'autoRenew', 'tbankSessionId', 'tbankBalances (JSON)', 'tbankVkladId', 'transferToVkladTime', 'transferFromVkladTime', 'tbankVkladName', 'alfaPhone', 'alfaCardNumber', 'alfaSavingAccountId', 'alfaSavingAccountName', 'userTimezone', 'eveningTransferTime', 'morningTransferTime']]);
     } else {
         // Проверяем, есть ли уже новые колонки, если нет - добавляем заголовки
         var header7 = sh.getRange(1, 7).getValue();
@@ -1883,6 +2174,43 @@ function ensurePrefsSheet_() {
         var header12 = sh.getRange(1, 12).getValue();
         if (!header12 || header12 !== 'tbankVkladName') {
             sh.getRange(1, 12).setValue('tbankVkladName');
+        }
+
+        // Новые колонки для Альфа-Банка
+        var header13 = sh.getRange(1, 13).getValue();
+        if (!header13 || header13 !== 'alfaPhone') {
+            sh.getRange(1, 13).setValue('alfaPhone');
+        }
+
+        var header14 = sh.getRange(1, 14).getValue();
+        if (!header14 || header14 !== 'alfaCardNumber') {
+            sh.getRange(1, 14).setValue('alfaCardNumber');
+        }
+
+        var header15 = sh.getRange(1, 15).getValue();
+        if (!header15 || header15 !== 'alfaSavingAccountId') {
+            sh.getRange(1, 15).setValue('alfaSavingAccountId');
+        }
+
+        var header16 = sh.getRange(1, 16).getValue();
+        if (!header16 || header16 !== 'alfaSavingAccountName') {
+            sh.getRange(1, 16).setValue('alfaSavingAccountName');
+        }
+
+        var header17 = sh.getRange(1, 17).getValue();
+        if (!header17 || header17 !== 'userTimezone') {
+            sh.getRange(1, 17).setValue('userTimezone');
+        }
+
+        // Новые колонки для вечернего/утреннего переводов (T-Bank <-> Alfa-Bank)
+        var header18 = sh.getRange(1, 18).getValue();
+        if (!header18 || header18 !== 'eveningTransferTime') {
+            sh.getRange(1, 18).setValue('eveningTransferTime');
+        }
+
+        var header19 = sh.getRange(1, 19).getValue();
+        if (!header19 || header19 !== 'morningTransferTime') {
+            sh.getRange(1, 19).setValue('morningTransferTime');
         }
     }
     return sh;
@@ -2960,4 +3288,88 @@ function pingRenderService() {
     console.error('[HEARTBEAT] ❌ Ping failed:', e.message);
     // Не бросаем ошибку, просто логируем - следующий пинг попробует снова
   }
+}
+
+/**
+ * ======================================================
+ * ФУНКЦИЯ ДЛЯ ИСПРАВЛЕНИЯ ОТРИЦАТЕЛЬНОГО БАЛАНСА
+ * ======================================================
+ * Пересчитывает userDeposits на основе всех APPROVED депозитов/выводов
+ * Используйте эту функцию ОДИН РАЗ для исправления данных после миграции на v9.0
+ *
+ * ВАЖНО: Эта функция должна быть запущена ВРУЧНУЮ из Google Apps Script Editor
+ * Выберите функцию fixNegativeBalance в редакторе и нажмите "Run"
+ *
+ * @param {string} [specificUsername] - Опционально: исправить только для конкретного пользователя (хешированный никнейм)
+ */
+function fixNegativeBalance(specificUsername) {
+  console.log('=== FIX NEGATIVE BALANCE START ===');
+
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const usersSheet = ss.getSheetByName(SHEET_NAME);
+  const depositWithdrawSheet = ensureDepositWithdrawTransactionsSheet_();
+
+  const lastRow = usersSheet.getLastRow();
+  if (lastRow < 2) {
+    console.log('No users found');
+    return;
+  }
+
+  const userData = usersSheet.getRange(2, 1, lastRow - 1, 19).getValues();
+  let fixedCount = 0;
+
+  for (let i = 0; i < userData.length; i++) {
+    const row = i + 2; // Строка в таблице (с учетом заголовка)
+    const hashedUsername = String(userData[i][0] || '').trim(); // Column A = index 0
+
+    if (!hashedUsername) continue;
+
+    // Если указан конкретный пользователь, пропускаем остальных
+    if (specificUsername && hashedUsername !== specificUsername) continue;
+
+    const currentUserDeposits = Number(userData[i][1] || 0); // Column B = index 1
+
+    console.log(`Processing user: ${hashedUsername}, current userDeposits: ${currentUserDeposits}`);
+
+    // Пересчитываем userDeposits на основе ВСЕХ APPROVED депозитов/выводов
+    let calculatedDeposits = 0;
+
+    // Читаем все транзакции из DEPOSIT_WITHDRAW_TRANSACTIONS
+    const txLastRow = depositWithdrawSheet.getLastRow();
+    if (txLastRow >= 2) {
+      const txData = depositWithdrawSheet.getRange(2, 1, txLastRow - 1, 9).getValues();
+
+      for (let j = 0; j < txData.length; j++) {
+        const txUsername = String(txData[j][1] || '').trim(); // Column B = index 1
+        const txStatus = String(txData[j][3] || '').trim(); // Column E = index 3 (status)
+        const txType = String(txData[j][6] || '').trim(); // Column H = index 6 (type)
+        const txAmount = Number(txData[j][7] || 0); // Column I = index 7 (amount)
+
+        if (txUsername !== hashedUsername) continue;
+        if (txStatus !== 'APPROVED') continue;
+
+        if (txType === 'DEPOSIT') {
+          calculatedDeposits += Math.abs(txAmount);
+        } else if (txType === 'WITHDRAW') {
+          calculatedDeposits -= Math.abs(txAmount);
+        }
+      }
+    }
+
+    console.log(`Calculated userDeposits: ${calculatedDeposits}`);
+
+    // Обновляем только если значение изменилось
+    if (Math.abs(currentUserDeposits - calculatedDeposits) > 0.01) {
+      usersSheet.getRange(row, 2).setValue(round2(calculatedDeposits)); // Column B
+      usersSheet.getRange(row, 19).setValue(round2(calculatedDeposits)); // Column S (обратная совместимость)
+
+      console.log(`✅ Fixed user ${hashedUsername}: ${currentUserDeposits} → ${round2(calculatedDeposits)}`);
+      fixedCount++;
+    } else {
+      console.log(`✓ User ${hashedUsername} is already correct`);
+    }
+  }
+
+  console.log(`=== FIX NEGATIVE BALANCE END: Fixed ${fixedCount} users ===`);
+  return { success: true, fixedCount: fixedCount };
 }

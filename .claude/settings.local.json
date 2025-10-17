@@ -4,7 +4,9 @@
       "Read(//c/Users/vokel/Downloads/**)",
       "Bash(awk:*)",
       "Bash(git -C \"C:\\Users\\vokel\\Downloads\\Build 2\" status)",
-      "Bash(node -e \"console.log(require(''crypto'').randomBytes(32).toString(''hex''))\")"
+      "Bash(node -e \"console.log(require(''crypto'').randomBytes(32).toString(''hex''))\")",
+      "Bash(git checkout:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

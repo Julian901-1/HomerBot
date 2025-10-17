@@ -4,6 +4,7 @@ import { shouldExecuteNow, formatTime, calculateNextExecutionTime } from './time
 /**
  * Manages user sessions and active browser instances
  * Also handles scheduled transfers to/from saving accounts
+ * and evening/morning transfers between T-Bank and Alfa-Bank
  */
 export class SessionManager {
   constructor() {
@@ -12,8 +13,12 @@ export class SessionManager {
     this.MAX_SESSIONS = 3; // Maximum concurrent sessions to prevent memory overflow
 
     // Track last execution times for scheduled transfers
-    this.lastTransferToSaving = new Map(); // username -> timestamp
-    this.lastTransferFromSaving = new Map(); // username -> timestamp
+    this.lastTransferToSaving = new Map(); // username -> timestamp (OLD T-Bank vklad system)
+    this.lastTransferFromSaving = new Map(); // username -> timestamp (OLD T-Bank vklad system)
+
+    // NEW: Track last execution times for evening/morning transfers (T-Bank <-> Alfa-Bank)
+    this.lastEveningTransfer = new Map(); // username -> timestamp (T-Bank -> Alfa saving)
+    this.lastMorningTransfer = new Map(); // username -> timestamp (Alfa saving -> T-Bank debit)
 
     // Interval for checking scheduled transfers (every 5 minutes)
     this.schedulerInterval = null;
@@ -23,10 +28,11 @@ export class SessionManager {
   /**
    * Create new session
    * @param {string} username - User identifier
-   * @param {TBankAutomation} automation - Automation instance
+   * @param {TBankAutomation} automation - T-Bank automation instance
+   * @param {AlfaAutomation} alfaAutomation - Alfa-Bank automation instance (optional)
    * @returns {string} Session ID
    */
-  createSession(username, automation) {
+  createSession(username, automation, alfaAutomation = null) {
     // Check if we're at the session limit
     if (this.sessions.size >= this.MAX_SESSIONS) {
       console.log(`[SESSION] ⚠️ Max sessions (${this.MAX_SESSIONS}) reached, cleaning up oldest unauthenticated session`);
@@ -70,6 +76,7 @@ export class SessionManager {
     this.sessions.set(sessionId, {
       username,
       automation,
+      alfaAutomation, // NEW: Alfa-Bank automation instance
       authenticated: false,
       createdAt: Date.now(),
       lastActivity: Date.now()
@@ -272,37 +279,76 @@ export class SessionManager {
           continue;
         }
 
-        const { transferToVkladTime, transferFromVkladTime, tbankVkladId, tbankVkladName } = scheduleResp;
-
-        if (!transferToVkladTime && !transferFromVkladTime) {
-          continue; // No schedule configured for this user
-        }
-
-        // Update session metadata with fresh data from Google Sheets
-        this.updateSessionMetadata(sessionId, {
+        const {
           transferToVkladTime,
           transferFromVkladTime,
           tbankVkladId,
-          tbankVkladName
+          tbankVkladName,
+          eveningTransferTime,
+          morningTransferTime,
+          alfaPhone,
+          alfaCardNumber,
+          alfaSavingAccountId,
+          alfaSavingAccountName,
+          userTimezone
+        } = scheduleResp;
+
+        // Update session metadata with fresh data from Google Sheets
+        this.updateSessionMetadata(sessionId, {
+          // OLD T-Bank vklad system
+          transferToVkladTime,
+          transferFromVkladTime,
+          tbankVkladId,
+          tbankVkladName,
+          // NEW: Evening/morning transfer times
+          eveningTransferTime,
+          morningTransferTime,
+          // NEW: Alfa-Bank credentials
+          alfaPhone,
+          alfaCardNumber,
+          alfaSavingAccountId,
+          alfaSavingAccountName,
+          // NEW: User timezone
+          userTimezone
         });
 
-        // Check if it's time to transfer TO saving account
+        // OLD: Check if it's time to transfer TO saving account (T-Bank vklad system)
         if (transferToVkladTime) {
           const lastTransferTo = this.lastTransferToSaving.get(username);
-          if (shouldExecuteNow(transferToVkladTime, lastTransferTo)) {
+          if (shouldExecuteNow(transferToVkladTime, lastTransferTo, 1, 20, userTimezone)) {
             console.log(`[SCHEDULER] ⏰ Time to transfer TO saving account for ${username} (scheduled: ${transferToVkladTime})`);
             await this.executeTransferToSaving(session);
             this.lastTransferToSaving.set(username, new Date());
           }
         }
 
-        // Check if it's time to transfer FROM saving account
+        // OLD: Check if it's time to transfer FROM saving account (T-Bank vklad system)
         if (transferFromVkladTime) {
           const lastTransferFrom = this.lastTransferFromSaving.get(username);
-          if (shouldExecuteNow(transferFromVkladTime, lastTransferFrom)) {
+          if (shouldExecuteNow(transferFromVkladTime, lastTransferFrom, 1, 20, userTimezone)) {
             console.log(`[SCHEDULER] ⏰ Time to transfer FROM saving account for ${username} (scheduled: ${transferFromVkladTime})`);
             await this.executeTransferFromSaving(session);
             this.lastTransferFromSaving.set(username, new Date());
+          }
+        }
+
+        // NEW: Check if it's time for EVENING transfer (T-Bank -> Alfa saving)
+        if (eveningTransferTime && alfaSavingAccountId) {
+          const lastEvening = this.lastEveningTransfer.get(username);
+          if (shouldExecuteNow(eveningTransferTime, lastEvening, 1, 20, userTimezone)) {
+            console.log(`[SCHEDULER] 🌆 Time for EVENING transfer for ${username} (T-Bank -> Alfa-Bank, scheduled: ${eveningTransferTime})`);
+            await this.executeEveningTransfer(session);
+            this.lastEveningTransfer.set(username, new Date());
+          }
+        }
+
+        // NEW: Check if it's time for MORNING transfer (Alfa saving -> T-Bank debit)
+        if (morningTransferTime && alfaSavingAccountId) {
+          const lastMorning = this.lastMorningTransfer.get(username);
+          if (shouldExecuteNow(morningTransferTime, lastMorning, 1, 20, userTimezone)) {
+            console.log(`[SCHEDULER] 🌅 Time for MORNING transfer for ${username} (Alfa-Bank -> T-Bank, scheduled: ${morningTransferTime})`);
+            await this.executeMorningTransfer(session);
+            this.lastMorningTransfer.set(username, new Date());
           }
         }
 
@@ -330,17 +376,37 @@ export class SessionManager {
       const response = await fetch(url);
       const data = await response.json();
 
-      // Also fetch vklad data
+      // Also fetch vklad data (OLD T-Bank vklad system)
       const vkladUrl = `${GOOGLE_SHEETS_URL}?action=tbankGetVklad&username=${encodeURIComponent(username)}`;
       const vkladResp = await fetch(vkladUrl);
       const vkladData = await vkladResp.json();
 
+      // NEW: Fetch Alfa-Bank credentials and timezone
+      const alfaUrl = `${GOOGLE_SHEETS_URL}?action=alfaGetCredentials&username=${encodeURIComponent(username)}`;
+      const alfaResp = await fetch(alfaUrl);
+      const alfaData = await alfaResp.json();
+
+      const timezoneUrl = `${GOOGLE_SHEETS_URL}?action=getUserTimezone&username=${encodeURIComponent(username)}`;
+      const timezoneResp = await fetch(timezoneUrl);
+      const timezoneData = await timezoneResp.json();
+
       return {
         success: true,
+        // OLD T-Bank vklad system
         transferToVkladTime: data.transferToTime,
         transferFromVkladTime: data.transferFromTime,
         tbankVkladId: vkladData.vkladId,
-        tbankVkladName: vkladData.vkladName
+        tbankVkladName: vkladData.vkladName,
+        // NEW: Evening/morning transfers (T-Bank <-> Alfa-Bank)
+        eveningTransferTime: data.eveningTransferTime, // Time for T-Bank -> Alfa saving
+        morningTransferTime: data.morningTransferTime, // Time for Alfa saving -> T-Bank debit
+        // NEW: Alfa-Bank credentials
+        alfaPhone: alfaData.phone,
+        alfaCardNumber: alfaData.cardNumber,
+        alfaSavingAccountId: alfaData.savingAccountId,
+        alfaSavingAccountName: alfaData.savingAccountName,
+        // NEW: User timezone
+        userTimezone: timezoneData.timezone || 'Europe/Moscow'
       };
     } catch (error) {
       console.error('[SCHEDULER] Error fetching user schedule:', error);
@@ -481,7 +547,215 @@ export class SessionManager {
   getLastTransferTimes(username) {
     return {
       lastTransferToSaving: this.lastTransferToSaving.get(username) || null,
-      lastTransferFromSaving: this.lastTransferFromSaving.get(username) || null
+      lastTransferFromSaving: this.lastTransferFromSaving.get(username) || null,
+      lastEveningTransfer: this.lastEveningTransfer.get(username) || null,
+      lastMorningTransfer: this.lastMorningTransfer.get(username) || null
     };
+  }
+
+  /**
+   * NEW: Execute EVENING transfer (T-Bank debit -> Alfa-Bank saving)
+   * Following instruction: "Инструкция по переводу средств с Т-Банка на Альфа-Банк.txt"
+   *
+   * Steps:
+   * 1. Get T-Bank debit balance
+   * 2. Transfer from T-Bank debit to Alfa debit via SBP
+   * 3. Login to Alfa-Bank
+   * 4. Transfer from Alfa debit to Alfa saving account
+   *
+   * @param {Object} session - Session object
+   */
+  async executeEveningTransfer(session) {
+    const { automation, alfaAutomation, metadata } = session;
+    const { alfaPhone, alfaSavingAccountId, alfaSavingAccountName } = metadata || {};
+
+    if (!alfaAutomation) {
+      console.error('[SCHEDULER] 🌆❌ No Alfa-Bank automation instance, skipping evening transfer');
+      return;
+    }
+
+    if (!alfaPhone || !alfaSavingAccountId) {
+      console.error('[SCHEDULER] 🌆❌ Alfa-Bank credentials not configured, skipping evening transfer');
+      return;
+    }
+
+    try {
+      console.log('[SCHEDULER] 🌆 Starting EVENING transfer (T-Bank -> Alfa saving)...');
+
+      // STEP 1-8: Get T-Bank debit balance and transfer to Alfa via SBP
+      console.log('[SCHEDULER] 🌆 Step 1: Getting T-Bank debit balance...');
+      const debitAccounts = await automation.getAccounts();
+
+      if (!debitAccounts || debitAccounts.length === 0) {
+        console.error('[SCHEDULER] 🌆❌ No T-Bank debit accounts found');
+        return;
+      }
+
+      // Calculate total balance to transfer
+      const totalBalance = debitAccounts.reduce((sum, acc) => sum + acc.balance, 0);
+
+      if (totalBalance <= 0) {
+        console.log('[SCHEDULER] 🌆 No funds to transfer (balance is 0)');
+        return;
+      }
+
+      console.log(`[SCHEDULER] 🌆 Step 2-8: Transferring ${totalBalance} RUB from T-Bank to Alfa-Bank via SBP (phone: ${alfaPhone})...`);
+
+      // Transfer from T-Bank to Alfa-Bank via SBP (steps 2-8 from instruction)
+      const transferResult = await automation.transferViaSBP(alfaPhone, totalBalance);
+
+      if (!transferResult.success) {
+        console.error(`[SCHEDULER] 🌆❌ T-Bank -> Alfa SBP transfer failed: ${transferResult.error}`);
+        return;
+      }
+
+      console.log(`[SCHEDULER] 🌆✅ T-Bank -> Alfa SBP transfer successful (${totalBalance} RUB)`);
+
+      // Add delay to allow funds to arrive
+      console.log('[SCHEDULER] 🌆 Waiting 30 seconds for funds to arrive at Alfa-Bank...');
+      await new Promise(resolve => setTimeout(resolve, 30000));
+
+      // STEP 9-17.5: Login to Alfa-Bank
+      console.log('[SCHEDULER] 🌆 Step 9-17.5: Logging in to Alfa-Bank...');
+      const loginResult = await alfaAutomation.loginAlfa();
+
+      if (!loginResult.success) {
+        console.error(`[SCHEDULER] 🌆❌ Alfa-Bank login failed: ${loginResult.error}`);
+        return;
+      }
+
+      console.log('[SCHEDULER] 🌆✅ Alfa-Bank login successful');
+
+      // STEP 18-25: Transfer from Alfa debit to Alfa saving account
+      console.log(`[SCHEDULER] 🌆 Step 18-25: Transferring ${totalBalance} RUB from Alfa debit to Alfa saving account...`);
+
+      const alfaTransferResult = await alfaAutomation.transferToAlfaSaving(
+        alfaSavingAccountId,
+        totalBalance
+      );
+
+      if (!alfaTransferResult.success) {
+        console.error(`[SCHEDULER] 🌆❌ Alfa debit -> saving transfer failed: ${alfaTransferResult.error}`);
+        return;
+      }
+
+      console.log(`[SCHEDULER] 🌆✅ Alfa debit -> saving transfer successful (${totalBalance} RUB)`);
+
+      // Store the transferred amount for morning transfer
+      session.metadata.eveningTransferAmount = totalBalance;
+
+      console.log('[SCHEDULER] 🌆✅✅ EVENING transfer completed successfully!');
+
+    } catch (error) {
+      console.error('[SCHEDULER] 🌆❌ Error executing evening transfer:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * NEW: Execute MORNING transfer (Alfa-Bank saving -> T-Bank debit)
+   * Following instruction: "Инструкция по переводу средств с Альфа-Банка на Т-Банк.txt"
+   *
+   * Steps:
+   * 1. Login to Alfa-Bank
+   * 2. Transfer from Alfa saving to Alfa debit
+   * 3. Transfer from Alfa debit to T-Bank via SBP
+   * 4. Verify receipt in T-Bank
+   *
+   * @param {Object} session - Session object
+   */
+  async executeMorningTransfer(session) {
+    const { automation, alfaAutomation, metadata } = session;
+    const { alfaPhone, alfaSavingAccountId, alfaSavingAccountName, eveningTransferAmount } = metadata || {};
+
+    if (!alfaAutomation) {
+      console.error('[SCHEDULER] 🌅❌ No Alfa-Bank automation instance, skipping morning transfer');
+      return;
+    }
+
+    if (!alfaPhone || !alfaSavingAccountId) {
+      console.error('[SCHEDULER] 🌅❌ Alfa-Bank credentials not configured, skipping morning transfer');
+      return;
+    }
+
+    if (!eveningTransferAmount || eveningTransferAmount <= 0) {
+      console.error('[SCHEDULER] 🌅❌ No evening transfer amount found, skipping morning transfer');
+      return;
+    }
+
+    try {
+      console.log('[SCHEDULER] 🌅 Starting MORNING transfer (Alfa saving -> T-Bank)...');
+
+      // STEP 1-8: Login to Alfa-Bank
+      console.log('[SCHEDULER] 🌅 Step 1-8: Logging in to Alfa-Bank...');
+      const loginResult = await alfaAutomation.loginAlfa();
+
+      if (!loginResult.success) {
+        console.error(`[SCHEDULER] 🌅❌ Alfa-Bank login failed: ${loginResult.error}`);
+        return;
+      }
+
+      console.log('[SCHEDULER] 🌅✅ Alfa-Bank login successful');
+
+      // STEP 9-10: Transfer from Alfa saving to Alfa debit
+      console.log(`[SCHEDULER] 🌅 Step 9-10: Transferring ${eveningTransferAmount} RUB from Alfa saving to Alfa debit...`);
+
+      // Get T-Bank account name for the transfer (usually "Дебетовая")
+      const tbankAccountName = 'Дебетовая'; // Default T-Bank account name
+
+      const alfaWithdrawResult = await alfaAutomation.transferFromAlfaSaving(
+        alfaSavingAccountId,
+        tbankAccountName, // Target account name (will be ignored, we just need funds on Alfa debit)
+        eveningTransferAmount
+      );
+
+      if (!alfaWithdrawResult.success) {
+        console.error(`[SCHEDULER] 🌅❌ Alfa saving -> debit transfer failed: ${alfaWithdrawResult.error}`);
+        return;
+      }
+
+      console.log(`[SCHEDULER] 🌅✅ Alfa saving -> debit transfer successful (${eveningTransferAmount} RUB)`);
+
+      // Add small delay
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // STEP 11-20: Transfer from Alfa to T-Bank via SBP
+      console.log(`[SCHEDULER] 🌅 Step 11-20: Transferring ${eveningTransferAmount} RUB from Alfa to T-Bank via SBP...`);
+
+      // Get T-Bank phone number from automation metadata (should be stored during login)
+      const tbankPhone = automation.userPhone || '+79999999999'; // Fallback to default
+
+      const sbpTransferResult = await alfaAutomation.transferToTBankSBP(
+        eveningTransferAmount,
+        tbankPhone
+      );
+
+      if (!sbpTransferResult.success) {
+        console.error(`[SCHEDULER] 🌅❌ Alfa -> T-Bank SBP transfer failed: ${sbpTransferResult.error}`);
+        return;
+      }
+
+      console.log(`[SCHEDULER] 🌅✅ Alfa -> T-Bank SBP transfer successful (${eveningTransferAmount} RUB)`);
+
+      // STEP 21-22: Verify receipt in T-Bank (optional, just refresh balance)
+      console.log('[SCHEDULER] 🌅 Step 21-22: Verifying receipt in T-Bank...');
+
+      // Wait for funds to arrive
+      await new Promise(resolve => setTimeout(resolve, 30000));
+
+      const updatedAccounts = await automation.getAccounts();
+      const newTotalBalance = updatedAccounts.reduce((sum, acc) => sum + acc.balance, 0);
+
+      console.log(`[SCHEDULER] 🌅 New T-Bank balance: ${newTotalBalance} RUB`);
+
+      // Clear the evening transfer amount
+      delete session.metadata.eveningTransferAmount;
+
+      console.log('[SCHEDULER] 🌅✅✅ MORNING transfer completed successfully!');
+
+    } catch (error) {
+      console.error('[SCHEDULER] 🌅❌ Error executing morning transfer:', error);
+      throw error;
+    }
   }
 }

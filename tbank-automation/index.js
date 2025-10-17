@@ -513,6 +513,113 @@ app.post('/api/auth/auto-sms', async (req, res) => {
 });
 
 /**
+ * Auto-submit SMS code from MacroDroid for Alfa-Bank
+ * POST /api/auth/auto-sms-alfa
+ * Body: { message: "Код для входа в Альфа-Онлайн: 2833. Никому его не сообщайте", username }
+ */
+app.post('/api/auth/auto-sms-alfa', async (req, res) => {
+  try {
+    const { message, username } = req.body;
+
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing message'
+      });
+    }
+
+    console.log('[AUTO-SMS-ALFA] Received SMS message:', message);
+
+    // Extract code using regex (4 digits for Alfa)
+    const codeMatch = message.match(/Код для входа в Альфа-Онлайн:\s*(\d{4})/i);
+
+    if (!codeMatch) {
+      console.log('[AUTO-SMS-ALFA] No code found in message');
+      return res.status(400).json({
+        success: false,
+        error: 'Could not extract code from message'
+      });
+    }
+
+    const code = codeMatch[1];
+    console.log(`[AUTO-SMS-ALFA] Extracted code: ${code}`);
+
+    // Find active session waiting for Alfa SMS
+    let targetSession = null;
+
+    if (username) {
+      // If username provided, find by username
+      const sessionId = sessionManager.findSessionByUsername(username);
+      if (sessionId) {
+        targetSession = sessionManager.getSession(sessionId);
+      }
+    } else {
+      // Otherwise find any session waiting for Alfa SMS
+      for (const [sessionId, session] of sessionManager.sessions.entries()) {
+        // Check if session has alfaAutomation and is waiting for alfa_sms
+        if (session.alfaAutomation && session.alfaAutomation.getPendingInputType() === 'alfa_sms') {
+          targetSession = session;
+          break;
+        }
+      }
+    }
+
+    if (!targetSession) {
+      console.log('[AUTO-SMS-ALFA] No session waiting for Alfa SMS code yet - adding to queue');
+
+      // Store code in queue with 5-minute TTL
+      if (username) {
+        const queueKey = `alfa_${username}`;
+        smsCodeQueue.set(queueKey, {
+          code,
+          timestamp: Date.now(),
+          expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes
+        });
+        console.log(`[AUTO-SMS-ALFA] Code ${code} queued for user ${username}, will expire in 5 minutes`);
+
+        return res.json({
+          success: true,
+          message: 'Alfa SMS code queued, will be submitted when session is ready',
+          code: code,
+          queued: true
+        });
+      } else {
+        // No username provided and no active session
+        return res.status(404).json({
+          success: false,
+          error: 'No active session waiting for Alfa SMS code and no username provided'
+        });
+      }
+    }
+
+    // Submit the code immediately to Alfa automation
+    console.log('[AUTO-SMS-ALFA] Submitting code to Alfa session immediately');
+    if (targetSession.alfaAutomation) {
+      targetSession.alfaAutomation.submitAlfaSMSCode(code);
+    }
+
+    // Clear from queue if it was there
+    if (username) {
+      const queueKey = `alfa_${username}`;
+      smsCodeQueue.delete(queueKey);
+    }
+
+    res.json({
+      success: true,
+      message: 'Alfa SMS code submitted successfully',
+      code: code
+    });
+
+  } catch (error) {
+    console.error('[AUTO-SMS-ALFA] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * Get session statistics
  * GET /api/session/stats?sessionId=xxx
  */
