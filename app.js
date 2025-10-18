@@ -1,4 +1,5 @@
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
+const TBANK_API_URL = 'https://homerbot.onrender.com';
 
 // -------- STATE --------
 let username = null; // Оригинальный никнейм пользователя (для отправки на сервер и отображения)
@@ -2245,9 +2246,15 @@ async function testTransferToAlfa() {
   try {
     showPopup('🌆 Выполняется тестовый перевод с Т-Банка на Альфа-Банк...');
 
-    const resp = await apiGet(
-      `?action=testEveningTransfer&username=${encodeURIComponent(username)}`
-    );
+    const response = await fetch(`${TBANK_API_URL}/api/test-evening-transfer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username })
+    });
+
+    const resp = await response.json();
 
     if (resp && resp.success) {
       showPopup('✅ Вечерний перевод выполнен успешно!');
@@ -2257,7 +2264,7 @@ async function testTransferToAlfa() {
     }
   } catch (e) {
     console.error('[EVENING_PERCENT] Error in test evening transfer:', e);
-    showPopup('❌ Ошибка сети.');
+    showPopup('❌ Ошибка сети: ' + e.message);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -2274,9 +2281,15 @@ async function testTransferFromAlfa() {
   try {
     showPopup('🌅 Выполняется тестовый перевод с Альфа-Банка на Т-Банк...');
 
-    const resp = await apiGet(
-      `?action=testMorningTransfer&username=${encodeURIComponent(username)}`
-    );
+    const response = await fetch(`${TBANK_API_URL}/api/test-morning-transfer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username })
+    });
+
+    const resp = await response.json();
 
     if (resp && resp.success) {
       showPopup('✅ Утренний перевод выполнен успешно!');
@@ -2286,7 +2299,7 @@ async function testTransferFromAlfa() {
     }
   } catch (e) {
     console.error('[EVENING_PERCENT] Error in test morning transfer:', e);
-    showPopup('❌ Ошибка сети.');
+    showPopup('❌ Ошибка сети: ' + e.message);
   } finally {
     if (btn) btn.disabled = false;
   }
