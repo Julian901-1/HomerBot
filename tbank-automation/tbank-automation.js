@@ -93,6 +93,17 @@ export class TBankAutomation {
     this.browser = await puppeteer.launch(launchOptions);
     this.page = await this.browser.newPage();
 
+    // Suppress puppeteer-extra-plugin-stealth console logs
+    this.page.on('console', msg => {
+      const text = msg.text();
+      // Only suppress stealth plugin debug messages
+      if (text.includes('Found box') || text.includes('matching one of selectors')) {
+        return; // Suppress this log
+      }
+      // Allow other console messages
+      console.log('PAGE LOG:', text);
+    });
+
     // Block images, fonts to save memory
     await this.page.setRequestInterception(true);
     this.page.on('request', (request) => {

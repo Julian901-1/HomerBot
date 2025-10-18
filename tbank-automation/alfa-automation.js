@@ -1,10 +1,13 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Use stealth plugin to avoid detection
+puppeteer.use(StealthPlugin());
 
 /**
  * Alfa-Bank Automation Class
@@ -63,9 +66,6 @@ export class AlfaAutomation {
   async initBrowser() {
     console.log('[ALFA-BROWSER] Инициализация браузера...');
 
-    // Use stealth plugin
-    puppeteer.use(StealthPlugin());
-
     this.browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -80,6 +80,17 @@ export class AlfaAutomation {
     });
 
     this.page = await this.browser.newPage();
+
+    // Suppress puppeteer-extra-plugin-stealth console logs
+    this.page.on('console', msg => {
+      const text = msg.text();
+      // Only suppress stealth plugin debug messages
+      if (text.includes('Found box') || text.includes('matching one of selectors')) {
+        return; // Suppress this log
+      }
+      // Allow other console messages
+      console.log('ALFA PAGE LOG:', text);
+    });
 
     // Set viewport
     await this.page.setViewport({ width: 1366, height: 768 });

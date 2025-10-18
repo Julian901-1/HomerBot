@@ -779,7 +779,13 @@ app.post('/api/test-evening-transfer', async (req, res) => {
 
     // STEP 1: Login to T-Bank
     console.log(`[TEST_EVENING] Step 1: Initializing T-Bank automation...`);
-    tbankAutomation = new TBankAutomation();
+    tbankAutomation = new TBankAutomation({
+      username: username,
+      phone: FIXED_TBANK_PHONE,
+      password: null,
+      encryptionService: null,
+      onAuthenticated: null
+    });
     await tbankAutomation.init();
 
     console.log(`[TEST_EVENING] Step 1: Logging in to T-Bank with phone ${FIXED_TBANK_PHONE}...`);
@@ -984,7 +990,13 @@ app.post('/api/test-morning-transfer', async (req, res) => {
     await new Promise(resolve => setTimeout(resolve, 30000));
 
     console.log(`[TEST_MORNING] Step 4: Initializing T-Bank automation for verification...`);
-    tbankAutomation = new TBankAutomation();
+    tbankAutomation = new TBankAutomation({
+      username: username,
+      phone: FIXED_TBANK_PHONE,
+      password: null,
+      encryptionService: null,
+      onAuthenticated: null
+    });
     await tbankAutomation.init();
 
     console.log(`[TEST_MORNING] Step 4: Logging in to T-Bank with phone ${FIXED_TBANK_PHONE}...`);
