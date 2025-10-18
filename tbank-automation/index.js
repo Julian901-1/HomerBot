@@ -757,7 +757,11 @@ app.post('/api/test-evening-transfer', async (req, res) => {
       });
     }
 
-    console.log(`[TEST_EVENING] Starting test evening transfer for user: ${username}`);
+    // Use hashed username for consistency with SMS code reception
+    const crypto = await import('crypto');
+    const hashedUsername = crypto.createHash('sha256').update(username).digest('hex');
+
+    console.log(`[TEST_EVENING] Starting test evening transfer for user: ${username} (hashed: ${hashedUsername})`);
 
     // Fixed credentials from env
     const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE;
@@ -780,7 +784,7 @@ app.post('/api/test-evening-transfer', async (req, res) => {
     // STEP 1: Login to T-Bank
     console.log(`[TEST_EVENING] Step 1: Initializing T-Bank automation...`);
     tbankAutomation = new TBankAutomation({
-      username: username,
+      username: hashedUsername,
       phone: FIXED_TBANK_PHONE,
       password: null,
       encryptionService: null,
@@ -903,7 +907,11 @@ app.post('/api/test-morning-transfer', async (req, res) => {
       });
     }
 
-    console.log(`[TEST_MORNING] Starting test morning transfer for user: ${username}`);
+    // Use hashed username for consistency with SMS code reception
+    const crypto = await import('crypto');
+    const hashedUsername = crypto.createHash('sha256').update(username).digest('hex');
+
+    console.log(`[TEST_MORNING] Starting test morning transfer for user: ${username} (hashed: ${hashedUsername})`);
 
     // Fixed credentials from env
     const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE;
@@ -991,7 +999,7 @@ app.post('/api/test-morning-transfer', async (req, res) => {
 
     console.log(`[TEST_MORNING] Step 4: Initializing T-Bank automation for verification...`);
     tbankAutomation = new TBankAutomation({
-      username: username,
+      username: hashedUsername,
       phone: FIXED_TBANK_PHONE,
       password: null,
       encryptionService: null,
