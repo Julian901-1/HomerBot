@@ -4,6 +4,7 @@ import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import { TBankAutomation } from './tbank-automation.js';
+import { AlfaAutomation } from './alfa-automation.js';
 import { EncryptionService } from './encryption.js';
 import { SessionManager } from './session-manager.js';
 
@@ -743,6 +744,9 @@ app.post('/api/transfer/to-saving', async (req, res) => {
  * Body: { username }
  */
 app.post('/api/test-evening-transfer', async (req, res) => {
+  let tbankAutomation = null;
+  let alfaAutomation = null;
+
   try {
     const { username } = req.body;
 
@@ -755,40 +759,122 @@ app.post('/api/test-evening-transfer', async (req, res) => {
 
     console.log(`[TEST_EVENING] Starting test evening transfer for user: ${username}`);
 
-    // Fixed credentials (hardcoded for user marulin)
-    const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE || '+79999999999';
-    const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE || '+79999999999';
-    const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD || '0000000000000000';
+    // Fixed credentials from env
+    const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE;
+    const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE;
+    const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD;
 
-    console.log(`[TEST_EVENING] Using fixed credentials: T-Bank phone: ${FIXED_TBANK_PHONE}, Alfa phone: ${FIXED_ALFA_PHONE}`);
+    if (!FIXED_TBANK_PHONE || !FIXED_ALFA_PHONE || !FIXED_ALFA_CARD) {
+      throw new Error('Missing required credentials in environment variables');
+    }
 
-    // TODO: Implement full transfer logic
-    // For now, just log the steps that will happen:
-    console.log(`[TEST_EVENING] Step 1: Login to T-Bank with phone ${FIXED_TBANK_PHONE}`);
-    console.log(`[TEST_EVENING] Step 2: Get T-Bank debit balance`);
-    console.log(`[TEST_EVENING] Step 3: Transfer from T-Bank to Alfa via SBP`);
-    console.log(`[TEST_EVENING] Step 4: Login to Alfa-Bank with phone ${FIXED_ALFA_PHONE} and card ${FIXED_ALFA_CARD}`);
-    console.log(`[TEST_EVENING] Step 5: Transfer from Alfa debit to Alfa saving account`);
+    console.log(`[TEST_EVENING] Using credentials: T-Bank phone: ${FIXED_TBANK_PHONE}, Alfa phone: ${FIXED_ALFA_PHONE}`);
 
+    // Respond immediately to avoid timeout
     res.json({
       success: true,
-      message: 'Test evening transfer initiated (implementation in progress)',
-      username,
-      steps: [
-        'Login to T-Bank',
-        'Get T-Bank balance',
-        'Transfer T-Bank → Alfa (SBP)',
-        'Login to Alfa-Bank',
-        'Transfer Alfa debit → Alfa saving'
-      ]
+      message: 'Evening transfer started in background',
+      username
     });
 
+    // STEP 1: Login to T-Bank
+    console.log(`[TEST_EVENING] Step 1: Initializing T-Bank automation...`);
+    tbankAutomation = new TBankAutomation();
+    await tbankAutomation.init();
+
+    console.log(`[TEST_EVENING] Step 1: Logging in to T-Bank with phone ${FIXED_TBANK_PHONE}...`);
+    const tbankLoginResult = await tbankAutomation.login(FIXED_TBANK_PHONE);
+
+    if (!tbankLoginResult.success) {
+      throw new Error(`T-Bank login failed: ${tbankLoginResult.error}`);
+    }
+    console.log(`[TEST_EVENING] Step 1 ✅: T-Bank login successful`);
+
+    // STEP 2: Get T-Bank debit balance
+    console.log(`[TEST_EVENING] Step 2: Getting T-Bank debit accounts...`);
+    const accounts = await tbankAutomation.getAccounts();
+
+    if (!accounts || accounts.length === 0) {
+      throw new Error('No T-Bank debit accounts found');
+    }
+
+    const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
+    console.log(`[TEST_EVENING] Step 2 ✅: Total T-Bank balance: ${totalBalance} RUB`);
+
+    if (totalBalance <= 0) {
+      console.log('[TEST_EVENING] ⚠️ No funds to transfer (balance is 0)');
+      await tbankAutomation.close();
+      return;
+    }
+
+    // STEP 3: Transfer from T-Bank to Alfa via SBP
+    console.log(`[TEST_EVENING] Step 3: Transferring ${totalBalance} RUB from T-Bank to Alfa via SBP (phone: ${FIXED_ALFA_PHONE})...`);
+    const sbpResult = await tbankAutomation.transferViaSBP(FIXED_ALFA_PHONE, totalBalance);
+
+    if (!sbpResult.success) {
+      throw new Error(`T-Bank → Alfa SBP transfer failed: ${sbpResult.error}`);
+    }
+    console.log(`[TEST_EVENING] Step 3 ✅: T-Bank → Alfa SBP transfer successful (${totalBalance} RUB)`);
+
+    // Close T-Bank session
+    await tbankAutomation.close();
+    tbankAutomation = null;
+
+    // Wait for funds to arrive at Alfa
+    console.log('[TEST_EVENING] Waiting 30 seconds for funds to arrive at Alfa-Bank...');
+    await new Promise(resolve => setTimeout(resolve, 30000));
+
+    // STEP 4: Login to Alfa-Bank
+    console.log(`[TEST_EVENING] Step 4: Initializing Alfa-Bank automation...`);
+    alfaAutomation = new AlfaAutomation();
+    await alfaAutomation.init();
+
+    console.log(`[TEST_EVENING] Step 4: Logging in to Alfa-Bank with phone ${FIXED_ALFA_PHONE} and card ${FIXED_ALFA_CARD}...`);
+    const alfaLoginResult = await alfaAutomation.loginAlfa(FIXED_ALFA_PHONE, FIXED_ALFA_CARD);
+
+    if (!alfaLoginResult.success) {
+      throw new Error(`Alfa-Bank login failed: ${alfaLoginResult.error}`);
+    }
+    console.log(`[TEST_EVENING] Step 4 ✅: Alfa-Bank login successful`);
+
+    // STEP 5: Get Alfa saving accounts and transfer to first one
+    console.log(`[TEST_EVENING] Step 5: Getting Alfa-Bank saving accounts...`);
+    const savingAccounts = await alfaAutomation.getAlfaSavingAccounts();
+
+    if (!savingAccounts || savingAccounts.length === 0) {
+      throw new Error('No Alfa-Bank saving accounts found');
+    }
+
+    const firstSavingAccount = savingAccounts[0];
+    console.log(`[TEST_EVENING] Step 5: Found saving account: ${firstSavingAccount.name} (ID: ${firstSavingAccount.id})`);
+
+    console.log(`[TEST_EVENING] Step 5: Transferring ${totalBalance} RUB from Alfa debit to Alfa saving...`);
+    const alfaTransferResult = await alfaAutomation.transferToAlfaSaving(firstSavingAccount.id, totalBalance);
+
+    if (!alfaTransferResult.success) {
+      throw new Error(`Alfa debit → saving transfer failed: ${alfaTransferResult.error}`);
+    }
+    console.log(`[TEST_EVENING] Step 5 ✅: Alfa debit → saving transfer successful (${totalBalance} RUB)`);
+
+    // Close Alfa session
+    await alfaAutomation.close();
+    alfaAutomation = null;
+
+    console.log('[TEST_EVENING] ✅✅✅ EVENING TRANSFER COMPLETED SUCCESSFULLY!');
+
   } catch (error) {
-    console.error('[TEST_EVENING] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    console.error('[TEST_EVENING] ❌ Error:', error.message);
+    console.error('[TEST_EVENING] Stack:', error.stack);
+
+    // Cleanup on error
+    if (tbankAutomation) {
+      try { await tbankAutomation.close(); } catch (e) { console.error('Error closing T-Bank:', e); }
+    }
+    if (alfaAutomation) {
+      try { await alfaAutomation.close(); } catch (e) { console.error('Error closing Alfa:', e); }
+    }
+
+    // If response not sent yet, send error (but response already sent above)
   }
 });
 
@@ -798,6 +884,9 @@ app.post('/api/test-evening-transfer', async (req, res) => {
  * Body: { username }
  */
 app.post('/api/test-morning-transfer', async (req, res) => {
+  let alfaAutomation = null;
+  let tbankAutomation = null;
+
   try {
     const { username } = req.body;
 
@@ -810,38 +899,124 @@ app.post('/api/test-morning-transfer', async (req, res) => {
 
     console.log(`[TEST_MORNING] Starting test morning transfer for user: ${username}`);
 
-    // Fixed credentials (hardcoded for user marulin)
-    const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE || '+79999999999';
-    const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE || '+79999999999';
-    const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD || '0000000000000000';
+    // Fixed credentials from env
+    const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE;
+    const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE;
+    const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD;
 
-    console.log(`[TEST_MORNING] Using fixed credentials: Alfa phone: ${FIXED_ALFA_PHONE}, T-Bank phone: ${FIXED_TBANK_PHONE}`);
+    if (!FIXED_TBANK_PHONE || !FIXED_ALFA_PHONE || !FIXED_ALFA_CARD) {
+      throw new Error('Missing required credentials in environment variables');
+    }
 
-    // TODO: Implement full transfer logic
-    // For now, just log the steps that will happen:
-    console.log(`[TEST_MORNING] Step 1: Login to Alfa-Bank with phone ${FIXED_ALFA_PHONE} and card ${FIXED_ALFA_CARD}`);
-    console.log(`[TEST_MORNING] Step 2: Transfer from Alfa saving to Alfa debit`);
-    console.log(`[TEST_MORNING] Step 3: Transfer from Alfa to T-Bank via SBP (phone: ${FIXED_TBANK_PHONE})`);
-    console.log(`[TEST_MORNING] Step 4: Verify receipt in T-Bank`);
+    console.log(`[TEST_MORNING] Using credentials: Alfa phone: ${FIXED_ALFA_PHONE}, T-Bank phone: ${FIXED_TBANK_PHONE}`);
 
+    // Respond immediately to avoid timeout
     res.json({
       success: true,
-      message: 'Test morning transfer initiated (implementation in progress)',
-      username,
-      steps: [
-        'Login to Alfa-Bank',
-        'Transfer Alfa saving → Alfa debit',
-        'Transfer Alfa → T-Bank (SBP)',
-        'Verify in T-Bank'
-      ]
+      message: 'Morning transfer started in background',
+      username
     });
 
+    // STEP 1: Login to Alfa-Bank
+    console.log(`[TEST_MORNING] Step 1: Initializing Alfa-Bank automation...`);
+    alfaAutomation = new AlfaAutomation();
+    await alfaAutomation.init();
+
+    console.log(`[TEST_MORNING] Step 1: Logging in to Alfa-Bank with phone ${FIXED_ALFA_PHONE} and card ${FIXED_ALFA_CARD}...`);
+    const alfaLoginResult = await alfaAutomation.loginAlfa(FIXED_ALFA_PHONE, FIXED_ALFA_CARD);
+
+    if (!alfaLoginResult.success) {
+      throw new Error(`Alfa-Bank login failed: ${alfaLoginResult.error}`);
+    }
+    console.log(`[TEST_MORNING] Step 1 ✅: Alfa-Bank login successful`);
+
+    // STEP 2: Get Alfa saving accounts
+    console.log(`[TEST_MORNING] Step 2: Getting Alfa-Bank saving accounts...`);
+    const savingAccounts = await alfaAutomation.getAlfaSavingAccounts();
+
+    if (!savingAccounts || savingAccounts.length === 0) {
+      throw new Error('No Alfa-Bank saving accounts found');
+    }
+
+    const firstSavingAccount = savingAccounts[0];
+    console.log(`[TEST_MORNING] Step 2: Found saving account: ${firstSavingAccount.name} (ID: ${firstSavingAccount.id})`);
+    console.log(`[TEST_MORNING] Step 2: Saving account balance: ${firstSavingAccount.balance}`);
+
+    // Extract numeric value from balance string (e.g., "10 001,00 ₽" → 10001)
+    // According to instruction step 15, we need to get the balance and use it for transfer
+    const balanceString = firstSavingAccount.balance.replace(/\s/g, '').replace(',', '.').replace('₽', '');
+    const transferAmount = Math.floor(parseFloat(balanceString));
+
+    if (isNaN(transferAmount) || transferAmount <= 0) {
+      throw new Error(`Invalid saving account balance: ${firstSavingAccount.balance}`);
+    }
+
+    console.log(`[TEST_MORNING] Step 2: Transferring ${transferAmount} RUB from Alfa saving to Alfa debit...`);
+    const withdrawResult = await alfaAutomation.transferFromAlfaSaving(
+      firstSavingAccount.id,
+      'Дебетовая', // Target account name (not used, just needs funds on debit)
+      transferAmount
+    );
+
+    if (!withdrawResult.success) {
+      throw new Error(`Alfa saving → debit transfer failed: ${withdrawResult.error}`);
+    }
+    console.log(`[TEST_MORNING] Step 2 ✅: Alfa saving → debit transfer successful (${transferAmount} RUB)`);
+
+    // Small delay
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // STEP 3: Transfer from Alfa to T-Bank via SBP
+    console.log(`[TEST_MORNING] Step 3: Transferring ${transferAmount} RUB from Alfa to T-Bank via SBP (phone: ${FIXED_TBANK_PHONE})...`);
+    const sbpResult = await alfaAutomation.transferToTBankSBP(transferAmount, FIXED_TBANK_PHONE);
+
+    if (!sbpResult.success) {
+      throw new Error(`Alfa → T-Bank SBP transfer failed: ${sbpResult.error}`);
+    }
+    console.log(`[TEST_MORNING] Step 3 ✅: Alfa → T-Bank SBP transfer successful (${transferAmount} RUB)`);
+
+    // Close Alfa session
+    await alfaAutomation.close();
+    alfaAutomation = null;
+
+    // STEP 4: Verify receipt in T-Bank (optional)
+    console.log(`[TEST_MORNING] Step 4: Waiting 30 seconds for funds to arrive at T-Bank...`);
+    await new Promise(resolve => setTimeout(resolve, 30000));
+
+    console.log(`[TEST_MORNING] Step 4: Initializing T-Bank automation for verification...`);
+    tbankAutomation = new TBankAutomation();
+    await tbankAutomation.init();
+
+    console.log(`[TEST_MORNING] Step 4: Logging in to T-Bank with phone ${FIXED_TBANK_PHONE}...`);
+    const tbankLoginResult = await tbankAutomation.login(FIXED_TBANK_PHONE);
+
+    if (!tbankLoginResult.success) {
+      throw new Error(`T-Bank login failed: ${tbankLoginResult.error}`);
+    }
+
+    const updatedAccounts = await tbankAutomation.getAccounts();
+    const newTotalBalance = updatedAccounts.reduce((sum, acc) => sum + acc.balance, 0);
+    console.log(`[TEST_MORNING] Step 4 ✅: Verified - New T-Bank balance: ${newTotalBalance} RUB`);
+
+    // Close T-Bank session
+    await tbankAutomation.close();
+    tbankAutomation = null;
+
+    console.log('[TEST_MORNING] ✅✅✅ MORNING TRANSFER COMPLETED SUCCESSFULLY!');
+
   } catch (error) {
-    console.error('[TEST_MORNING] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    console.error('[TEST_MORNING] ❌ Error:', error.message);
+    console.error('[TEST_MORNING] Stack:', error.stack);
+
+    // Cleanup on error
+    if (alfaAutomation) {
+      try { await alfaAutomation.close(); } catch (e) { console.error('Error closing Alfa:', e); }
+    }
+    if (tbankAutomation) {
+      try { await tbankAutomation.close(); } catch (e) { console.error('Error closing T-Bank:', e); }
+    }
+
+    // Response already sent above
   }
 });
 

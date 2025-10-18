@@ -1660,6 +1660,160 @@ export class TBankAutomation {
   }
 
   /**
+   * Transfer money via SBP (Faster Payment System) to another bank (e.g., Alfa-Bank)
+   * Implements steps 2-8 from evening transfer instruction
+   * @param {string} recipientPhone - Phone number of recipient (e.g., '79166435494')
+   * @param {number} amount - Amount to transfer in RUB
+   */
+  async transferViaSBP(recipientPhone, amount) {
+    try {
+      if (!this.sessionActive) {
+        throw new Error('Not logged in');
+      }
+
+      console.log(`[TBANK→SBP] 💸 Starting SBP transfer ${amount} RUB to phone ${recipientPhone}...`);
+
+      // Ensure we're on /mybank/ page
+      const currentUrl = this.page.url();
+      if (!currentUrl.includes('/mybank/')) {
+        await this.page.goto('https://www.tbank.ru/mybank/', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
+      // Step 2: Click on the debit account widget
+      console.log('[TBANK→SBP] Шаг 2/7: Нажатие на дебетовый счёт...');
+
+      const debitAccountWidget = await this.page.evaluateHandle(() => {
+        const widgets = Array.from(document.querySelectorAll('[data-qa-type^="atomPanel widget widget-debit"]'));
+        // Find first debit account
+        return widgets[0];
+      });
+
+      if (!debitAccountWidget || debitAccountWidget.asElement() === null) {
+        throw new Error('Could not find debit account widget');
+      }
+
+      const debitLink = await debitAccountWidget.asElement().$('a[data-qa-type="link click-area"]');
+      if (!debitLink) {
+        throw new Error('Could not find link in debit account widget');
+      }
+
+      await debitLink.click();
+      await this.page.waitForNavigation({
+        waitUntil: 'networkidle2',
+        timeout: 15000
+      }).catch(e => console.log('[TBANK→SBP] Navigation timeout:', e.message));
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Step 3: Click "Перевести" button
+      console.log('[TBANK→SBP] Шаг 3/7: Нажатие кнопки "Перевести"...');
+
+      const transferButton = await this.page.evaluateHandle(() => {
+        const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="transferButton"]'));
+        return buttons.find(btn => btn.textContent.includes('Перевести'));
+      });
+
+      if (!transferButton || transferButton.asElement() === null) {
+        throw new Error('Could not find "Перевести" button');
+      }
+
+      await transferButton.asElement().click();
+      await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+
+      // Step 4: Click "Себе" button
+      console.log('[TBANK→SBP] Шаг 4/7: Нажатие "Себе"...');
+
+      const selfButton = await this.page.evaluateHandle(() => {
+        const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="contactItem"]'));
+        return buttons.find(btn => btn.textContent.includes('Себе'));
+      });
+
+      if (!selfButton || selfButton.asElement() === null) {
+        throw new Error('Could not find "Себе" button');
+      }
+
+      await selfButton.asElement().click();
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Step 5: Get current account balance (from the selector on the page)
+      console.log('[TBANK→SBP] Шаг 5/7: Получение баланса счёта...');
+
+      const accountBalance = await this.page.evaluate(() => {
+        const balanceElement = document.querySelector('span[data-qa-type="uikit/money"]');
+        if (balanceElement) {
+          return balanceElement.textContent;
+        }
+        return null;
+      });
+
+      console.log(`[TBANK→SBP] Баланс счёта: ${accountBalance} (используем переданную сумму: ${amount} RUB)`);
+
+      // Step 6: Click "Альфа-Банк" button
+      console.log('[TBANK→SBP] Шаг 6/7: Нажатие "Альфа-Банк"...');
+
+      const alfaBankButton = await this.page.evaluateHandle(() => {
+        const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="bank-plate"]'));
+        return buttons.find(btn => btn.textContent.includes('Альфа-Банк'));
+      });
+
+      if (!alfaBankButton || alfaBankButton.asElement() === null) {
+        throw new Error('Could not find "Альфа-Банк" button');
+      }
+
+      await alfaBankButton.asElement().click();
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Step 7: Enter amount in the "Сумма" field
+      console.log(`[TBANK→SBP] Шаг 7/7: Ввод суммы ${amount}...`);
+
+      await this.page.waitForSelector('input[data-qa-type="amount-from.input"]', {
+        timeout: 10000
+      });
+
+      const amountInput = await this.page.$('input[data-qa-type="amount-from.input"]');
+      if (!amountInput) {
+        throw new Error('Could not find amount input field');
+      }
+
+      // Clear and enter amount
+      await amountInput.click({ clickCount: 3 }); // Select all
+      await this.page.keyboard.press('Backspace');
+      await this.typeWithHumanDelay('input[data-qa-type="amount-from.input"]', amount.toString());
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Step 8: Click "Перевести" submit button
+      console.log('[TBANK→SBP] Шаг 8/7: Нажатие "Перевести" для подтверждения...');
+
+      const submitButton = await this.page.$('button[data-qa-type="transfer-button"][type="submit"]');
+      if (!submitButton) {
+        throw new Error('Could not find submit "Перевести" button');
+      }
+
+      await submitButton.click();
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      console.log('[TBANK→SBP] ✅ SBP transfer initiated successfully');
+      await this.takeDebugScreenshot('sbp-transfer-success');
+
+      return {
+        success: true,
+        amount
+      };
+
+    } catch (error) {
+      console.error('[TBANK→SBP] ❌ Error:', error.message);
+      await this.takeDebugScreenshot('sbp-transfer-error');
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
    * Transfer money between own accounts (old generic method - kept for backwards compatibility)
    */
   async transferBetweenAccounts(fromAccountId, toAccountId, amount) {

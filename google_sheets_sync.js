@@ -252,10 +252,28 @@ function doGet(e) {
         return jsonOk(tbankGetVklad(hashedUsername));
 
       case 'tbankSaveTransferSchedule':
-        return jsonOk(tbankSaveTransferSchedule(hashedUsername, p.transferToTime, p.transferFromTime));
+        return jsonOk(tbankSaveTransferSchedule(hashedUsername, p.transferToTime, p.transferFromTime, p.eveningTransferTime, p.morningTransferTime));
 
       case 'tbankGetTransferSchedule':
         return jsonOk(tbankGetTransferSchedule(hashedUsername));
+
+      case 'saveUserTimezone':
+        return jsonOk(saveUserTimezone(hashedUsername, p.timezone));
+
+      case 'getUserTimezone':
+        return jsonOk(getUserTimezone(hashedUsername));
+
+      case 'alfaSaveCredentials':
+        return jsonOk(alfaSaveCredentials(hashedUsername, p.phone, p.cardNumber, p.savingAccountId, p.savingAccountName));
+
+      case 'alfaGetCredentials':
+        return jsonOk(alfaGetCredentials(hashedUsername));
+
+      case 'testEveningTransfer':
+        return jsonOk(testEveningTransfer(hashedUsername));
+
+      case 'testMorningTransfer':
+        return jsonOk(testMorningTransfer(hashedUsername));
 
       case 'tbankForceTransferToSaving': {
         const result = tbankForceTransferToSaving(hashedUsername, p.sessionId);
@@ -2021,6 +2039,100 @@ function getUserTimezone(hashedUsername) {
   } catch (e) {
     console.error('getUserTimezone error:', e);
     return { timezone: 'Europe/Moscow' };
+  }
+}
+
+/**
+ * Тестовый вечерний перевод (Т-Банк → Альфа-Банк)
+ * Вызывает backend API для выполнения тестового перевода
+ */
+function testEveningTransfer(hashedUsername) {
+  try {
+    console.log('[TEST_EVENING] Starting test evening transfer for user:', hashedUsername);
+
+    // Получаем SCRIPT_URL из properties (должен быть настроен в Google Apps Script)
+    const scriptProperties = PropertiesService.getScriptProperties();
+    const tbankApiUrl = scriptProperties.getProperty('TBANK_API_URL');
+
+    if (!tbankApiUrl) {
+      console.error('[TEST_EVENING] TBANK_API_URL not configured in script properties');
+      return { success: false, error: 'Backend API URL not configured' };
+    }
+
+    // Вызываем endpoint tbank-automation API
+    const url = tbankApiUrl + '/api/test-evening-transfer';
+    const payload = JSON.stringify({ username: hashedUsername });
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: payload,
+      muteHttpExceptions: true
+    };
+
+    const response = UrlFetchApp.fetch(url, options);
+    const responseCode = response.getResponseCode();
+    const responseText = response.getContentText();
+
+    console.log('[TEST_EVENING] Response code:', responseCode);
+    console.log('[TEST_EVENING] Response:', responseText);
+
+    if (responseCode === 200) {
+      const result = JSON.parse(responseText);
+      return result;
+    } else {
+      return { success: false, error: 'HTTP ' + responseCode + ': ' + responseText };
+    }
+  } catch (e) {
+    console.error('[TEST_EVENING] Error:', e.message, e.stack);
+    return { success: false, error: String(e) };
+  }
+}
+
+/**
+ * Тестовый утренний перевод (Альфа-Банк → Т-Банк)
+ * Вызывает backend API для выполнения тестового перевода
+ */
+function testMorningTransfer(hashedUsername) {
+  try {
+    console.log('[TEST_MORNING] Starting test morning transfer for user:', hashedUsername);
+
+    // Получаем SCRIPT_URL из properties
+    const scriptProperties = PropertiesService.getScriptProperties();
+    const tbankApiUrl = scriptProperties.getProperty('TBANK_API_URL');
+
+    if (!tbankApiUrl) {
+      console.error('[TEST_MORNING] TBANK_API_URL not configured in script properties');
+      return { success: false, error: 'Backend API URL not configured' };
+    }
+
+    // Вызываем endpoint tbank-automation API
+    const url = tbankApiUrl + '/api/test-morning-transfer';
+    const payload = JSON.stringify({ username: hashedUsername });
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: payload,
+      muteHttpExceptions: true
+    };
+
+    const response = UrlFetchApp.fetch(url, options);
+    const responseCode = response.getResponseCode();
+    const responseText = response.getContentText();
+
+    console.log('[TEST_MORNING] Response code:', responseCode);
+    console.log('[TEST_MORNING] Response:', responseText);
+
+    if (responseCode === 200) {
+      const result = JSON.parse(responseText);
+      return result;
+    } else {
+      return { success: false, error: 'HTTP ' + responseCode + ': ' + responseText };
+    }
+  } catch (e) {
+    console.error('[TEST_MORNING] Error:', e.message, e.stack);
+    return { success: false, error: String(e) };
   }
 }
 

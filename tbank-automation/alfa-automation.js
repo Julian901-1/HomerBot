@@ -492,7 +492,7 @@ export class AlfaAutomation {
       });
       await this.randomDelay(2000, 3000);
 
-      console.log('[ALFA→TBANK] Этап 4/13: Нажатие "По номеру телефона"');
+      console.log('[ALFA→TBANK] Этап 4/14: Нажатие "По номеру телефона"');
       await this.page.waitForSelector('div[data-test-id="transfer-item"]', { timeout: 10000 });
       await this.page.evaluate(() => {
         const transferItems = Array.from(document.querySelectorAll('div[data-test-id="transfer-item"]'));
@@ -504,7 +504,12 @@ export class AlfaAutomation {
       });
       await this.randomDelay(2000, 3000);
 
-      console.log('[ALFA→TBANK] Этап 5/13: Нажатие "Себе в другой банк"');
+      console.log('[ALFA→TBANK] Этап 5/14: Нажатие на поле "Номер телефона получателя"');
+      await this.page.waitForSelector('input[data-test-id="phone-intl-input"]', { timeout: 10000 });
+      await this.page.click('input[data-test-id="phone-intl-input"]');
+      await this.randomDelay(1000, 2000);
+
+      console.log('[ALFA→TBANK] Этап 6/14: Нажатие "Себе в другой банк"');
       await this.page.waitForSelector('button[data-test-id="phone-list-item"]', { timeout: 10000 });
       await this.page.evaluate(() => {
         const items = Array.from(document.querySelectorAll('button[data-test-id="phone-list-item"]'));
@@ -513,7 +518,7 @@ export class AlfaAutomation {
       });
       await this.randomDelay(2000, 3000);
 
-      console.log('[ALFA→TBANK] Этап 6/13: Нажатие "Т-Банк"');
+      console.log('[ALFA→TBANK] Этап 7/14: Нажатие "Т-Банк"');
       await this.page.evaluate(() => {
         const sections = Array.from(document.querySelectorAll('section'));
         const tbankSection = sections.find(s => s.textContent.includes('Т-Банк'));
@@ -521,29 +526,29 @@ export class AlfaAutomation {
       });
       await this.randomDelay(2000, 3000);
 
-      console.log('[ALFA→TBANK] Этап 7/13: Получение суммы на счёте');
+      console.log('[ALFA→TBANK] Этап 8/14: Получение суммы на счёте');
       const accountBalance = await this.page.evaluate(() => {
         const amountElement = document.querySelector('span[data-test-id="amount"]');
         return amountElement ? amountElement.textContent : '0';
       });
       console.log(`[ALFA→TBANK] Баланс счёта: ${accountBalance}`);
 
-      console.log('[ALFA→TBANK] Этап 8/13: Ввод суммы');
+      console.log('[ALFA→TBANK] Этап 9/14: Ввод суммы');
       await this.page.waitForSelector('input[name="amount"]', { timeout: 10000 });
       await this.page.type('input[name="amount"]', amount.toString());
       await this.randomDelay(1000, 2000);
 
-      console.log('[ALFA→TBANK] Этап 9/13: Нажатие "Продолжить"');
+      console.log('[ALFA→TBANK] Этап 10/14: Нажатие "Продолжить"');
       await this.page.waitForSelector('button[type="submit"]', { timeout: 10000 });
       await this.page.click('button[type="submit"]');
       await this.randomDelay(2000, 3000);
 
-      console.log('[ALFA→TBANK] Этап 10/13: Нажатие "Перевести"');
+      console.log('[ALFA→TBANK] Этап 11/14: Нажатие "Перевести"');
       await this.page.waitForSelector('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]', { timeout: 10000 });
       await this.page.click('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]');
       await this.randomDelay(2000, 3000);
 
-      console.log('[ALFA→TBANK] Этап 11/13: Ожидание SMS-кода для подтверждения');
+      console.log('[ALFA→TBANK] Этап 12/14: Ожидание SMS-кода для подтверждения');
       this.pendingInputType = 'alfa_sms';
       this.pendingInputData = {
         message: 'Ожидание SMS-кода для подтверждения перевода'
@@ -551,7 +556,7 @@ export class AlfaAutomation {
 
       await this.waitForAlfaSMSCode(120000);
 
-      console.log('[ALFA→TBANK] Этап 12/13: Ввод SMS-кода');
+      console.log('[ALFA→TBANK] Этап 13/14: Ввод SMS-кода');
       await this.page.waitForSelector('input.KRyR4.uokLS', { timeout: 10000 });
       const codeInputs = await this.page.$$('input.KRyR4.uokLS');
 
@@ -564,7 +569,7 @@ export class AlfaAutomation {
 
       await this.randomDelay(3000, 4000);
 
-      console.log('[ALFA→TBANK] Этап 13/13: Проверка успешности перевода');
+      console.log('[ALFA→TBANK] Этап 14/14: Проверка успешности перевода');
       this.pendingInputType = null;
       this.pendingInputData = null;
 
