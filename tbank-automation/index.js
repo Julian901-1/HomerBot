@@ -755,17 +755,32 @@ app.post('/api/test-evening-transfer', async (req, res) => {
 
     console.log(`[TEST_EVENING] Starting test evening transfer for user: ${username}`);
 
-    // Find or create session for this user
-    // For now, we'll use a simple approach: trigger the transfer directly
-    // In production, this should use the session manager
+    // Fixed credentials (hardcoded for user marulin)
+    const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE || '+79999999999';
+    const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE || '+79999999999';
+    const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD || '0000000000000000';
 
-    // TODO: Implement actual transfer logic using sessionManager.executeEveningTransfer()
-    // For now, return success placeholder
+    console.log(`[TEST_EVENING] Using fixed credentials: T-Bank phone: ${FIXED_TBANK_PHONE}, Alfa phone: ${FIXED_ALFA_PHONE}`);
+
+    // TODO: Implement full transfer logic
+    // For now, just log the steps that will happen:
+    console.log(`[TEST_EVENING] Step 1: Login to T-Bank with phone ${FIXED_TBANK_PHONE}`);
+    console.log(`[TEST_EVENING] Step 2: Get T-Bank debit balance`);
+    console.log(`[TEST_EVENING] Step 3: Transfer from T-Bank to Alfa via SBP`);
+    console.log(`[TEST_EVENING] Step 4: Login to Alfa-Bank with phone ${FIXED_ALFA_PHONE} and card ${FIXED_ALFA_CARD}`);
+    console.log(`[TEST_EVENING] Step 5: Transfer from Alfa debit to Alfa saving account`);
 
     res.json({
       success: true,
-      message: 'Test evening transfer completed (placeholder)',
-      username
+      message: 'Test evening transfer initiated (implementation in progress)',
+      username,
+      steps: [
+        'Login to T-Bank',
+        'Get T-Bank balance',
+        'Transfer T-Bank → Alfa (SBP)',
+        'Login to Alfa-Bank',
+        'Transfer Alfa debit → Alfa saving'
+      ]
     });
 
   } catch (error) {
@@ -795,17 +810,30 @@ app.post('/api/test-morning-transfer', async (req, res) => {
 
     console.log(`[TEST_MORNING] Starting test morning transfer for user: ${username}`);
 
-    // Find or create session for this user
-    // For now, we'll use a simple approach: trigger the transfer directly
-    // In production, this should use the session manager
+    // Fixed credentials (hardcoded for user marulin)
+    const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE || '+79999999999';
+    const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE || '+79999999999';
+    const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD || '0000000000000000';
 
-    // TODO: Implement actual transfer logic using sessionManager.executeMorningTransfer()
-    // For now, return success placeholder
+    console.log(`[TEST_MORNING] Using fixed credentials: Alfa phone: ${FIXED_ALFA_PHONE}, T-Bank phone: ${FIXED_TBANK_PHONE}`);
+
+    // TODO: Implement full transfer logic
+    // For now, just log the steps that will happen:
+    console.log(`[TEST_MORNING] Step 1: Login to Alfa-Bank with phone ${FIXED_ALFA_PHONE} and card ${FIXED_ALFA_CARD}`);
+    console.log(`[TEST_MORNING] Step 2: Transfer from Alfa saving to Alfa debit`);
+    console.log(`[TEST_MORNING] Step 3: Transfer from Alfa to T-Bank via SBP (phone: ${FIXED_TBANK_PHONE})`);
+    console.log(`[TEST_MORNING] Step 4: Verify receipt in T-Bank`);
 
     res.json({
       success: true,
-      message: 'Test morning transfer completed (placeholder)',
-      username
+      message: 'Test morning transfer initiated (implementation in progress)',
+      username,
+      steps: [
+        'Login to Alfa-Bank',
+        'Transfer Alfa saving → Alfa debit',
+        'Transfer Alfa → T-Bank (SBP)',
+        'Verify in T-Bank'
+      ]
     });
 
   } catch (error) {
