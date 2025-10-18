@@ -85,11 +85,13 @@ export class SessionPersistence {
         }
       };
 
-      // 7. Encrypt sensitive data before saving
-      const encryptedData = this.encryptionService.encrypt(JSON.stringify(sessionData));
+      // 7. Encrypt sensitive data before saving (skip if no encryption service for test endpoints)
+      const dataToSave = this.encryptionService
+        ? this.encryptionService.encrypt(JSON.stringify(sessionData))
+        : JSON.stringify(sessionData);
 
       // 8. Save to file
-      await fs.writeFile(this.sessionFile, encryptedData, 'utf8');
+      await fs.writeFile(this.sessionFile, dataToSave, 'utf8');
 
       // Calculate session lifetime
       const sessionLifetime = this.loginTimestamp
@@ -126,9 +128,11 @@ export class SessionPersistence {
         return false;
       }
 
-      // Read and decrypt session data
-      const encryptedData = await fs.readFile(this.sessionFile, 'utf8');
-      const decryptedData = this.encryptionService.decrypt(encryptedData);
+      // Read and decrypt session data (skip decryption if no encryption service for test endpoints)
+      const fileData = await fs.readFile(this.sessionFile, 'utf8');
+      const decryptedData = this.encryptionService
+        ? this.encryptionService.decrypt(fileData)
+        : fileData;
       const sessionData = JSON.parse(decryptedData);
 
       console.log(`[SESSION-PERSIST] 📂 Session file loaded for ${this.username}`);

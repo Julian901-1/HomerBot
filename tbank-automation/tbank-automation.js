@@ -156,7 +156,10 @@ export class TBankAutomation {
       // Session restore disabled - always login fresh
       console.log(`[TBANK] 🔄 Session persistence disabled - starting fresh login`);
 
-      const phone = this.encryptionService.decrypt(this.encryptedPhone);
+      // If encryptionService is null, use phone directly (for test endpoints)
+      const phone = this.encryptionService
+        ? this.encryptionService.decrypt(this.encryptedPhone)
+        : this.encryptedPhone;
 
       console.log(`[TBANK] Navigating to login page...`);
       await this.page.goto(process.env.TBANK_LOGIN_URL, {
