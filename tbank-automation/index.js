@@ -737,6 +737,86 @@ app.post('/api/transfer/to-saving', async (req, res) => {
   }
 });
 
+/**
+ * Test evening transfer (T-Bank -> Alfa-Bank)
+ * POST /api/test-evening-transfer
+ * Body: { username }
+ */
+app.post('/api/test-evening-transfer', async (req, res) => {
+  try {
+    const { username } = req.body;
+
+    if (!username) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing username'
+      });
+    }
+
+    console.log(`[TEST_EVENING] Starting test evening transfer for user: ${username}`);
+
+    // Find or create session for this user
+    // For now, we'll use a simple approach: trigger the transfer directly
+    // In production, this should use the session manager
+
+    // TODO: Implement actual transfer logic using sessionManager.executeEveningTransfer()
+    // For now, return success placeholder
+
+    res.json({
+      success: true,
+      message: 'Test evening transfer completed (placeholder)',
+      username
+    });
+
+  } catch (error) {
+    console.error('[TEST_EVENING] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Test morning transfer (Alfa-Bank -> T-Bank)
+ * POST /api/test-morning-transfer
+ * Body: { username }
+ */
+app.post('/api/test-morning-transfer', async (req, res) => {
+  try {
+    const { username } = req.body;
+
+    if (!username) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing username'
+      });
+    }
+
+    console.log(`[TEST_MORNING] Starting test morning transfer for user: ${username}`);
+
+    // Find or create session for this user
+    // For now, we'll use a simple approach: trigger the transfer directly
+    // In production, this should use the session manager
+
+    // TODO: Implement actual transfer logic using sessionManager.executeMorningTransfer()
+    // For now, return success placeholder
+
+    res.json({
+      success: true,
+      message: 'Test morning transfer completed (placeholder)',
+      username
+    });
+
+  } catch (error) {
+    console.error('[TEST_MORNING] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 T-Bank Automation Service running on port ${PORT}`);
