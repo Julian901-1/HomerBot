@@ -472,6 +472,7 @@ export class AlfaAutomation {
         const dashboardTimeout = 15000;
         const checkInterval = 1000;
         const start = Date.now();
+        let trustPromptHandled = false;
 
         while (Date.now() - start < dashboardTimeout) {
           const onDashboard = await this.page.evaluate(() => {
@@ -482,6 +483,35 @@ export class AlfaAutomation {
 
           if (onDashboard) {
             return true;
+          }
+
+          if (!trustPromptHandled) {
+            const trustPromptVisible = await this.page.evaluate(() => {
+              const button = document.querySelector('button[data-test-id="trust-device-page-cancel-btn"]');
+              if (!button) return false;
+
+              const style = window.getComputedStyle(button);
+              if (!style || style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+                return false;
+              }
+
+              const rect = button.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0;
+            });
+
+            if (trustPromptVisible) {
+              console.log('[ALFA→SAVING] Обнаружен диалог "Доверять этому устройству?", нажимаем "Не доверять"');
+              try {
+                await this.page.click('button[data-test-id="trust-device-page-cancel-btn"]');
+                trustPromptHandled = true;
+                await this.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                continue;
+              } catch (trustError) {
+                console.log(`[ALFA→SAVING] ⚠️ Не удалось нажать "Не доверять": ${trustError.message}`);
+                trustPromptHandled = true;
+              }
+            }
           }
 
           await new Promise(resolve => setTimeout(resolve, checkInterval));
