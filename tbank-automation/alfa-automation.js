@@ -451,6 +451,10 @@ export class AlfaAutomation {
         throw new Error('Не авторизован в Альфа-Банке');
       }
 
+      const waitBetweenSteps = async () => {
+        await new Promise(resolve => setTimeout(resolve, 15000));
+      };
+
       console.log('[ALFA→SAVING] Этап 1/8: Переход в дашборд');
 
       const ensureDashboard = async () => {
@@ -491,15 +495,21 @@ export class AlfaAutomation {
         throw new Error('Не удалось убедиться, что открыта главная страница (нет текста "Мои продукты")');
       }
 
-      await this.randomDelay(1000, 2000);
+      await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] Этап 2/8: Переход на страницу накопительного счёта');
-      const savingAccountUrl = `https://web.alfabank.ru/accounts/${savingAccountId}`;
-      await this.page.goto(savingAccountUrl, { waitUntil: 'domcontentloaded' });
-      await this.randomDelay(4000, 5000); // Allow page widgets to initialise
+      const requiredSavingAccountId = '40817810506220141175';
+      if (savingAccountId && savingAccountId !== requiredSavingAccountId) {
+        console.log(`[ALFA→SAVING] ⚠️ Используем предписанный счёт ${requiredSavingAccountId} вместо переданного ${savingAccountId}`);
+      }
+      await this.page.goto(`https://web.alfabank.ru/accounts/${requiredSavingAccountId}`, {
+        waitUntil: 'domcontentloaded'
+      });
+
+      await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] Этап 3/8: Нажатие "Пополнить"');
-      await this.page.waitForSelector('button:has(span.lcIYP)', { timeout: 10000 });
+      await this.page.waitForSelector('button:has(span.lcIYP)', { timeout: 15000 });
       await this.page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const depositButton = buttons.find(btn => {
@@ -508,15 +518,17 @@ export class AlfaAutomation {
         });
         if (depositButton) depositButton.click();
       });
-      await this.randomDelay(2000, 3000);
+
+      await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] Этап 4/8: Нажатие "Со счёта Альфа-Банка"');
-      await this.page.waitForSelector('div[data-test-id="banner-wrapper"]', { timeout: 10000 });
+      await this.page.waitForSelector('div[data-test-id="banner-wrapper"]', { timeout: 15000 });
       await this.page.click('div[data-test-id="banner-wrapper"]');
-      await this.randomDelay(5000, 6000); // Wait 5 seconds
+
+      await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] Этап 5/8: Выбор "Текущий счёт ··7167"');
-      await this.page.waitForSelector('div[data-test-id="src-account-option"]', { timeout: 10000 });
+      await this.page.waitForSelector('div[data-test-id="src-account-option"]', { timeout: 15000 });
 
       // Find the account ending with 7167
       await this.page.evaluate(() => {
@@ -524,7 +536,8 @@ export class AlfaAutomation {
         const targetOption = options.find(opt => opt.textContent.includes('··7167'));
         if (targetOption) targetOption.click();
       });
-      await this.randomDelay(1000, 2000);
+
+      await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] Этап 6/8: Нажатие "Всё"');
       await this.page.evaluate(() => {
@@ -532,16 +545,15 @@ export class AlfaAutomation {
         const allButton = buttons.find(btn => btn.textContent.includes('Всё'));
         if (allButton) allButton.click();
       });
-      await this.randomDelay(1000, 2000);
+
+      await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] Этап 7/8: Нажатие "Перевести"');
-      await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 10000 });
+      await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
       await this.page.click('button[data-test-id="payment-button"]');
-      await this.randomDelay(3000, 4000);
 
       console.log('[ALFA→SAVING] Этап 8/8: Проверка успешности перевода');
-      // Wait for success screen or check balance update
-      await this.randomDelay(2000, 3000);
+      await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] ✅ Перевод успешно завершён');
 

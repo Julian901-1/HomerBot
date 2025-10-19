@@ -1,7 +1,6 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import dotenv from 'dotenv';
-import { SessionPersistence } from './session-persistence.js';
 
 dotenv.config();
 
@@ -23,9 +22,7 @@ export class TBankAutomation {
     this.page = null;
     this.keepAliveInterval = null;
     this.sessionActive = false;
-
-    // Session persistence manager
-    this.sessionPersistence = new SessionPersistence(username, encryptionService);
+    this.sessionStartTime = null;
 
     // Pending input system - now fully dynamic
     this.pendingInputResolve = null;
@@ -41,7 +38,7 @@ export class TBankAutomation {
 
     console.log(`[TBANK] Initializing browser for user ${this.username}`);
 
-    // Use persistent user data directory for better session persistence
+    // Use dedicated user data directory for isolated browser state
     const userDataDir = `./user-data/${this.username}`;
 
     // Kill any existing browser processes using this userDataDir
@@ -321,17 +318,11 @@ export class TBankAutomation {
             console.log(`[TBANK] ✅ Called onAuthenticated callback`);
           }
 
-          // Mark login success timestamp
-          this.sessionPersistence.markLoginSuccess();
-
-          // Save session after successful login
-          await this.sessionPersistence.saveSession(this.page);
+          // Track login start for runtime metrics
+          this.recordLoginSuccess();
 
           this.startKeepAlive();
 
-          // Log session stats
-          const stats = this.sessionPersistence.getSessionStats();
-          console.log(`[TBANK] 📊 Session Stats after login:`, stats);
           console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
           return {
@@ -360,14 +351,11 @@ export class TBankAutomation {
               console.log(`[TBANK] ✅ Called onAuthenticated callback`);
             }
 
-            // Mark login success and save session
-            this.sessionPersistence.markLoginSuccess();
-            await this.sessionPersistence.saveSession(this.page);
+            // Track login start for runtime metrics
+            this.recordLoginSuccess();
 
             this.startKeepAlive();
 
-            const stats = this.sessionPersistence.getSessionStats();
-            console.log(`[TBANK] 📊 Session Stats:`, stats);
             console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
             return {
@@ -494,14 +482,11 @@ export class TBankAutomation {
           console.log(`[TBANK] ✅ Called onAuthenticated callback`);
         }
 
-        // Mark login success and save session
-        this.sessionPersistence.markLoginSuccess();
-        await this.sessionPersistence.saveSession(this.page);
+        // Track login start for runtime metrics
+        this.recordLoginSuccess();
 
         this.startKeepAlive();
 
-        const stats = this.sessionPersistence.getSessionStats();
-        console.log(`[TBANK] 📊 Session Stats:`, stats);
         console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
         return {
@@ -523,14 +508,11 @@ export class TBankAutomation {
           console.log(`[TBANK] ✅ Called onAuthenticated callback`);
         }
 
-        // Mark login success and save session
-        this.sessionPersistence.markLoginSuccess();
-        await this.sessionPersistence.saveSession(this.page);
+        // Track login start for runtime metrics
+        this.recordLoginSuccess();
 
         this.startKeepAlive();
 
-        const stats = this.sessionPersistence.getSessionStats();
-        console.log(`[TBANK] 📊 Session Stats:`, stats);
         console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
         return {
@@ -708,7 +690,7 @@ export class TBankAutomation {
 
       try {
         keepAliveCount++;
-        const lifetime = this.sessionPersistence.getSessionLifetime();
+        const lifetime = this.getSessionLifetimeMinutes();
         console.log(`[TBANK] Keep-alive #${keepAliveCount}: simulating user activity (session lifetime: ${lifetime} min)`);
 
         // Get viewport dimensions
@@ -868,17 +850,32 @@ export class TBankAutomation {
           console.log(`[TBANK] ✅ Session still active (URL check passed)`);
         }
 
-        // Save session every 3rd keep-alive cycle (every 15 minutes if interval is 5 min)
-        if (keepAliveCount % 3 === 0) {
-          console.log(`[TBANK] 💾 Periodic session save (keep-alive #${keepAliveCount})`);
-          await this.sessionPersistence.saveSession(this.page);
-        }
-
       } catch (error) {
         console.error('[TBANK] Keep-alive error:', error);
         // Error occurred during keep-alive
       }
     }, interval);
+  }
+
+  /**
+   * Record the timestamp of a successful login for lifetime tracking
+   */
+  recordLoginSuccess() {
+    if (!this.sessionStartTime) {
+      this.sessionStartTime = Date.now();
+      console.log('[TBANK] 🕒 Session start timestamp recorded');
+    }
+  }
+
+  /**
+   * Get session lifetime in minutes since successful login
+   * @returns {number} Lifetime in whole minutes
+   */
+  getSessionLifetimeMinutes() {
+    if (!this.sessionStartTime) {
+      return 0;
+    }
+    return Math.floor((Date.now() - this.sessionStartTime) / 60000);
   }
 
   /**
@@ -2016,20 +2013,9 @@ export class TBankAutomation {
       this.keepAliveInterval = null;
     }
 
-    // Save session one last time before closing (unless explicitly deleting)
-    if (this.page && !deleteSession) {
-      try {
-        console.log(`[TBANK] 💾 Final session save before closing...`);
-        await this.sessionPersistence.saveSession(this.page);
-      } catch (e) {
-        console.error('[TBANK] Error saving session before close:', e.message);
-      }
-    }
-
-    // Delete saved session if requested
+    // Delete saved session if requested (compatibility log - no files kept)
     if (deleteSession) {
-      console.log(`[TBANK] 🗑️ Deleting saved session as requested`);
-      await this.sessionPersistence.deleteSession();
+      console.log('[TBANK] 🔄 Session persistence disabled - nothing to delete');
     }
 
     // Clear pending input resolvers to prevent memory leaks
@@ -2086,10 +2072,6 @@ export class TBankAutomation {
       console.log('[TBANK] Garbage collection triggered');
     }
 
-    // Log final session stats
-    const stats = this.sessionPersistence.getSessionStats();
-    console.log('[TBANK] 📊 Final Session Stats:', stats);
-
     console.log('[TBANK] Browser and resources cleaned up');
   }
 
@@ -2098,6 +2080,10 @@ export class TBankAutomation {
    * @returns {Object} Session statistics
    */
   getSessionStats() {
-    return this.sessionPersistence.getSessionStats();
+    return {
+      sessionActive: this.sessionActive,
+      sessionLifetimeMinutes: this.getSessionLifetimeMinutes(),
+      keepAliveActive: Boolean(this.keepAliveInterval)
+    };
   }
 }
