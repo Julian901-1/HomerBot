@@ -1737,7 +1737,7 @@ export class TBankAutomation {
       await this.page.goto(transferUrl, {
         waitUntil: 'networkidle2',
         timeout: 40000
-      });
+      }).catch(e => console.log('[TBANK→SBP] Navigation timeout (продолжаем работу):', e.message));
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
