@@ -763,24 +763,14 @@ app.post('/api/evening-transfer', async (req, res) => {
     const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE;
     const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE;
     const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD;
+    const FIXED_ALFA_SAVING_ACCOUNT_ID = process.env.FIXED_ALFA_SAVING_ACCOUNT_ID;
 
-    if (!FIXED_TBANK_PHONE || !FIXED_ALFA_PHONE || !FIXED_ALFA_CARD) {
-      throw new Error('Missing required environment variables: FIXED_TBANK_PHONE, FIXED_ALFA_PHONE, FIXED_ALFA_CARD');
+    if (!FIXED_TBANK_PHONE || !FIXED_ALFA_PHONE || !FIXED_ALFA_CARD || !FIXED_ALFA_SAVING_ACCOUNT_ID) {
+      throw new Error('Missing required environment variables: FIXED_TBANK_PHONE, FIXED_ALFA_PHONE, FIXED_ALFA_CARD, FIXED_ALFA_SAVING_ACCOUNT_ID');
     }
 
-    // Fetch Alfa credentials from Google Sheets
-    console.log(`[API] Fetching Alfa credentials from Google Sheets...`);
-    const GOOGLE_SHEETS_URL = process.env.GOOGLE_SHEETS_SCRIPT_URL;
-    const alfaUrl = `${GOOGLE_SHEETS_URL}?action=alfaGetCredentials&username=${encodeURIComponent(username)}`;
-    const alfaResp = await fetch(alfaUrl);
-    const alfaData = await alfaResp.json();
-
-    if (!alfaData.success || !alfaData.savingAccountId) {
-      throw new Error('Failed to fetch Alfa-Bank credentials from Google Sheets');
-    }
-
-    const { savingAccountId: alfaSavingAccountId } = alfaData;
-    console.log(`[API] ✅ Alfa credentials loaded: savingId=${alfaSavingAccountId}`);
+    console.log(`[API] ✅ Using credentials from environment variables`);
+    const alfaSavingAccountId = FIXED_ALFA_SAVING_ACCOUNT_ID;
 
     // STEP 1: Create T-Bank automation and login
     console.log(`[API] Step 1: Creating T-Bank automation instance...`);
@@ -919,24 +909,14 @@ app.post('/api/morning-transfer', async (req, res) => {
     const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE;
     const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE;
     const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD;
+    const FIXED_ALFA_SAVING_ACCOUNT_ID = process.env.FIXED_ALFA_SAVING_ACCOUNT_ID;
 
-    if (!FIXED_TBANK_PHONE || !FIXED_ALFA_PHONE || !FIXED_ALFA_CARD) {
-      throw new Error('Missing required environment variables: FIXED_TBANK_PHONE, FIXED_ALFA_PHONE, FIXED_ALFA_CARD');
+    if (!FIXED_TBANK_PHONE || !FIXED_ALFA_PHONE || !FIXED_ALFA_CARD || !FIXED_ALFA_SAVING_ACCOUNT_ID) {
+      throw new Error('Missing required environment variables: FIXED_TBANK_PHONE, FIXED_ALFA_PHONE, FIXED_ALFA_CARD, FIXED_ALFA_SAVING_ACCOUNT_ID');
     }
 
-    // Fetch Alfa credentials from Google Sheets
-    console.log(`[API] Fetching Alfa credentials from Google Sheets...`);
-    const GOOGLE_SHEETS_URL = process.env.GOOGLE_SHEETS_SCRIPT_URL;
-    const alfaUrl = `${GOOGLE_SHEETS_URL}?action=alfaGetCredentials&username=${encodeURIComponent(username)}`;
-    const alfaResp = await fetch(alfaUrl);
-    const alfaData = await alfaResp.json();
-
-    if (!alfaData.success || !alfaData.savingAccountId) {
-      throw new Error('Failed to fetch Alfa-Bank credentials from Google Sheets');
-    }
-
-    const { savingAccountId: alfaSavingAccountId } = alfaData;
-    console.log(`[API] ✅ Alfa credentials loaded: savingId=${alfaSavingAccountId}`);
+    console.log(`[API] ✅ Using credentials from environment variables`);
+    const alfaSavingAccountId = FIXED_ALFA_SAVING_ACCOUNT_ID;
 
     // STEP 1: Create Alfa automation and login
     console.log(`[API] Step 1: Creating Alfa-Bank automation instance...`);
