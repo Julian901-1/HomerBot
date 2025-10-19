@@ -465,6 +465,9 @@ export class AlfaAutomation {
       });
     }
 
+    // Give page time to render dashboard widgets after navigation/load
+    await this.sleep(6000);
+
     const dashboardTimeout = 15000;
     const checkInterval = 1000;
     const start = Date.now();
@@ -528,7 +531,7 @@ export class AlfaAutomation {
         log('Обнаружен диалог "Доверять этому устройству?", нажимаем "Не доверять"');
         try {
           await this.page.click('button[data-test-id="trust-device-page-cancel-btn"]');
-          await this.sleep(2000);
+          await this.sleep(10000);
         } catch (err) {
           log(`⚠️ Не удалось нажать "Не доверять": ${err.message}`);
         }
