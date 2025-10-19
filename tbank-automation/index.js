@@ -782,12 +782,35 @@ app.post('/api/evening-transfer', async (req, res) => {
       onAuthenticated: null
     });
 
-    console.log(`[API] Step 2: Logging in to T-Bank...`);
-    const loginResult = await tbankAutomation.login();
-    if (!loginResult.success) {
-      throw new Error(`T-Bank login failed: ${loginResult.error}`);
-    }
-    console.log(`[API] ✅ T-Bank login successful`);
+    // Start background process to check SMS queue and auto-submit codes
+    const smsQueueChecker = setInterval(() => {
+      if (!tbankAutomation) return;
+
+      const pendingType = tbankAutomation.getPendingInputType();
+      if (pendingType === 'sms') {
+        // Check if SMS code is in queue
+        const queuedSMS = smsCodeQueue.get(username);
+        if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
+          console.log(`[API] Found queued SMS code for ${username}, submitting automatically...`);
+          const submitted = tbankAutomation.submitUserInput(queuedSMS.code);
+          if (submitted) {
+            smsCodeQueue.delete(username);
+            console.log(`[API] ✅ SMS code auto-submitted and removed from queue`);
+          }
+        }
+      }
+    }, 500); // Check every 500ms
+
+    try {
+      console.log(`[API] Step 2: Logging in to T-Bank...`);
+      const loginResult = await tbankAutomation.login();
+      if (!loginResult.success) {
+        throw new Error(`T-Bank login failed: ${loginResult.error}`);
+      }
+      console.log(`[API] ✅ T-Bank login successful`);
+
+      // Stop SMS queue checker after successful login
+      clearInterval(smsQueueChecker);
 
     // STEP 2: Get T-Bank debit balance
     console.log(`[API] Step 3: Getting T-Bank debit balance...`);
@@ -832,12 +855,34 @@ app.post('/api/evening-transfer', async (req, res) => {
       encryptionService: null
     });
 
+    // Start background process to check Alfa SMS queue and auto-submit codes
+    const alfaSmsQueueChecker = setInterval(() => {
+      if (!alfaAutomation) return;
+
+      const pendingType = alfaAutomation.getPendingInputType();
+      if (pendingType === 'alfa_sms') {
+        // Check if Alfa SMS code is in queue
+        const queueKey = `alfa_${username}`;
+        const queuedSMS = smsCodeQueue.get(queueKey);
+        if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
+          console.log(`[API] Found queued Alfa SMS code for ${username}, submitting automatically...`);
+          const submitted = alfaAutomation.submitAlfaSMSCode(queuedSMS.code);
+          if (submitted) {
+            smsCodeQueue.delete(queueKey);
+            console.log(`[API] ✅ Alfa SMS code auto-submitted and removed from queue`);
+          }
+        }
+      }
+    }, 500); // Check every 500ms
+
     console.log(`[API] Step 7: Logging in to Alfa-Bank...`);
     const alfaLoginResult = await alfaAutomation.loginAlfa();
     if (!alfaLoginResult.success) {
+      clearInterval(alfaSmsQueueChecker);
       throw new Error(`Alfa-Bank login failed: ${alfaLoginResult.error}`);
     }
     console.log(`[API] ✅ Alfa-Bank login successful`);
+    clearInterval(alfaSmsQueueChecker);
 
     // STEP 6: Transfer from Alfa debit to Alfa saving
     console.log(`[API] Step 8: Transferring ${totalBalance} RUB from Alfa debit to saving...`);
@@ -861,6 +906,14 @@ app.post('/api/evening-transfer', async (req, res) => {
 
   } catch (error) {
     console.error('[API] ❌ Evening transfer error:', error);
+
+    // Stop SMS queue checkers on error
+    if (typeof smsQueueChecker !== 'undefined') {
+      clearInterval(smsQueueChecker);
+    }
+    if (typeof alfaSmsQueueChecker !== 'undefined') {
+      clearInterval(alfaSmsQueueChecker);
+    }
 
     // Cleanup browsers on error
     if (tbankAutomation) {
