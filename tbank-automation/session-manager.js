@@ -674,8 +674,10 @@ export class SessionManager {
    * Steps:
    * 1. Login to Alfa-Bank
    * 2. Transfer from Alfa saving to Alfa debit
-   * 3. Transfer from Alfa debit to T-Bank via SBP
-   * 4. Verify receipt in T-Bank
+   * 3. CLOSE SESSION AND CLEAR CACHE (like evening transfer before Alfa login)
+   * 4. Re-login to Alfa-Bank
+   * 5. Transfer from Alfa debit to T-Bank via SBP
+   * 6. Verify receipt in T-Bank
    *
    * @param {Object} session - Session object
    */
@@ -700,6 +702,7 @@ export class SessionManager {
 
     try {
       console.log('[SCHEDULER] 🌅 Starting MORNING transfer (Alfa saving -> T-Bank)...');
+      console.log('[SCHEDULER] 🌅 === STAGE 1/2: SAVING→ALFA ===');
 
       // STEP 1-8: Login to Alfa-Bank
       console.log('[SCHEDULER] 🌅 Step 1-8: Logging in to Alfa-Bank...');
@@ -730,9 +733,35 @@ export class SessionManager {
       }
 
       console.log(`[SCHEDULER] 🌅✅ Alfa saving -> debit transfer successful (${eveningTransferAmount} RUB)`);
+      console.log('[SCHEDULER] 🌅✅ STAGE 1/2 completed: SAVING→ALFA');
 
-      // Add small delay
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // === CLEAN UP SESSION BEFORE STAGE 2 (like evening transfer) ===
+      console.log('[SCHEDULER] 🌅 Closing Alfa session and clearing cache before STAGE 2...');
+      await alfaAutomation.close();
+      console.log('[SCHEDULER] 🌅✅ Alfa session closed, cache cleared');
+
+      // Force garbage collection if available
+      if (global.gc) {
+        console.log('[SCHEDULER] 🌅 Running garbage collection...');
+        global.gc();
+        console.log('[SCHEDULER] 🌅✅ Garbage collection complete');
+      }
+
+      // Add delay to ensure cleanup is complete
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // === STAGE 2: ALFA→TBANK ===
+      console.log('[SCHEDULER] 🌅 === STAGE 2/2: ALFA→TBANK ===');
+      console.log('[SCHEDULER] 🌅 Re-logging in to Alfa-Bank for Stage 2...');
+
+      const loginResult2 = await alfaAutomation.loginAlfa();
+
+      if (!loginResult2.success) {
+        console.error(`[SCHEDULER] 🌅❌ Alfa-Bank re-login failed: ${loginResult2.error}`);
+        return;
+      }
+
+      console.log('[SCHEDULER] 🌅✅ Alfa-Bank re-login successful');
 
       // STEP 11-20: Transfer from Alfa to T-Bank via SBP
       console.log(`[SCHEDULER] 🌅 Step 11-20: Transferring ${eveningTransferAmount} RUB from Alfa to T-Bank via SBP...`);
@@ -753,6 +782,7 @@ export class SessionManager {
 
       const sbpAmount = sbpTransferResult.amount || eveningTransferAmount;
       console.log(`[SCHEDULER] 🌅✅ Alfa -> T-Bank SBP transfer successful (${sbpAmount} RUB)`);
+      console.log('[SCHEDULER] 🌅✅ STAGE 2/2 completed: ALFA→TBANK');
 
       // STEP 21-22: Verify receipt in T-Bank (optional, just refresh balance)
       console.log('[SCHEDULER] 🌅 Step 21-22: Verifying receipt in T-Bank...');

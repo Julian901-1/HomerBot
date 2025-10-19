@@ -942,19 +942,48 @@ export class AlfaAutomation {
 
       console.log('[ALFA→TBANK] Этап 4/12: Выбор шаблона "Себе в другой банк"');
       await this.page.waitForSelector('button[data-test-id="phone-list-item"]', { timeout: 15000 });
-      await this.page.evaluate(() => {
+      const selfTransferClicked = await this.page.evaluate(() => {
         const items = Array.from(document.querySelectorAll('button[data-test-id="phone-list-item"]'));
         const selfTransfer = items.find(item => item.textContent.includes('Себе в другой банк'));
-        if (selfTransfer) selfTransfer.click();
+        if (selfTransfer) {
+          selfTransfer.click();
+          return true;
+        }
+        return false;
       });
-      await waitBetweenSteps();
+
+      if (!selfTransferClicked) {
+        throw new Error('Не удалось найти и нажать "Себе в другой банк"');
+      }
+
+      console.log('[ALFA→TBANK] Ожидание загрузки списка банков...');
+      // Wait for bank options to load after clicking "Себе в другой банк"
+      // Using the selector from your HTML: div[data-test-id="recipient-select-option"]
+      await this.page.waitForSelector('div[data-test-id="recipient-select-option"]', { timeout: 30000 });
+      await this.sleep(2000); // Additional 2s to ensure all options are rendered
 
       console.log('[ALFA→TBANK] Этап 5/12: Выбор банка "Т-Банк"');
-      await this.page.evaluate(() => {
-        const sections = Array.from(document.querySelectorAll('section'));
-        const tbankSection = sections.find(s => s.textContent.includes('Т-Банк'));
-        if (tbankSection) tbankSection.click();
+      const tbankClicked = await this.page.evaluate(() => {
+        // Find the option that contains "Т-Банк" text
+        const options = Array.from(document.querySelectorAll('div[data-test-id="recipient-select-option"]'));
+        const tbankOption = options.find(opt => {
+          const text = opt.textContent || '';
+          return text.includes('Т-Банк') || text.includes('Tinkoff');
+        });
+
+        if (tbankOption instanceof HTMLElement) {
+          // Scroll into view and click
+          tbankOption.scrollIntoView({ block: 'center' });
+          tbankOption.click();
+          return true;
+        }
+        return false;
       });
+
+      if (!tbankClicked) {
+        throw new Error('Не удалось найти и выбрать банк "Т-Банк"');
+      }
+
       await waitBetweenSteps();
 
       console.log('[ALFA→TBANK] Этап 6/12: Получение доступного баланса');
