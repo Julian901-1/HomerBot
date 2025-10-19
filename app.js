@@ -2244,9 +2244,9 @@ async function testTransferToAlfa() {
   if (btn) btn.disabled = true;
 
   try {
-    showPopup('🌆 Выполняется тестовый перевод с Т-Банка на Альфа-Банк...');
+    showPopup('🌆 Выполняется вечерний перевод с Т-Банка на Альфа-Банк...');
 
-    const response = await fetch(`${TBANK_API_URL}/api/test-evening-transfer`, {
+    const response = await fetch(`${TBANK_API_URL}/api/evening-transfer`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -2258,12 +2258,12 @@ async function testTransferToAlfa() {
 
     if (resp && resp.success) {
       showPopup('✅ Вечерний перевод выполнен успешно!');
-      console.log('[EVENING_PERCENT] Test evening transfer completed:', resp);
+      console.log('[EVENING_PERCENT] Evening transfer completed:', resp);
     } else {
       showPopup('❌ Ошибка: ' + ((resp && resp.error) || 'unknown'));
     }
   } catch (e) {
-    console.error('[EVENING_PERCENT] Error in test evening transfer:', e);
+    console.error('[EVENING_PERCENT] Error in evening transfer:', e);
     showPopup('❌ Ошибка сети: ' + e.message);
   } finally {
     if (btn) btn.disabled = false;
@@ -2279,9 +2279,9 @@ async function testTransferFromAlfa() {
   if (btn) btn.disabled = true;
 
   try {
-    showPopup('🌅 Выполняется тестовый перевод с Альфа-Банка на Т-Банк...');
+    showPopup('🌅 Выполняется утренний перевод с Альфа-Банка на Т-Банк...');
 
-    const response = await fetch(`${TBANK_API_URL}/api/test-morning-transfer`, {
+    const response = await fetch(`${TBANK_API_URL}/api/morning-transfer`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -2293,12 +2293,12 @@ async function testTransferFromAlfa() {
 
     if (resp && resp.success) {
       showPopup('✅ Утренний перевод выполнен успешно!');
-      console.log('[EVENING_PERCENT] Test morning transfer completed:', resp);
+      console.log('[EVENING_PERCENT] Morning transfer completed:', resp);
     } else {
       showPopup('❌ Ошибка: ' + ((resp && resp.error) || 'unknown'));
     }
   } catch (e) {
-    console.error('[EVENING_PERCENT] Error in test morning transfer:', e);
+    console.error('[EVENING_PERCENT] Error in morning transfer:', e);
     showPopup('❌ Ошибка сети: ' + e.message);
   } finally {
     if (btn) btn.disabled = false;
