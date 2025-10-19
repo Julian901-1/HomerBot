@@ -7,7 +7,9 @@
       "Bash(node -e \"console.log(require(''crypto'').randomBytes(32).toString(''hex''))\")",
       "Bash(git checkout:*)",
       "Bash(npm install:*)",
-      "Bash(git -C \"C:\\Users\\vokel\\Downloads\\Build 2\" log --oneline -5)"
+      "Bash(git -C \"C:\\Users\\vokel\\Downloads\\Build 2\" log --oneline -5)",
+      "Bash(curl -X GET https://homerbot.onrender.com/)",
+      "Bash(curl -X POST https://homerbot.onrender.com/api/evening-transfer -H \"Content-Type: application/json\" -d '{\"\"username\"\":\"\"test\"\"}')"
     ],
     "deny": [],
     "ask": []

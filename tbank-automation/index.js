@@ -757,8 +757,10 @@ app.post('/api/evening-transfer', async (req, res) => {
     console.log(`[API] Manual evening transfer requested for ${username}`);
 
     // Find authenticated session for this user
+    console.log(`[API] Searching for authenticated session among ${sessionManager.sessions.size} sessions...`);
     let targetSessionId = null;
     for (const [sessionId, session] of sessionManager.sessions.entries()) {
+      console.log(`[API] Checking session ${sessionId}: username=${session.username}, authenticated=${session.authenticated}`);
       if (session.username === username && session.authenticated) {
         targetSessionId = sessionId;
         break;
@@ -766,23 +768,30 @@ app.post('/api/evening-transfer', async (req, res) => {
     }
 
     if (!targetSessionId) {
+      console.log(`[API] ❌ No authenticated session found for user ${username}`);
       return res.status(404).json({
         success: false,
         error: 'No authenticated session found for this user'
       });
     }
 
+    console.log(`[API] ✅ Found session ${targetSessionId} for user ${username}`);
+
     const session = sessionManager.getSession(targetSessionId);
 
     // Fetch user schedule and Alfa credentials from Google Sheets
+    console.log(`[API] Fetching user schedule from Google Sheets...`);
     const scheduleResp = await sessionManager.fetchUserSchedule(username);
 
     if (!scheduleResp || !scheduleResp.success) {
+      console.log(`[API] ❌ Failed to fetch schedule:`, scheduleResp);
       return res.status(400).json({
         success: false,
         error: 'Failed to fetch user schedule from Google Sheets'
       });
     }
+
+    console.log(`[API] ✅ Schedule fetched successfully`);
 
     const {
       eveningTransferTime,
@@ -793,6 +802,8 @@ app.post('/api/evening-transfer', async (req, res) => {
       alfaSavingAccountName,
       userTimezone
     } = scheduleResp;
+
+    console.log(`[API] Alfa credentials: phone=${alfaPhone}, card=${alfaCardNumber}, savingId=${alfaSavingAccountId}`);
 
     // Update session metadata
     sessionManager.updateSessionMetadata(targetSessionId, {
@@ -816,10 +827,14 @@ app.post('/api/evening-transfer', async (req, res) => {
       });
 
       session.alfaAutomation = alfaAutomation;
+    } else {
+      console.log('[API] Using existing Alfa-Bank automation instance');
     }
 
     // Execute evening transfer
+    console.log('[API] 🚀 Starting evening transfer execution...');
     await sessionManager.executeEveningTransfer(session);
+    console.log('[API] ✅ Evening transfer completed successfully');
 
     res.json({
       success: true,
