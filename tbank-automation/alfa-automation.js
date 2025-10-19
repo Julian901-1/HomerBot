@@ -43,6 +43,15 @@ export class AlfaAutomation {
   }
 
   /**
+   * Simple sleep helper
+   * @param {number} ms
+   * @returns {Promise<void>}
+   */
+  async sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
    * Take base64 screenshot for logging
    * @param {string} context - Context description
    */
@@ -519,13 +528,13 @@ export class AlfaAutomation {
         log('Обнаружен диалог "Доверять этому устройству?", нажимаем "Не доверять"');
         try {
           await this.page.click('button[data-test-id="trust-device-page-cancel-btn"]');
-          await this.page.waitForTimeout(2000);
+          await this.sleep(2000);
         } catch (err) {
           log(`⚠️ Не удалось нажать "Не доверять": ${err.message}`);
         }
       }
 
-      await this.page.waitForTimeout(checkInterval);
+      await this.sleep(checkInterval);
     }
 
     if (finalState) {
@@ -580,7 +589,7 @@ export class AlfaAutomation {
       }
 
       const waitBetweenSteps = async () => {
-        await new Promise(resolve => setTimeout(resolve, 15000));
+        await this.sleep(15000);
       };
 
       console.log('[ALFA→SAVING] Этап 1/6: Переход в дашборд');
@@ -593,7 +602,7 @@ export class AlfaAutomation {
         throw new Error(`Не удалось убедиться, что открыта главная страница. ${details}`);
       }
 
-      console.log(`[ALFA→TBANK] Источник средств: счёт ${savingAccountId}`);
+      console.log(`[ALFA→SAVING] Источник средств: счёт ${savingAccountId}`);
 
       await waitBetweenSteps();
 
@@ -628,7 +637,7 @@ export class AlfaAutomation {
           const handle = await this.page.$(selector);
           if (handle) {
             await handle.click();
-            await this.page.waitForTimeout(500);
+            await this.sleep(500);
             const check = await this.page.$(accountOptionSelector);
             if (check) return;
           }
@@ -653,7 +662,7 @@ export class AlfaAutomation {
             }
           }
         });
-        await this.page.waitForTimeout(500);
+        await this.sleep(500);
       };
 
       await ensureAccountDropdownOpen();
@@ -718,7 +727,7 @@ export class AlfaAutomation {
       }
 
       const waitBetweenSteps = async () => {
-        await this.page.waitForTimeout(15000);
+        await this.sleep(15000);
       };
 
       console.log('[SAVING→ALFA] Этап 1/7: Переход в дашборд');
@@ -759,7 +768,7 @@ export class AlfaAutomation {
           const handle = await this.page.$(selector);
           if (handle) {
             await handle.click();
-            await this.page.waitForTimeout(500);
+            await this.sleep(500);
             const check = await this.page.$(destOptionSelector);
             if (check) return;
           }
@@ -779,7 +788,7 @@ export class AlfaAutomation {
             }
           }
         });
-        await this.page.waitForTimeout(500);
+        await this.sleep(500);
       };
 
       await ensureDestinationDropdownOpen();
@@ -831,7 +840,7 @@ export class AlfaAutomation {
       console.log('[SAVING→ALFA] Этап 6/7: Нажатие "Готово"');
       await this.page.waitForSelector('button[data-test-id="ready-button"]', { timeout: 15000 });
       await this.page.click('button[data-test-id="ready-button"]');
-      await this.page.waitForTimeout(10000);
+      await this.sleep(10000);
 
       console.log('[SAVING→ALFA] Этап 7/7: Проверка успешности перевода');
       console.log('[SAVING→ALFA] ✅ Перевод успешно завершён');
@@ -865,7 +874,7 @@ export class AlfaAutomation {
       }
 
       const waitBetweenSteps = async () => {
-        await this.page.waitForTimeout(15000);
+        await this.sleep(15000);
       };
 
       console.log('[ALFA→TBANK] Этап 1/12: Переход в дашборд');
@@ -977,12 +986,12 @@ export class AlfaAutomation {
       const codeInputs = await this.page.$$('input.KRyR4.uokLS');
       for (let i = 0; i < 4 && i < this.alfaSmsCode.length; i++) {
         await codeInputs[i].click();
-        await this.page.waitForTimeout(150);
+        await this.sleep(150);
         await codeInputs[i].type(this.alfaSmsCode[i]);
-        await this.page.waitForTimeout(350);
+        await this.sleep(350);
       }
 
-      await this.page.waitForTimeout(3000);
+      await this.sleep(3000);
 
       console.log('[ALFA→TBANK] Этап 12/12: Проверка успешности перевода');
       this.pendingInputType = null;
