@@ -527,40 +527,14 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 2/8: Переход на страницу накопительного счёта');
-      const requiredSavingAccountId = '40817810506220141175';
-      if (savingAccountId && savingAccountId !== requiredSavingAccountId) {
-        console.log(`[ALFA→SAVING] ⚠️ Используем предписанный счёт ${requiredSavingAccountId} вместо переданного ${savingAccountId}`);
-      }
-      await this.page.goto(`https://web.alfabank.ru/accounts/${requiredSavingAccountId}`, {
-        waitUntil: 'domcontentloaded'
-      });
-
+      console.log('[ALFA→SAVING] Этап 2/8: Переход на страницу перевода между счетами');
+      const transferUrl = 'https://web.alfabank.ru/transfers/account-to-account?destinationAccount=40817810506220141175&type=FROM_ALFA_ACCOUNT';
+      await this.page.goto(transferUrl, { waitUntil: 'domcontentloaded' });
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 3/8: Нажатие "Пополнить"');
-      await this.page.waitForSelector('button:has(span.lcIYP)', { timeout: 15000 });
-      await this.page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        const depositButton = buttons.find(btn => {
-          const span = btn.querySelector('span.lcIYP');
-          return span && span.textContent.includes('Пополнить');
-        });
-        if (depositButton) depositButton.click();
-      });
-
-      await waitBetweenSteps();
-
-      console.log('[ALFA→SAVING] Этап 4/8: Нажатие "Со счёта Альфа-Банка"');
-      await this.page.waitForSelector('div[data-test-id="banner-wrapper"]', { timeout: 15000 });
-      await this.page.click('div[data-test-id="banner-wrapper"]');
-
-      await waitBetweenSteps();
-
-      console.log('[ALFA→SAVING] Этап 5/8: Выбор "Текущий счёт ··7167"');
-      await this.page.waitForSelector('div[data-test-id="src-account-option"]', { timeout: 15000 });
-
-      // Find the account ending with 7167
+      console.log('[ALFA→SAVING] Этап 3/8: Выбор счёта списания "Расчётный счёт ··7167"');
+      const accountSelector = 'div[data-test-id="src-account-option"]';
+      await this.page.waitForSelector(accountSelector, { timeout: 15000 });
       await this.page.evaluate(() => {
         const options = Array.from(document.querySelectorAll('div[data-test-id="src-account-option"]'));
         const targetOption = options.find(opt => opt.textContent.includes('··7167'));
@@ -569,7 +543,7 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 6/8: Нажатие "Всё"');
+      console.log('[ALFA→SAVING] Этап 4/8: Нажатие "Всё"');
       await this.page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const allButton = buttons.find(btn => btn.textContent.includes('Всё'));
@@ -578,7 +552,21 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 7/8: Нажатие "Перевести"');
+      console.log('[ALFA→SAVING] Этап 5/8: Нажатие "Перевести"');
+      await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
+      await this.page.click('button[data-test-id="payment-button"]');
+
+      await waitBetweenSteps();
+
+      console.log('[ALFA→SAVING] Этап 6/8: Проверка успешности перевода');
+      await waitBetweenSteps();
+
+      console.log('[ALFA→SAVING] ✅ Перевод успешно завершён');
+
+      // Take confirmation screenshot
+      await this.takeScreenshot('alfa-to-saving-success');
+
+      return { success: true, amount };
       await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
       await this.page.click('button[data-test-id="payment-button"]');
 
