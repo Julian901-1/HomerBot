@@ -493,11 +493,10 @@ export class AlfaAutomation {
 
       await this.randomDelay(1000, 2000);
 
-      console.log('[ALFA→SAVING] Этап 2/8: Нажатие на накопительный счёт');
-      const savingAccountSelector = `button[data-test-id="product-view-content-${savingAccountId}"]`;
-      await this.page.waitForSelector(savingAccountSelector, { timeout: 10000 });
-      await this.page.click(savingAccountSelector);
-      await this.randomDelay(5000, 6000); // Wait 5 seconds as per instruction
+      console.log('[ALFA→SAVING] Этап 2/8: Переход на страницу накопительного счёта');
+      const savingAccountUrl = `https://web.alfabank.ru/accounts/${savingAccountId}`;
+      await this.page.goto(savingAccountUrl, { waitUntil: 'domcontentloaded' });
+      await this.randomDelay(4000, 5000); // Allow page widgets to initialise
 
       console.log('[ALFA→SAVING] Этап 3/8: Нажатие "Пополнить"');
       await this.page.waitForSelector('button:has(span.lcIYP)', { timeout: 10000 });
