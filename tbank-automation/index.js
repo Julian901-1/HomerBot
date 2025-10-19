@@ -800,6 +800,15 @@ async function executeEveningTransferStep1(username) {
     clearInterval(smsQueueChecker);
     await tbankAutomation.close();
 
+    // Clear reference to help garbage collection
+    tbankAutomation = null;
+
+    // Force garbage collection if available
+    if (global.gc) {
+      console.log('[STEP1] 🗑️ Running garbage collection...');
+      global.gc();
+    }
+
     console.log(`[STEP1] ✅ Completed: ${amount} RUB transferred`);
     return { success: true, amount };
 
@@ -826,8 +835,8 @@ async function executeEveningTransferStep2(username, amount) {
       throw new Error('Missing required Alfa environment variables');
     }
 
-    console.log(`[STEP2] Waiting 30 seconds for funds to arrive...`);
-    await new Promise(resolve => setTimeout(resolve, 30000));
+    console.log(`[STEP2] Waiting 45 seconds for funds to arrive and memory to free...`);
+    await new Promise(resolve => setTimeout(resolve, 45000));
 
     alfaAutomation = new AlfaAutomation({
       username,
@@ -895,6 +904,12 @@ app.post('/api/evening-transfer', async (req, res) => {
     // Execute step 1
     const step1Result = await executeEveningTransferStep1(username);
     const transferredAmount = step1Result.amount;
+
+    // Force garbage collection between steps
+    if (global.gc) {
+      console.log('[API-WRAPPER] 🗑️ Running garbage collection between steps...');
+      global.gc();
+    }
 
     // Execute step 2
     await executeEveningTransferStep2(username, transferredAmount);

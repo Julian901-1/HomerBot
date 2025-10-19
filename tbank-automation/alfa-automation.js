@@ -97,7 +97,22 @@ export class AlfaAutomation {
         '--disable-accelerated-2d-canvas',
         '--no-first-run',
         '--no-zygote',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-sync',
+        '--metrics-recording-only',
+        '--mute-audio',
+        '--no-default-browser-check',
+        '--disable-hang-monitor',
+        '--disable-prompt-on-repost',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+        '--disable-ipc-flooding-protection',
+        '--disable-client-side-phishing-detection',
+        '--single-process'
       ]
     });
 
@@ -236,8 +251,11 @@ export class AlfaAutomation {
    * Submit Alfa SMS code (called from external API)
    */
   submitAlfaSMSCode(code) {
-    console.log(`[ALFA-LOGIN] Получен SMS-код: ${code}`);
-    this.alfaSmsCode = code;
+    // Only log if this is a new code (prevent spam from 500ms interval checker)
+    if (this.alfaSmsCode !== code) {
+      console.log(`[ALFA-LOGIN] Получен SMS-код: ${code}`);
+      this.alfaSmsCode = code;
+    }
 
     if (this.alfaSmsCodeResolver) {
       clearTimeout(this.alfaSmsCodeTimeout);
