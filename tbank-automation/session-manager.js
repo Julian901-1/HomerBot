@@ -726,8 +726,9 @@ export class SessionManager {
       const tbankPhone = automation.userPhone || '+79999999999'; // Fallback to default
 
       const sbpTransferResult = await alfaAutomation.transferToTBankSBP(
-        eveningTransferAmount,
-        tbankPhone
+        alfaSavingAccountId,
+        tbankPhone,
+        eveningTransferAmount
       );
 
       if (!sbpTransferResult.success) {
@@ -735,7 +736,8 @@ export class SessionManager {
         return;
       }
 
-      console.log(`[SCHEDULER] 🌅✅ Alfa -> T-Bank SBP transfer successful (${eveningTransferAmount} RUB)`);
+      const sbpAmount = sbpTransferResult.amount || eveningTransferAmount;
+      console.log(`[SCHEDULER] 🌅✅ Alfa -> T-Bank SBP transfer successful (${sbpAmount} RUB)`);
 
       // STEP 21-22: Verify receipt in T-Bank (optional, just refresh balance)
       console.log('[SCHEDULER] 🌅 Step 21-22: Verifying receipt in T-Bank...');

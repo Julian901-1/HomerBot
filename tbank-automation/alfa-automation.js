@@ -118,14 +118,11 @@ export class AlfaAutomation {
 
     this.page = await this.browser.newPage();
 
-    // Suppress puppeteer-extra-plugin-stealth console logs
     this.page.on('console', msg => {
       const text = msg.text();
-      // Only suppress stealth plugin debug messages
       if (text.includes('Found box') || text.includes('matching one of selectors')) {
-        return; // Suppress this log
+        return;
       }
-      // Allow other console messages
       console.log('ALFA PAGE LOG:', text);
     });
 
@@ -440,6 +437,137 @@ export class AlfaAutomation {
   }
 
   /**
+   * Ensure dashboard is visible by checking key indicators and handling the trust dialog
+   * @param {string} prefix - Log prefix used to identify caller context
+   * @returns {{ready: boolean, state: object, missing: string[]}} Dashboard readiness report
+   */
+  async ensureDashboardReady(prefix = '[ALFA]') {
+    const log = message => console.log(`${prefix} ${message}`);
+    let finalState = null;
+
+    try {
+      await this.page.waitForFunction(
+        () => window.location.href.includes('web.alfabank.ru/dashboard'),
+        { timeout: 3000 }
+      );
+    } catch {
+      await this.page.goto('https://web.alfabank.ru/dashboard', {
+        waitUntil: 'domcontentloaded'
+      });
+    }
+
+    const dashboardTimeout = 15000;
+    const checkInterval = 1000;
+    const start = Date.now();
+
+    while (Date.now() - start < dashboardTimeout) {
+      const dashboardState = await this.page.evaluate(() => {
+        const normalize = text => (text || '').replace(/\s+/g, ' ').trim();
+
+        const hasProductsHeader = Array.from(document.querySelectorAll('h3')).some(
+          header => normalize(header.textContent) === 'Мои продукты'
+        );
+
+        const hasSettingsButton = Boolean(
+          document.querySelector('button[data-test-id="hidden-products-settings-button"]')
+        );
+
+        const hasQuickActionsHeader = Boolean(
+          document.querySelector('h3[data-test-id="quick-actions-header-my-payments"]')
+        );
+
+        const trustButton = document.querySelector('button[data-test-id="trust-device-page-cancel-btn"]');
+        let trustPromptVisible = false;
+
+        if (trustButton) {
+          const style = window.getComputedStyle(trustButton);
+          if (
+            style &&
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            Number(style.opacity) !== 0
+          ) {
+            const rect = trustButton.getBoundingClientRect();
+            trustPromptVisible = rect.width > 0 && rect.height > 0;
+          }
+        }
+
+        return {
+          hasProductsHeader,
+          hasSettingsButton,
+          hasQuickActionsHeader,
+          trustPromptVisible
+        };
+      });
+
+      finalState = dashboardState;
+
+      if (
+        dashboardState.hasProductsHeader ||
+        dashboardState.hasSettingsButton ||
+        dashboardState.hasQuickActionsHeader
+      ) {
+        const indicators = [];
+        if (dashboardState.hasProductsHeader) indicators.push('заголовок "Мои продукты"');
+        if (dashboardState.hasSettingsButton) indicators.push('кнопка настройки скрытия продуктов');
+        if (dashboardState.hasQuickActionsHeader) indicators.push('секция "Мои платежи"');
+        log(`Подтверждены элементы дашборда: ${indicators.join(', ')}`);
+        return { ready: true, state: dashboardState, missing: [] };
+      }
+
+      if (dashboardState.trustPromptVisible) {
+        log('Обнаружен диалог "Доверять этому устройству?", нажимаем "Не доверять"');
+        try {
+          await this.page.click('button[data-test-id="trust-device-page-cancel-btn"]');
+          await this.page.waitForTimeout(2000);
+        } catch (err) {
+          log(`⚠️ Не удалось нажать "Не доверять": ${err.message}`);
+        }
+      }
+
+      await this.page.waitForTimeout(checkInterval);
+    }
+
+    if (finalState) {
+      log(`Финальное состояние проверок дашборда: ${JSON.stringify(finalState)}`);
+    } else {
+      log('Финальное состояние проверок дашборда: не определено');
+    }
+
+    const missing = [];
+    if (!finalState?.hasProductsHeader) missing.push('заголовок "Мои продукты"');
+    if (!finalState?.hasSettingsButton) missing.push('кнопка настройки скрытия продуктов');
+    if (!finalState?.hasQuickActionsHeader) missing.push('секция "Мои платежи"');
+    if (finalState?.trustPromptVisible) missing.push('диалог "Доверять этому устройству?" остается открыт');
+
+    return {
+      ready: false,
+      state: finalState || {},
+      missing
+    };
+  }
+
+  /**
+   * Parse localized money strings (e.g., "16 223,70 ₽") to float
+   * @param {string} value
+   * @returns {number}
+   */
+  parseMoneyString(value) {
+    if (typeof value !== 'string') {
+      return 0;
+    }
+
+    const normalized = value
+      .replace(/\u00A0/g, ' ')
+      .replace(/[^\d,.,-]/g, '')
+      .replace(/\s+/g, '')
+      .replace(',', '.');
+
+    const parsed = parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  /**
    * Transfer to Alfa saving account
    * (from Alfa debit account to Alfa saving account)
    */
@@ -455,132 +583,30 @@ export class AlfaAutomation {
         await new Promise(resolve => setTimeout(resolve, 15000));
       };
 
-      console.log('[ALFA→SAVING] Этап 1/8: Переход в дашборд');
+      console.log('[ALFA→SAVING] Этап 1/6: Переход в дашборд');
 
-      let finalDashboardState = null;
-
-      const ensureDashboard = async () => {
-        try {
-          await this.page.waitForFunction(
-            () => window.location.href.includes('web.alfabank.ru/dashboard'),
-            { timeout: 3000 }
-          );
-        } catch {
-          await this.page.goto('https://web.alfabank.ru/dashboard', {
-            waitUntil: 'domcontentloaded'
-          });
-        }
-
-        const dashboardTimeout = 15000;
-        const checkInterval = 1000;
-        const start = Date.now();
-        let trustPromptHandled = false;
-
-        let lastDashboardState = null;
-
-        while (Date.now() - start < dashboardTimeout) {
-          const dashboardState = await this.page.evaluate(() => {
-            const normalize = text => (text || '').replace(/\s+/g, ' ').trim();
-
-            const hasProductsHeader = Array.from(document.querySelectorAll('h3')).some(
-              header => normalize(header.textContent) === 'Мои продукты'
-            );
-
-            const hasSettingsButton = Boolean(
-              document.querySelector('button[data-test-id="hidden-products-settings-button"]')
-            );
-
-            const hasQuickActionsHeader = Boolean(
-              document.querySelector('h3[data-test-id="quick-actions-header-my-payments"]')
-            );
-
-            const trustButton = document.querySelector('button[data-test-id="trust-device-page-cancel-btn"]');
-            let trustPromptVisible = false;
-
-            if (trustButton) {
-              const style = window.getComputedStyle(trustButton);
-              if (
-                style &&
-                style.display !== 'none' &&
-                style.visibility !== 'hidden' &&
-                Number(style.opacity) !== 0
-              ) {
-                const rect = trustButton.getBoundingClientRect();
-                trustPromptVisible = rect.width > 0 && rect.height > 0;
-              }
-            }
-
-            return {
-              hasProductsHeader,
-              hasSettingsButton,
-              hasQuickActionsHeader,
-              trustPromptVisible
-            };
-          });
-
-          lastDashboardState = dashboardState;
-          finalDashboardState = dashboardState;
-
-          if (
-            dashboardState.hasProductsHeader &&
-            dashboardState.hasSettingsButton &&
-            dashboardState.hasQuickActionsHeader
-          ) {
-            console.log('[ALFA→SAVING] Подтверждено наличие всех элементов дашборда');
-            return true;
-          }
-
-          if (!trustPromptHandled && dashboardState.trustPromptVisible) {
-            console.log('[ALFA→SAVING] Обнаружен диалог "Доверять этому устройству?", нажимаем "Не доверять"');
-            try {
-              await this.page.click('button[data-test-id="trust-device-page-cancel-btn"]');
-              trustPromptHandled = true;
-              await this.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              continue;
-            } catch (trustError) {
-              console.log(`[ALFA→SAVING] ⚠️ Не удалось нажать "Не доверять": ${trustError.message}`);
-              trustPromptHandled = true;
-            }
-          }
-
-          await new Promise(resolve => setTimeout(resolve, checkInterval));
-        }
-
-        if (lastDashboardState) {
-          console.log('[ALFA→SAVING] Финальное состояние дашборда:', lastDashboardState);
-        }
-
-        return false;
-      };
-
-      const dashboardReady = await ensureDashboard();
-      if (!dashboardReady) {
-        if (finalDashboardState) {
-          console.log('[ALFA→SAVING] Финальное состояние проверок дашборда:', finalDashboardState);
-        }
-
-        const missingIndicators = [];
-        if (!finalDashboardState?.hasProductsHeader) missingIndicators.push('заголовок "Мои продукты"');
-        if (!finalDashboardState?.hasSettingsButton) missingIndicators.push('кнопка настройки скрытия продуктов');
-        if (!finalDashboardState?.hasQuickActionsHeader) missingIndicators.push('секция "Мои платежи"');
-        if (finalDashboardState?.trustPromptVisible) missingIndicators.push('диалог "Доверять этому устройству?" остается открыт');
-
-        const details = missingIndicators.length
-          ? `Отсутствуют элементы: ${missingIndicators.join(', ')}`
+      const dashboardStatus = await this.ensureDashboardReady('[ALFA→SAVING]');
+      if (!dashboardStatus.ready) {
+        const details = dashboardStatus.missing.length
+          ? `Отсутствуют элементы: ${dashboardStatus.missing.join(', ')}`
           : 'Неизвестное состояние дашборда';
-
         throw new Error(`Не удалось убедиться, что открыта главная страница. ${details}`);
       }
 
+      console.log(`[ALFA→TBANK] Источник средств: счёт ${savingAccountId}`);
+
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 2/8: Переход на страницу перевода между счетами');
-      const transferUrl = 'https://web.alfabank.ru/transfers/account-to-account?destinationAccount=40817810506220141175&type=FROM_ALFA_ACCOUNT';
+      console.log('[ALFA→SAVING] Этап 2/6: Переход на страницу перевода между счетами');
+      const requiredSavingAccountId = '40817810506220141175';
+      if (savingAccountId && savingAccountId !== requiredSavingAccountId) {
+        console.log(`[ALFA→SAVING] ⚠️ Используем предписанный счёт ${requiredSavingAccountId} вместо переданного ${savingAccountId}`);
+      }
+      const transferUrl = `https://web.alfabank.ru/transfers/account-to-account?destinationAccount=${requiredSavingAccountId}&type=FROM_ALFA_ACCOUNT`;
       await this.page.goto(transferUrl, { waitUntil: 'domcontentloaded' });
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 3/8: Выбор счёта списания "Расчётный счёт ··7167"');
+      console.log('[ALFA→SAVING] Этап 3/6: Выбор счёта списания "Расчётный счёт ··7167"');
       const accountOptionSelector = 'div[data-test-id="src-account-option"]';
       const optionsListSelector = 'div[data-test-id="src-account-options-list"]';
 
@@ -602,7 +628,9 @@ export class AlfaAutomation {
           const handle = await this.page.$(selector);
           if (handle) {
             await handle.click();
-            return;
+            await this.page.waitForTimeout(500);
+            const check = await this.page.$(accountOptionSelector);
+            if (check) return;
           }
         }
 
@@ -625,6 +653,7 @@ export class AlfaAutomation {
             }
           }
         });
+        await this.page.waitForTimeout(500);
       };
 
       await ensureAccountDropdownOpen();
@@ -642,7 +671,7 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 4/8: Нажатие "Всё"');
+      console.log('[ALFA→SAVING] Этап 4/6: Нажатие "Всё"');
       await this.page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const allButton = buttons.find(btn => btn.textContent.includes('Всё'));
@@ -651,25 +680,13 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 5/8: Нажатие "Перевести"');
+      console.log('[ALFA→SAVING] Этап 5/6: Нажатие "Перевести"');
       await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
       await this.page.click('button[data-test-id="payment-button"]');
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 6/8: Проверка успешности перевода');
-      await waitBetweenSteps();
-
-      console.log('[ALFA→SAVING] ✅ Перевод успешно завершён');
-
-      // Take confirmation screenshot
-      await this.takeScreenshot('alfa-to-saving-success');
-
-      return { success: true, amount };
-      await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
-      await this.page.click('button[data-test-id="payment-button"]');
-
-      console.log('[ALFA→SAVING] Этап 8/8: Проверка успешности перевода');
+      console.log('[ALFA→SAVING] Этап 6/6: Проверка успешности перевода');
       await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] ✅ Перевод успешно завершён');
@@ -700,69 +717,125 @@ export class AlfaAutomation {
         throw new Error('Не авторизован в Альфа-Банке');
       }
 
-      console.log('[SAVING→ALFA] Этап 1/9: Переход в дашборд');
-      await this.page.goto('https://web.alfabank.ru/dashboard', {
-        waitUntil: 'networkidle2'
-      });
-      await this.randomDelay(2000, 3000);
+      const waitBetweenSteps = async () => {
+        await this.page.waitForTimeout(15000);
+      };
 
-      console.log('[SAVING→ALFA] Этап 2/9: Нажатие на накопительный счёт');
-      const savingAccountSelector = `button[data-test-id="product-view-content-${savingAccountId}"]`;
-      await this.page.waitForSelector(savingAccountSelector, { timeout: 10000 });
-      await this.page.click(savingAccountSelector);
-      await this.randomDelay(2000, 3000);
+      console.log('[SAVING→ALFA] Этап 1/7: Переход в дашборд');
+      const dashboardStatus = await this.ensureDashboardReady('[SAVING→ALFA]');
+      if (!dashboardStatus.ready) {
+        const details = dashboardStatus.missing.length
+          ? `Отсутствуют элементы: ${dashboardStatus.missing.join(', ')}`
+          : 'Неизвестное состояние дашборда';
+        throw new Error(`Не удалось убедиться, что открыта главная страница. ${details}`);
+      }
 
-      console.log('[SAVING→ALFA] Этап 3/9: Нажатие "Вывести"');
-      await this.page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        const withdrawButton = buttons.find(btn => {
-          const span = btn.querySelector('span.lcIYP');
-          return span && span.textContent.includes('Вывести');
+      await waitBetweenSteps();
+
+      console.log('[SAVING→ALFA] Этап 2/7: Переход на страницу перевода между своими счетами');
+      const transferUrl = `https://web.alfabank.ru/transfers/account-to-account?sourceAccount=${savingAccountId}`;
+      await this.page.goto(transferUrl, { waitUntil: 'domcontentloaded' });
+      await waitBetweenSteps();
+
+      console.log(`[SAVING→ALFA] Этап 3/7: Выбор счёта назначения "${toAccountName}"`);
+      const destOptionSelector = 'div[data-test-id="dest-account-option"]';
+      const destListSelector = 'div[data-test-id="dest-account-options-list"]';
+
+      const ensureDestinationDropdownOpen = async () => {
+        const optionVisible = await this.page.$(destOptionSelector);
+        if (optionVisible) return;
+
+        const triggerSelectors = [
+          '[data-test-id="dest-account-select"]',
+          '[data-test-id="dest-account-selector"]',
+          '[data-test-id="dest-account-dropdown"]',
+          '[data-test-id="dest-account"] button',
+          'button[aria-haspopup="listbox"]',
+          '[aria-haspopup="listbox"][role="combobox"]',
+          '[data-test-id="dest-account-options-trigger"]'
+        ];
+
+        for (const selector of triggerSelectors) {
+          const handle = await this.page.$(selector);
+          if (handle) {
+            await handle.click();
+            await this.page.waitForTimeout(500);
+            const check = await this.page.$(destOptionSelector);
+            if (check) return;
+          }
+        }
+
+        await this.page.evaluate(() => {
+          const candidates = Array.from(document.querySelectorAll('[aria-haspopup="listbox"], [data-test-id]'));
+          for (const candidate of candidates) {
+            if (!(candidate instanceof HTMLElement)) continue;
+            const dataset = candidate.dataset || {};
+            const matchesDataset = Object.keys(dataset).some(key =>
+              key.toLowerCase().includes('dest') && key.toLowerCase().includes('account')
+            );
+            if (matchesDataset || candidate.getAttribute('role') === 'combobox') {
+              candidate.click();
+              break;
+            }
+          }
         });
-        if (withdrawButton) withdrawButton.click();
-      });
-      await this.randomDelay(2000, 3000);
+        await this.page.waitForTimeout(500);
+      };
 
-      console.log('[SAVING→ALFA] Этап 4/9: Нажатие на поле "Куда"');
-      await this.page.waitForSelector('span.qvvIn', { timeout: 10000 });
-      await this.page.evaluate(() => {
-        const spans = Array.from(document.querySelectorAll('span.qvvIn'));
-        const targetSpan = spans.find(s => s.textContent.includes('Куда'));
-        if (targetSpan) targetSpan.parentElement.click();
-      });
-      await this.randomDelay(1000, 2000);
+      await ensureDestinationDropdownOpen();
+      await this.page.waitForSelector(`${destListSelector}, ${destOptionSelector}`, { timeout: 60000 });
+      await ensureDestinationDropdownOpen();
 
-      console.log('[SAVING→ALFA] Этап 5/9: Выбор "Текущий счёт ··7167"');
-      await this.page.evaluate(() => {
-        const sections = Array.from(document.querySelectorAll('section'));
-        const targetSection = sections.find(s => s.textContent.includes('Текущий счёт') && s.textContent.includes('··7167'));
-        if (targetSection) targetSection.click();
-      });
-      await this.randomDelay(1000, 2000);
+      const destinationSelected = await this.page.evaluate((targetName) => {
+        const normalize = text => (text || '').replace(/\s+/g, ' ').trim();
+        const targetNormalized = normalize(targetName);
+        const options = Array.from(document.querySelectorAll('div[data-test-id="dest-account-option"]'));
+        const targetOption = options.find(opt => normalize(opt.textContent).includes(targetNormalized));
+        if (targetOption instanceof HTMLElement) {
+          targetOption.scrollIntoView({ block: 'center' });
+          targetOption.click();
+          return true;
+        }
+        return false;
+      }, toAccountName);
 
-      console.log('[SAVING→ALFA] Этап 6/9: Нажатие "Всё"');
-      await this.page.evaluate(() => {
+      if (!destinationSelected) {
+        throw new Error(`Не удалось выбрать счёт назначения "${toAccountName}"`);
+      }
+
+      await waitBetweenSteps();
+
+      console.log('[SAVING→ALFA] Этап 4/7: Нажатие "Всё"');
+      const allClicked = await this.page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const allButton = buttons.find(btn => btn.textContent.includes('Всё'));
-        if (allButton) allButton.click();
+        if (allButton) {
+          allButton.click();
+          return true;
+        }
+        return false;
       });
-      await this.randomDelay(1000, 2000);
 
-      console.log('[SAVING→ALFA] Этап 7/9: Нажатие "Перевести"');
-      await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 10000 });
+      if (!allClicked) {
+        throw new Error('Не удалось нажать кнопку "Всё"');
+      }
+
+      await waitBetweenSteps();
+
+      console.log('[SAVING→ALFA] Этап 5/7: Нажатие "Перевести"');
+      await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
       await this.page.click('button[data-test-id="payment-button"]');
-      await this.randomDelay(3000, 4000);
 
-      console.log('[SAVING→ALFA] Этап 8/9: Нажатие "Готово"');
-      await this.page.waitForSelector('button[data-test-id="ready-button"]', { timeout: 10000 });
+      await waitBetweenSteps();
+
+      console.log('[SAVING→ALFA] Этап 6/7: Нажатие "Готово"');
+      await this.page.waitForSelector('button[data-test-id="ready-button"]', { timeout: 15000 });
       await this.page.click('button[data-test-id="ready-button"]');
-      await this.randomDelay(10000, 11000); // Wait 10 seconds as per instruction
+      await this.page.waitForTimeout(10000);
 
-      console.log('[SAVING→ALFA] Этап 9/9: Проверка успешности перевода');
-
+      console.log('[SAVING→ALFA] Этап 7/7: Проверка успешности перевода');
       console.log('[SAVING→ALFA] ✅ Перевод успешно завершён');
 
-      // Take confirmation screenshot
       await this.takeScreenshot('saving-to-alfa-success');
 
       return { success: true, amount };
@@ -770,7 +843,6 @@ export class AlfaAutomation {
     } catch (error) {
       console.error('[SAVING→ALFA] ❌ Ошибка:', error.message);
 
-      // Take error screenshot
       await this.takeScreenshot('saving-to-alfa-error');
 
       throw error;
@@ -779,129 +851,152 @@ export class AlfaAutomation {
 
   /**
    * Transfer from Alfa to T-Bank via SBP
+   * @param {string} savingAccountId - Alfa account identifier (used for logging/tracing)
+   * @param {string} recipientPhone - Phone number linked to T-Bank for SBP transfer
+   * @param {?number} amount - Optional transfer amount (if null, full balance is used)
    */
-  async transferToTBankSBP(amount, recipientPhone) {
+  async transferToTBankSBP(savingAccountId, recipientPhone, amount) {
     try {
-      console.log(`[ALFA→TBANK] Начало перевода ${amount}₽ на Т-Банк через СБП`);
+      const requestedAmountLabel = amount != null ? `${amount}₽` : 'полного баланса';
+      console.log(`[ALFA→TBANK] Начало перевода ${requestedAmountLabel} на Т-Банк через СБП`);
 
       if (!this.authenticated) {
         throw new Error('Не авторизован в Альфа-Банке');
       }
 
-      console.log('[ALFA→TBANK] Этап 1/13: Переход в дашборд');
-      await this.page.goto('https://web.alfabank.ru/dashboard', {
-        waitUntil: 'networkidle2'
+      const waitBetweenSteps = async () => {
+        await this.page.waitForTimeout(15000);
+      };
+
+      console.log('[ALFA→TBANK] Этап 1/12: Переход в дашборд');
+      const dashboardStatus = await this.ensureDashboardReady('[ALFA→TBANK]');
+      if (!dashboardStatus.ready) {
+        const details = dashboardStatus.missing.length
+          ? `Отсутствуют элементы: ${dashboardStatus.missing.join(', ')}`
+          : 'Неизвестное состояние дашборда';
+        throw new Error(`Не удалось убедиться, что открыта главная страница. ${details}`);
+      }
+
+      await waitBetweenSteps();
+
+      console.log('[ALFA→TBANK] Этап 2/12: Переход на страницу перевода по номеру телефона');
+      await this.page.goto('https://web.alfabank.ru/transfers/phone', {
+        waitUntil: 'domcontentloaded'
       });
-      await this.randomDelay(2000, 3000);
+      await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 2/13: Нажатие на дебетовый счёт 1315');
-      await this.page.waitForSelector('button[data-test-id="product-view-content-40817810105891277167"]', { timeout: 10000 });
-      await this.page.click('button[data-test-id="product-view-content-40817810105891277167"]');
-      await this.randomDelay(2000, 3000);
-
-      console.log('[ALFA→TBANK] Этап 3/13: Нажатие "Оплатить со счёта"');
-      await this.page.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        const payButton = buttons.find(btn => {
-          const span = btn.querySelector('span.lcIYP');
-          return span && span.textContent.includes('Оплатить со счёта');
-        });
-        if (payButton) payButton.click();
-      });
-      await this.randomDelay(2000, 3000);
-
-      console.log('[ALFA→TBANK] Этап 4/14: Нажатие "По номеру телефона"');
-      await this.page.waitForSelector('div[data-test-id="transfer-item"]', { timeout: 10000 });
-      await this.page.evaluate(() => {
-        const transferItems = Array.from(document.querySelectorAll('div[data-test-id="transfer-item"]'));
-        const phoneTransfer = transferItems.find(item => item.textContent.includes('По номеру телефона'));
-        if (phoneTransfer) {
-          const button = phoneTransfer.querySelector('button');
-          if (button) button.click();
+      console.log('[ALFA→TBANK] Этап 3/12: Ввод номера телефона получателя');
+      await this.page.waitForSelector('input[data-test-id="phone-intl-input"]', { timeout: 15000 });
+      const trimmedPhone = typeof recipientPhone === 'string' ? recipientPhone.trim() : '';
+      const normalizedPhone = trimmedPhone
+        ? (trimmedPhone.startsWith('+') ? trimmedPhone : `+${trimmedPhone}`)
+        : '';
+      await this.page.evaluate(phone => {
+        const input = document.querySelector('input[data-test-id="phone-intl-input"]');
+        if (input) {
+          input.focus();
+          const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          nativeSetter.call(input, '');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          nativeSetter.call(input, phone);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
         }
-      });
-      await this.randomDelay(2000, 3000);
+      }, normalizedPhone);
+      await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 5/14: Нажатие на поле "Номер телефона получателя"');
-      await this.page.waitForSelector('input[data-test-id="phone-intl-input"]', { timeout: 10000 });
-      await this.page.click('input[data-test-id="phone-intl-input"]');
-      await this.randomDelay(1000, 2000);
-
-      console.log('[ALFA→TBANK] Этап 6/14: Нажатие "Себе в другой банк"');
-      await this.page.waitForSelector('button[data-test-id="phone-list-item"]', { timeout: 10000 });
+      console.log('[ALFA→TBANK] Этап 4/12: Выбор шаблона "Себе в другой банк"');
+      await this.page.waitForSelector('button[data-test-id="phone-list-item"]', { timeout: 15000 });
       await this.page.evaluate(() => {
         const items = Array.from(document.querySelectorAll('button[data-test-id="phone-list-item"]'));
         const selfTransfer = items.find(item => item.textContent.includes('Себе в другой банк'));
         if (selfTransfer) selfTransfer.click();
       });
-      await this.randomDelay(2000, 3000);
+      await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 7/14: Нажатие "Т-Банк"');
+      console.log('[ALFA→TBANK] Этап 5/12: Выбор банка "Т-Банк"');
       await this.page.evaluate(() => {
         const sections = Array.from(document.querySelectorAll('section'));
         const tbankSection = sections.find(s => s.textContent.includes('Т-Банк'));
         if (tbankSection) tbankSection.click();
       });
-      await this.randomDelay(2000, 3000);
+      await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 8/14: Получение суммы на счёте');
+      console.log('[ALFA→TBANK] Этап 6/12: Получение доступного баланса');
       const accountBalance = await this.page.evaluate(() => {
         const amountElement = document.querySelector('span[data-test-id="amount"]');
         return amountElement ? amountElement.textContent : '0';
       });
       console.log(`[ALFA→TBANK] Баланс счёта: ${accountBalance}`);
 
-      console.log('[ALFA→TBANK] Этап 9/14: Ввод суммы');
-      await this.page.waitForSelector('input[name="amount"]', { timeout: 10000 });
-      await this.page.type('input[name="amount"]', amount.toString());
-      await this.randomDelay(1000, 2000);
+      let transferAmount = amount != null ? Number(String(amount).replace(',', '.')) : this.parseMoneyString(accountBalance);
+      if (!Number.isFinite(transferAmount) || transferAmount <= 0) {
+        throw new Error('Не удалось определить сумму перевода');
+      }
+      transferAmount = Math.round(transferAmount * 100) / 100;
+      console.log(`[ALFA→TBANK] Используем сумму перевода: ${transferAmount} RUB`);
 
-      console.log('[ALFA→TBANK] Этап 10/14: Нажатие "Продолжить"');
-      await this.page.waitForSelector('button[type="submit"]', { timeout: 10000 });
+      await waitBetweenSteps();
+
+      console.log('[ALFA→TBANK] Этап 7/12: Ввод суммы');
+      await this.page.waitForSelector('input[name="amount"]', { timeout: 15000 });
+      const amountInputValue = transferAmount.toFixed(2).replace('.', ',');
+      await this.page.evaluate(value => {
+        const input = document.querySelector('input[name="amount"]');
+        if (input) {
+          input.focus();
+          const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+          nativeSetter.call(input, '');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          nativeSetter.call(input, value);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, amountInputValue);
+      await waitBetweenSteps();
+
+      console.log('[ALFA→TBANK] Этап 8/12: Нажатие "Продолжить"');
+      await this.page.waitForSelector('button[type="submit"]', { timeout: 15000 });
       await this.page.click('button[type="submit"]');
-      await this.randomDelay(2000, 3000);
+      await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 11/14: Нажатие "Перевести"');
-      await this.page.waitForSelector('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]', { timeout: 10000 });
+      console.log('[ALFA→TBANK] Этап 9/12: Нажатие "Перевести"');
+      await this.page.waitForSelector('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]', { timeout: 15000 });
       await this.page.click('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]');
-      await this.randomDelay(2000, 3000);
+      await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 12/14: Ожидание SMS-кода для подтверждения');
+      console.log('[ALFA→TBANK] Этап 10/12: Ожидание SMS-кода для подтверждения');
       this.pendingInputType = 'alfa_sms';
       this.pendingInputData = {
         message: 'Ожидание SMS-кода для подтверждения перевода'
       };
-
       await this.waitForAlfaSMSCode(120000);
 
-      console.log('[ALFA→TBANK] Этап 13/14: Ввод SMS-кода');
-      await this.page.waitForSelector('input.KRyR4.uokLS', { timeout: 10000 });
+      console.log('[ALFA→TBANK] Этап 11/12: Ввод SMS-кода');
+      await this.page.waitForSelector('input.KRyR4.uokLS', { timeout: 15000 });
       const codeInputs = await this.page.$$('input.KRyR4.uokLS');
-
       for (let i = 0; i < 4 && i < this.alfaSmsCode.length; i++) {
         await codeInputs[i].click();
-        await this.randomDelay(100, 300);
+        await this.page.waitForTimeout(150);
         await codeInputs[i].type(this.alfaSmsCode[i]);
-        await this.randomDelay(300, 500);
+        await this.page.waitForTimeout(350);
       }
 
-      await this.randomDelay(3000, 4000);
+      await this.page.waitForTimeout(3000);
 
-      console.log('[ALFA→TBANK] Этап 14/14: Проверка успешности перевода');
+      console.log('[ALFA→TBANK] Этап 12/12: Проверка успешности перевода');
       this.pendingInputType = null;
       this.pendingInputData = null;
 
       console.log('[ALFA→TBANK] ✅ Перевод успешно завершён');
 
-      // Take confirmation screenshot
       await this.takeScreenshot('alfa-to-tbank-success');
 
-      return { success: true, amount };
+      return { success: true, amount: transferAmount };
 
     } catch (error) {
       console.error('[ALFA→TBANK] ❌ Ошибка:', error.message);
 
-      // Take error screenshot
       await this.takeScreenshot('alfa-to-tbank-error');
 
       this.pendingInputType = null;
