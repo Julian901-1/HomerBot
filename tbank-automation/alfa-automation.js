@@ -194,20 +194,98 @@ export class AlfaAutomation {
       await this.randomDelay(2000, 4000);
 
       console.log('[ALFA-LOGIN] Этап 8/9: Проверка успешной авторизации');
-      await this.page.waitForNavigation({
-        url: url => url.includes('web.alfabank.ru/dashboard'),
-        timeout: 30000
-      });
+      const postLoginTimeout = 30000;
+      const pollInterval = 1000;
+      const postLoginStart = Date.now();
+      let dashboardReached = false;
+      let trustPromptVisible = false;
+
+      while (Date.now() - postLoginStart < postLoginTimeout) {
+        const hasTrustPrompt = await this.page.evaluate(() => {
+          const targetText = 'Доверять этому устройству?';
+          if (!document.body) {
+            return false;
+          }
+
+          const elements = Array.from(document.querySelectorAll('body *'));
+          return elements.some(element => {
+            if (!element.textContent) {
+              return false;
+            }
+
+            const normalizedText = element.textContent
+              .replace(/\u00A0/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            if (!normalizedText.includes(targetText)) {
+              return false;
+            }
+
+            const style = window.getComputedStyle(element);
+            if (!style) {
+              return false;
+            }
+
+            if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+              return false;
+            }
+
+            const rect = element.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
+        });
+
+        if (hasTrustPrompt) {
+          trustPromptVisible = true;
+          break;
+        }
+
+        const currentUrl = this.page.url();
+        if (currentUrl.includes('web.alfabank.ru/dashboard')) {
+          dashboardReached = true;
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+
+      if (!dashboardReached && !trustPromptVisible) {
+        throw new Error('Не удалось подтвердить успешную авторизацию: ни дашборд, ни диалог доверия не появились в течение 30 секунд');
+      }
 
       console.log('[ALFA-LOGIN] Этап 9/9: Проверка диалога "Доверять устройству?"');
-      await this.randomDelay(1000, 2000);
 
-      // Check for trust device dialog
-      const trustDialog = await this.page.$('button[data-test-id="trust-device-page-cancel-btn"]');
-      if (trustDialog) {
-        console.log('[ALFA-LOGIN] Найден диалог "Доверять устройству?", нажимаем "Не доверять"');
-        await trustDialog.click();
-        await this.randomDelay(1000, 2000);
+      if (trustPromptVisible) {
+        console.log('[ALFA-LOGIN] Найден диалог "Доверять этому устройству?", нажимаем "Не доверять"');
+
+        const trustCancelButton = await this.page.waitForSelector('button[data-test-id="trust-device-page-cancel-btn"]', {
+          timeout: 5000
+        }).catch(() => null);
+
+        if (trustCancelButton) {
+          await trustCancelButton.click();
+          await this.randomDelay(1000, 2000);
+        } else {
+          console.log('[ALFA-LOGIN] ⚠️ Кнопка "Не доверять" не найдена, продолжаем без клика');
+        }
+
+        try {
+          await this.page.waitForFunction(
+            () => window.location.href.includes('web.alfabank.ru/dashboard'),
+            { timeout: 20000 }
+          );
+          dashboardReached = true;
+        } catch (navError) {
+          console.log(`[ALFA-LOGIN] ⚠️ Не удалось дождаться перехода на дашборд после отказа в доверии: ${navError.message}`);
+        }
+      } else {
+        console.log('[ALFA-LOGIN] Диалог доверия не появился, продолжаем');
+        await this.randomDelay(500, 1000);
+      }
+
+      if (!dashboardReached) {
+        throw new Error('Авторизация не завершилась переходом на дашборд');
       }
 
       this.authenticated = true;

@@ -1918,18 +1918,6 @@ export class TBankAutomation {
         await new Promise(resolve => setTimeout(resolve, remainingWait));
       }
 
-      // Log full page HTML for debugging
-      console.log('[TBANK→SBP] 📄 Logging final page HTML for debugging...');
-      try {
-        const finalHtml = await this.page.content();
-        console.log('[TBANK→SBP] === PAGE HTML START ===');
-        console.log(finalHtml);
-        console.log('[TBANK→SBP] === PAGE HTML END ===');
-        console.log(`[TBANK→SBP] HTML length: ${finalHtml.length} characters`);
-      } catch (e) {
-        console.log(`[TBANK→SBP] ⚠️ Could not capture page HTML: ${e.message}`);
-      }
-
       // Take final confirmation screenshot
       await this.takeScreenshot('sbp-transfer-final');
 
