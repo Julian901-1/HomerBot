@@ -1736,7 +1736,7 @@ export class TBankAutomation {
 
       await this.page.goto(transferUrl, {
         waitUntil: 'networkidle2',
-        timeout: 15000
+        timeout: 40000
       });
 
       await new Promise(resolve => setTimeout(resolve, 2000));
