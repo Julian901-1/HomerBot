@@ -1879,8 +1879,24 @@ export class TBankAutomation {
 
       console.log('[TBANK→SBP] ✅ SBP transfer initiated successfully');
 
-      // Take confirmation screenshot
-      await this.takeScreenshot('sbp-transfer-success');
+      // Wait 30 seconds before closing (allows SMS confirmation to complete)
+      console.log('[TBANK→SBP] ⏳ Waiting 30 seconds before closing browser...');
+      await new Promise(resolve => setTimeout(resolve, 30000));
+
+      // Log full page HTML for debugging
+      console.log('[TBANK→SBP] 📄 Logging final page HTML for debugging...');
+      try {
+        const finalHtml = await this.page.content();
+        console.log('[TBANK→SBP] === PAGE HTML START ===');
+        console.log(finalHtml);
+        console.log('[TBANK→SBP] === PAGE HTML END ===');
+        console.log(`[TBANK→SBP] HTML length: ${finalHtml.length} characters`);
+      } catch (e) {
+        console.log(`[TBANK→SBP] ⚠️ Could not capture page HTML: ${e.message}`);
+      }
+
+      // Take final confirmation screenshot
+      await this.takeScreenshot('sbp-transfer-final');
 
       return {
         success: true,
