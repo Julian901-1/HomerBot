@@ -534,7 +534,7 @@ export class AlfaAutomation {
 
       console.log('[ALFA→SAVING] Этап 3/8: Выбор счёта списания "Расчётный счёт ··7167"');
       const accountSelector = 'div[data-test-id="src-account-option"]';
-      await this.page.waitForSelector(accountSelector, { timeout: 15000 });
+      await this.page.waitForSelector(accountSelector, { timeout: 60000 });
       await this.page.evaluate(() => {
         const options = Array.from(document.querySelectorAll('div[data-test-id="src-account-option"]'));
         const targetOption = options.find(opt => opt.textContent.includes('··7167'));
