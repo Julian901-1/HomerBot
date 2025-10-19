@@ -1862,7 +1862,7 @@ export class TBankAutomation {
 
           // Pattern 2: data-qa-type containing "otp" or "code"
           input = document.querySelector('[data-qa-type*="otp"], [data-qa-type*="code"]');
-          if (input) return input.getAttribute('data-qa-type');
+          if (input) return `[data-qa-type="${input.getAttribute('data-qa-type')}"]`;
 
           // Pattern 3: input with type="tel" or type="text" in visible modal/dialog
           const inputs = Array.from(document.querySelectorAll('input[type="tel"], input[type="text"]'));

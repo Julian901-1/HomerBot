@@ -808,8 +808,7 @@ app.post('/api/evening-transfer', async (req, res) => {
     }
     console.log(`[API] ✅ T-Bank login successful`);
 
-    // Stop SMS queue checker after successful login
-    clearInterval(smsQueueChecker);
+    // Keep SMS queue checker running - might need it for transfer confirmation
 
     // STEP 2: Transfer from T-Bank to Alfa via SBP
     // Amount will be parsed from the page during transfer (step 5)
@@ -821,6 +820,9 @@ app.post('/api/evening-transfer', async (req, res) => {
 
     const transferredAmount = transferResult.amount;
     console.log(`[API] ✅ T-Bank -> Alfa SBP transfer successful: ${transferredAmount} RUB`);
+
+    // Stop T-Bank SMS queue checker
+    clearInterval(smsQueueChecker);
 
     // Close T-Bank browser
     await tbankAutomation.close();
