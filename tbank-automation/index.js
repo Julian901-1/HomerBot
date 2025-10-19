@@ -1071,14 +1071,33 @@ app.post('/api/morning-transfer', async (req, res) => {
     }
     console.log(`[API] ✅ Alfa-Bank login successful`);
 
-    // STEP 2: Transfer from Alfa saving to T-Bank via SBP
-    const transferAmount = amount || null; // If amount not provided, transferToTBankSBP will use full balance
-    console.log(`[API] Step 3: Transferring ${transferAmount || 'full balance'} from Alfa saving to T-Bank...`);
+    // STEP 2: Transfer from Alfa saving to Alfa debit account
+    const transferAmount = amount ?? null; // null => transfer full balance
+    const amountLabel = transferAmount != null ? `${transferAmount}` : 'full balance';
+    const alfaDebitAccountName = 'Текущий счёт ··7167';
+
+    console.log(`[API] Step 3: Moving ${amountLabel} from Alfa saving to debit account "${alfaDebitAccountName}"...`);
+    const alfaWithdrawResult = await alfaAutomation.transferFromAlfaSaving(
+      alfaSavingAccountId,
+      alfaDebitAccountName,
+      transferAmount
+    );
+
+    if (!alfaWithdrawResult.success) {
+      throw new Error(`Alfa saving -> debit transfer failed: ${alfaWithdrawResult.error}`);
+    }
+    console.log('[API] ✅ Alfa saving -> debit transfer successful');
+
+    const sbpAmount = transferAmount != null ? transferAmount : null;
+    const sbpAmountLabel = sbpAmount != null ? `${sbpAmount}` : 'full balance';
+
+    // STEP 3: Transfer from Alfa debit to T-Bank via SBP
+    console.log(`[API] Step 4: Transferring ${sbpAmountLabel} from Alfa debit to T-Bank via SBP...`);
 
     const transferResult = await alfaAutomation.transferToTBankSBP(
       alfaSavingAccountId,
       FIXED_TBANK_PHONE,
-      transferAmount
+      sbpAmount
     );
 
     if (!transferResult.success) {

@@ -720,7 +720,8 @@ export class AlfaAutomation {
    */
   async transferFromAlfaSaving(savingAccountId, toAccountName, amount) {
     try {
-      console.log(`[SAVING→ALFA] Начало перевода ${amount}₽ с накопительного счёта`);
+      const amountLabel = amount != null ? `${amount}₽` : 'полного баланса';
+      console.log(`[SAVING→ALFA] Начало перевода ${amountLabel} с накопительного счёта`);
 
       if (!this.authenticated) {
         throw new Error('Не авторизован в Альфа-Банке');
