@@ -756,14 +756,10 @@ app.post('/api/evening-transfer', async (req, res) => {
 
     console.log(`[API] Manual evening transfer requested for ${username}`);
 
-    // Hash username for consistency
-    const crypto = await import('crypto');
-    const hashedUsername = crypto.createHash('sha256').update(username).digest('hex');
-
     // Find authenticated session for this user
     let targetSessionId = null;
     for (const [sessionId, session] of sessionManager.sessions.entries()) {
-      if (session.username === hashedUsername && session.authenticated) {
+      if (session.username === username && session.authenticated) {
         targetSessionId = sessionId;
         break;
       }
@@ -777,6 +773,50 @@ app.post('/api/evening-transfer', async (req, res) => {
     }
 
     const session = sessionManager.getSession(targetSessionId);
+
+    // Fetch user schedule and Alfa credentials from Google Sheets
+    const scheduleResp = await sessionManager.fetchUserSchedule(username);
+
+    if (!scheduleResp || !scheduleResp.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Failed to fetch user schedule from Google Sheets'
+      });
+    }
+
+    const {
+      eveningTransferTime,
+      morningTransferTime,
+      alfaPhone,
+      alfaCardNumber,
+      alfaSavingAccountId,
+      alfaSavingAccountName,
+      userTimezone
+    } = scheduleResp;
+
+    // Update session metadata
+    sessionManager.updateSessionMetadata(targetSessionId, {
+      eveningTransferTime,
+      morningTransferTime,
+      alfaPhone,
+      alfaCardNumber,
+      alfaSavingAccountId,
+      alfaSavingAccountName,
+      userTimezone
+    });
+
+    // Create Alfa automation instance if not exists
+    if (!session.alfaAutomation) {
+      console.log('[API] Creating Alfa-Bank automation instance...');
+      const alfaAutomation = new AlfaAutomation({
+        username,
+        phone: alfaPhone,
+        cardNumber: alfaCardNumber,
+        encryptionService: null // Not using encryption for manual transfers
+      });
+
+      session.alfaAutomation = alfaAutomation;
+    }
 
     // Execute evening transfer
     await sessionManager.executeEveningTransfer(session);
@@ -813,14 +853,10 @@ app.post('/api/morning-transfer', async (req, res) => {
 
     console.log(`[API] Manual morning transfer requested for ${username}`);
 
-    // Hash username for consistency
-    const crypto = await import('crypto');
-    const hashedUsername = crypto.createHash('sha256').update(username).digest('hex');
-
     // Find authenticated session for this user
     let targetSessionId = null;
     for (const [sessionId, session] of sessionManager.sessions.entries()) {
-      if (session.username === hashedUsername && session.authenticated) {
+      if (session.username === username && session.authenticated) {
         targetSessionId = sessionId;
         break;
       }
@@ -834,6 +870,50 @@ app.post('/api/morning-transfer', async (req, res) => {
     }
 
     const session = sessionManager.getSession(targetSessionId);
+
+    // Fetch user schedule and Alfa credentials from Google Sheets
+    const scheduleResp = await sessionManager.fetchUserSchedule(username);
+
+    if (!scheduleResp || !scheduleResp.success) {
+      return res.status(400).json({
+        success: false,
+        error: 'Failed to fetch user schedule from Google Sheets'
+      });
+    }
+
+    const {
+      eveningTransferTime,
+      morningTransferTime,
+      alfaPhone,
+      alfaCardNumber,
+      alfaSavingAccountId,
+      alfaSavingAccountName,
+      userTimezone
+    } = scheduleResp;
+
+    // Update session metadata
+    sessionManager.updateSessionMetadata(targetSessionId, {
+      eveningTransferTime,
+      morningTransferTime,
+      alfaPhone,
+      alfaCardNumber,
+      alfaSavingAccountId,
+      alfaSavingAccountName,
+      userTimezone
+    });
+
+    // Create Alfa automation instance if not exists
+    if (!session.alfaAutomation) {
+      console.log('[API] Creating Alfa-Bank automation instance...');
+      const alfaAutomation = new AlfaAutomation({
+        username,
+        phone: alfaPhone,
+        cardNumber: alfaCardNumber,
+        encryptionService: null // Not using encryption for manual transfers
+      });
+
+      session.alfaAutomation = alfaAutomation;
+    }
 
     // Execute morning transfer
     await sessionManager.executeMorningTransfer(session);
