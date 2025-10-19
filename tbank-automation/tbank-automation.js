@@ -1824,64 +1824,97 @@ export class TBankAutomation {
       }
 
       await submitButton.click();
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      console.log('[TBANK→SBP] ⏳ Ожидание обработки перевода и проверка СМС-подтверждения...');
 
-      // Check if SMS confirmation is required
-      console.log('[TBANK→SBP] Проверка необходимости СМС-подтверждения...');
-      const smsConfirmationText = await this.page.evaluate(() => {
-        const body = document.body.textContent || '';
-        return body.includes('Мы отправили СМС с кодом на');
-      });
+      // Poll for SMS confirmation modal for up to 35 seconds
+      let smsModalFound = false;
+      let otpInputSelector = null;
+      const maxWaitTime = 35000; // 35 seconds
+      const checkInterval = 2000; // Check every 2 seconds
+      const startTime = Date.now();
 
-      if (smsConfirmationText) {
-        console.log('[TBANK→SBP] ⚠️ Требуется СМС-подтверждение перевода');
+      while (Date.now() - startTime < maxWaitTime && !smsModalFound) {
+        await new Promise(resolve => setTimeout(resolve, checkInterval));
 
-        // Try to find OTP input field using common patterns
-        const otpInputSelector = await this.page.evaluate(() => {
+        // Check if SMS confirmation text or input field appeared
+        const checkResult = await this.page.evaluate(() => {
+          // Check for confirmation text
+          const body = document.body.textContent || '';
+          const hasConfirmationText = body.includes('Мы отправили СМС с кодом на');
+
+          // Try to find OTP input field using common patterns
+          let inputSelector = null;
+
           // Pattern 1: automation-id="otp-input"
           let input = document.querySelector('[automation-id="otp-input"]');
-          if (input) return '[automation-id="otp-input"]';
-
-          // Pattern 2: data-qa-type containing "otp" or "code"
-          input = document.querySelector('[data-qa-type*="otp"], [data-qa-type*="code"]');
-          if (input) return `[data-qa-type="${input.getAttribute('data-qa-type')}"]`;
-
-          // Pattern 3: input with type="tel" or type="text" in visible modal/dialog
-          const inputs = Array.from(document.querySelectorAll('input[type="tel"], input[type="text"]'));
-          const visibleInput = inputs.find(inp => {
-            const rect = inp.getBoundingClientRect();
-            return rect.width > 0 && rect.height > 0;
-          });
-          if (visibleInput) {
-            if (visibleInput.id) return `#${visibleInput.id}`;
-            if (visibleInput.className) return `input.${visibleInput.classList[0]}`;
+          if (input) {
+            inputSelector = '[automation-id="otp-input"]';
           }
 
-          return null;
+          // Pattern 2: data-qa-type containing "otp" or "code"
+          if (!inputSelector) {
+            input = document.querySelector('[data-qa-type*="otp"], [data-qa-type*="code"]');
+            if (input) {
+              inputSelector = `[data-qa-type="${input.getAttribute('data-qa-type')}"]`;
+            }
+          }
+
+          // Pattern 3: input with type="tel" or type="text" in visible modal/dialog
+          if (!inputSelector) {
+            const inputs = Array.from(document.querySelectorAll('input[type="tel"], input[type="text"]'));
+            const visibleInput = inputs.find(inp => {
+              const rect = inp.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0;
+            });
+            if (visibleInput) {
+              if (visibleInput.id) inputSelector = `#${visibleInput.id}`;
+              else if (visibleInput.className) inputSelector = `input.${visibleInput.classList[0]}`;
+            }
+          }
+
+          return {
+            hasConfirmationText,
+            inputSelector
+          };
         });
 
-        if (!otpInputSelector) {
-          console.log('[TBANK→SBP] ⚠️ Не найдено поле для ввода СМС-кода, но текст подтверждения присутствует');
-        } else {
-          console.log(`[TBANK→SBP] Найдено поле ввода СМС: ${otpInputSelector}`);
-          console.log('[TBANK→SBP] Ожидание СМС-кода для подтверждения перевода...');
+        if (checkResult.hasConfirmationText || checkResult.inputSelector) {
+          smsModalFound = true;
+          otpInputSelector = checkResult.inputSelector;
+          console.log('[TBANK→SBP] ⚠️ Обнаружено СМС-подтверждение перевода');
 
-          const smsCode = await this.waitForUserInput('sms');
-          console.log('[TBANK→SBP] Получен СМС-код, вводим...');
+          if (otpInputSelector) {
+            console.log(`[TBANK→SBP] Найдено поле ввода СМС: ${otpInputSelector}`);
+            console.log('[TBANK→SBP] Ожидание СМС-кода для подтверждения перевода...');
 
-          await this.typeWithHumanDelay(otpInputSelector, smsCode);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          console.log('[TBANK→SBP] ✅ СМС-код введён');
+            const smsCode = await this.waitForUserInput('sms');
+            console.log('[TBANK→SBP] Получен СМС-код, вводим...');
+
+            await this.typeWithHumanDelay(otpInputSelector, smsCode);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.log('[TBANK→SBP] ✅ СМС-код введён');
+          } else {
+            console.log('[TBANK→SBP] ⚠️ Текст подтверждения найден, но поле ввода не обнаружено');
+          }
+          break;
         }
-      } else {
-        console.log('[TBANK→SBP] СМС-подтверждение не требуется');
+
+        const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+        console.log(`[TBANK→SBP] Проверка ${elapsedSeconds}с: СМС-модаль не найдена, продолжаем ожидание...`);
+      }
+
+      if (!smsModalFound) {
+        console.log('[TBANK→SBP] СМС-подтверждение не потребовалось (35 секунд проверки)');
       }
 
       console.log('[TBANK→SBP] ✅ SBP transfer initiated successfully');
 
-      // Wait 30 seconds before closing (allows SMS confirmation to complete)
-      console.log('[TBANK→SBP] ⏳ Waiting 30 seconds before closing browser...');
-      await new Promise(resolve => setTimeout(resolve, 30000));
+      // Additional wait to ensure completion
+      const remainingWait = Math.max(0, 35000 - (Date.now() - startTime));
+      if (remainingWait > 0) {
+        console.log(`[TBANK→SBP] ⏳ Дополнительное ожидание ${Math.floor(remainingWait / 1000)}с перед закрытием браузера...`);
+        await new Promise(resolve => setTimeout(resolve, remainingWait));
+      }
 
       // Log full page HTML for debugging
       console.log('[TBANK→SBP] 📄 Logging final page HTML for debugging...');
