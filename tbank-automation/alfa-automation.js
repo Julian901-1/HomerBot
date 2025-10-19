@@ -746,6 +746,7 @@ export class AlfaAutomation {
       await this.page.goto(transferUrl, { waitUntil: 'domcontentloaded' });
       await waitBetweenSteps();
 
+      console.log('[SAVING→ALFA] Открытие поля "Куда"...');
       console.log(`[SAVING→ALFA] Этап 3/7: Выбор счёта назначения "${toAccountName}"`);
       const destOptionSelector = 'div[data-test-id="dest-account-option"]';
       const destListSelector = 'div[data-test-id="dest-account-options-list"]';

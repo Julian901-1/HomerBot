@@ -1095,6 +1095,11 @@ app.post('/api/morning-transfer', async (req, res) => {
     await alfaAutomation.close();
     alfaAutomation = null;
 
+    if (global.gc) {
+      console.log('[API] 🌅 Running garbage collection after morning transfer...');
+      global.gc();
+    }
+
     console.log(`[API] 🎉 Morning transfer completed successfully!`);
 
     res.json({
@@ -1118,6 +1123,7 @@ app.post('/api/morning-transfer', async (req, res) => {
       } catch (e) {
         console.error('[API] Error closing Alfa browser:', e);
       }
+      alfaAutomation = null;
     }
 
     res.status(500).json({
