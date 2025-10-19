@@ -274,34 +274,101 @@ export class AlfaAutomation {
         throw new Error('Не удалось подтвердить успешную авторизацию: ни дашборд, ни диалог доверия не появились в течение 30 секунд');
       }
 
-      console.log('[ALFA-LOGIN] Этап 9/9: Проверка диалога "Доверять устройству?"');
+      console.log('[ALFA-LOGIN] Этап 9/9: Проверка диалога "Доверять устройству?" (ожидание до 40 секунд)');
 
-      if (trustPromptVisible) {
-        console.log('[ALFA-LOGIN] Найден диалог "Доверять этому устройству?", нажимаем "Не доверять"');
+      // Wait up to 40 seconds for trust dialog to appear (even if dashboard already reached)
+      const trustDialogTimeout = 40000;
+      const trustDialogCheckInterval = 1000;
+      const trustDialogCheckStart = Date.now();
+      let trustDialogFound = false;
 
-        const trustCancelButton = await this.page.waitForSelector('button[data-test-id="trust-device-page-cancel-btn"]', {
-          timeout: 5000
-        }).catch(() => null);
-
-        if (trustCancelButton) {
-          await trustCancelButton.click();
-          await this.randomDelay(1000, 2000);
-        } else {
-          console.log('[ALFA-LOGIN] ⚠️ Кнопка "Не доверять" не найдена, продолжаем без клика');
-        }
-
+      while (Date.now() - trustDialogCheckStart < trustDialogTimeout) {
+        let hasTrustPrompt = false;
         try {
-          await this.page.waitForFunction(
-            () => window.location.href.includes('web.alfabank.ru/dashboard'),
-            { timeout: 20000 }
-          );
-          dashboardReached = true;
-        } catch (navError) {
-          console.log(`[ALFA-LOGIN] ⚠️ Не удалось дождаться перехода на дашборд после отказа в доверии: ${navError.message}`);
+          hasTrustPrompt = await this.page.evaluate(() => {
+            const targetText = 'Доверять этому устройству?';
+            if (!document.body) {
+              return false;
+            }
+
+            const elements = Array.from(document.querySelectorAll('body *'));
+            return elements.some(element => {
+              if (!element.textContent) {
+                return false;
+              }
+
+              const normalizedText = element.textContent
+                .replace(/\u00A0/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+              if (!normalizedText.includes(targetText)) {
+                return false;
+              }
+
+              const style = window.getComputedStyle(element);
+              if (!style) {
+                return false;
+              }
+
+              if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+                return false;
+              }
+
+              const rect = element.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0;
+            });
+          });
+        } catch (evaluateError) {
+          const errorMessage = evaluateError?.message || '';
+          if (
+            errorMessage.includes('Execution context was destroyed') ||
+            errorMessage.includes('Cannot find context') ||
+            errorMessage.includes('Target closed')
+          ) {
+            await new Promise(resolve => setTimeout(resolve, 250));
+            continue;
+          }
+          // If evaluation error is not context-related, just continue checking
+          await new Promise(resolve => setTimeout(resolve, trustDialogCheckInterval));
+          continue;
         }
-      } else {
-        console.log('[ALFA-LOGIN] Диалог доверия не появился, продолжаем');
-        await this.randomDelay(500, 1000);
+
+        if (hasTrustPrompt) {
+          trustDialogFound = true;
+          console.log('[ALFA-LOGIN] Найден диалог "Доверять этому устройству?", нажимаем "Не доверять"');
+
+          const trustCancelButton = await this.page.waitForSelector('button[data-test-id="trust-device-page-cancel-btn"]', {
+            timeout: 5000
+          }).catch(() => null);
+
+          if (trustCancelButton) {
+            await trustCancelButton.click();
+            await this.randomDelay(1000, 2000);
+            console.log('[ALFA-LOGIN] ✅ Кнопка "Не доверять" успешно нажата');
+          } else {
+            console.log('[ALFA-LOGIN] ⚠️ Кнопка "Не доверять" не найдена, продолжаем без клика');
+          }
+
+          // Wait for navigation to dashboard after clicking
+          try {
+            await this.page.waitForFunction(
+              () => window.location.href.includes('web.alfabank.ru/dashboard'),
+              { timeout: 20000 }
+            );
+            dashboardReached = true;
+          } catch (navError) {
+            console.log(`[ALFA-LOGIN] ⚠️ Не удалось дождаться перехода на дашборд после отказа в доверии: ${navError.message}`);
+          }
+
+          break; // Exit loop after handling trust dialog
+        }
+
+        await new Promise(resolve => setTimeout(resolve, trustDialogCheckInterval));
+      }
+
+      if (!trustDialogFound) {
+        console.log('[ALFA-LOGIN] Диалог доверия не появился в течение 40 секунд, продолжаем');
       }
 
       if (!dashboardReached) {
@@ -595,21 +662,9 @@ export class AlfaAutomation {
         await this.sleep(15000);
       };
 
-      console.log('[ALFA→SAVING] Этап 1/6: Переход в дашборд');
-
-      const dashboardStatus = await this.ensureDashboardReady('[ALFA→SAVING]');
-      if (!dashboardStatus.ready) {
-        const details = dashboardStatus.missing.length
-          ? `Отсутствуют элементы: ${dashboardStatus.missing.join(', ')}`
-          : 'Неизвестное состояние дашборда';
-        throw new Error(`Не удалось убедиться, что открыта главная страница. ${details}`);
-      }
-
       console.log(`[ALFA→SAVING] Источник средств: счёт ${savingAccountId}`);
 
-      await waitBetweenSteps();
-
-      console.log('[ALFA→SAVING] Этап 2/6: Переход на страницу перевода между счетами');
+      console.log('[ALFA→SAVING] Этап 1/5: Переход на страницу перевода между счетами');
       const requiredSavingAccountId = '40817810506220141175';
       if (savingAccountId && savingAccountId !== requiredSavingAccountId) {
         console.log(`[ALFA→SAVING] ⚠️ Используем предписанный счёт ${requiredSavingAccountId} вместо переданного ${savingAccountId}`);
@@ -618,7 +673,7 @@ export class AlfaAutomation {
       await this.page.goto(transferUrl, { waitUntil: 'domcontentloaded' });
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 3/6: Выбор счёта списания "Расчётный счёт ··7167"');
+      console.log('[ALFA→SAVING] Этап 2/5: Выбор счёта списания "Расчётный счёт ··7167"');
       const accountOptionSelector = 'div[data-test-id="src-account-option"]';
       const optionsListSelector = 'div[data-test-id="src-account-options-list"]';
 
@@ -683,7 +738,7 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 4/6: Нажатие "Всё"');
+      console.log('[ALFA→SAVING] Этап 3/5: Нажатие "Всё"');
       await this.page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const allButton = buttons.find(btn => btn.textContent.includes('Всё'));
@@ -692,13 +747,13 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 5/6: Нажатие "Перевести"');
+      console.log('[ALFA→SAVING] Этап 4/5: Нажатие "Перевести"');
       await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
       await this.page.click('button[data-test-id="payment-button"]');
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 6/6: Проверка успешности перевода');
+      console.log('[ALFA→SAVING] Этап 5/5: Проверка успешности перевода');
       await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] ✅ Перевод успешно завершён');
@@ -734,24 +789,13 @@ export class AlfaAutomation {
         await this.sleep(15000);
       };
 
-      console.log('[SAVING→ALFA] Этап 1/7: Переход в дашборд');
-      const dashboardStatus = await this.ensureDashboardReady('[SAVING→ALFA]');
-      if (!dashboardStatus.ready) {
-        const details = dashboardStatus.missing.length
-          ? `Отсутствуют элементы: ${dashboardStatus.missing.join(', ')}`
-          : 'Неизвестное состояние дашборда';
-        throw new Error(`Не удалось убедиться, что открыта главная страница. ${details}`);
-      }
-
-      await waitBetweenSteps();
-
-      console.log('[SAVING→ALFA] Этап 2/7: Переход на страницу перевода между своими счетами');
+      console.log('[SAVING→ALFA] Этап 1/6: Переход на страницу перевода между своими счетами');
       const transferUrl = `https://web.alfabank.ru/transfers/account-to-account?sourceAccount=${savingAccountId}`;
       await this.page.goto(transferUrl, { waitUntil: 'domcontentloaded' });
       await waitBetweenSteps();
 
       console.log('[SAVING→ALFA] Открытие поля "Куда"...');
-      console.log(`[SAVING→ALFA] Этап 3/7: Выбор счёта назначения "${toAccountName}"`);
+      console.log(`[SAVING→ALFA] Этап 2/6: Выбор счёта назначения "${toAccountName}"`);
       const destOptionSelector = 'div[data-test-id="dest-account-option"]';
       const destListSelector = 'div[data-test-id="dest-account-options-list"]';
 
@@ -840,7 +884,7 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[SAVING→ALFA] Этап 4/7: Нажатие "Всё"');
+      console.log('[SAVING→ALFA] Этап 3/6: Нажатие "Всё"');
       const allClicked = await this.page.evaluate(() => {
         const buttons = Array.from(document.querySelectorAll('button'));
         const allButton = buttons.find(btn => btn.textContent.includes('Всё'));
@@ -857,18 +901,18 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[SAVING→ALFA] Этап 5/7: Нажатие "Перевести"');
+      console.log('[SAVING→ALFA] Этап 4/6: Нажатие "Перевести"');
       await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
       await this.page.click('button[data-test-id="payment-button"]');
 
       await waitBetweenSteps();
 
-      console.log('[SAVING→ALFA] Этап 6/7: Нажатие "Готово"');
+      console.log('[SAVING→ALFA] Этап 5/6: Нажатие "Готово"');
       await this.page.waitForSelector('button[data-test-id="ready-button"]', { timeout: 15000 });
       await this.page.click('button[data-test-id="ready-button"]');
       await this.sleep(10000);
 
-      console.log('[SAVING→ALFA] Этап 7/7: Проверка успешности перевода');
+      console.log('[SAVING→ALFA] Этап 6/6: Проверка успешности перевода');
       console.log('[SAVING→ALFA] ✅ Перевод успешно завершён');
 
       await this.takeScreenshot('saving-to-alfa-success');
@@ -903,24 +947,13 @@ export class AlfaAutomation {
         await this.sleep(15000);
       };
 
-      console.log('[ALFA→TBANK] Этап 1/12: Переход в дашборд');
-      const dashboardStatus = await this.ensureDashboardReady('[ALFA→TBANK]');
-      if (!dashboardStatus.ready) {
-        const details = dashboardStatus.missing.length
-          ? `Отсутствуют элементы: ${dashboardStatus.missing.join(', ')}`
-          : 'Неизвестное состояние дашборда';
-        throw new Error(`Не удалось убедиться, что открыта главная страница. ${details}`);
-      }
-
-      await waitBetweenSteps();
-
-      console.log('[ALFA→TBANK] Этап 2/12: Переход на страницу перевода по номеру телефона');
+      console.log('[ALFA→TBANK] Этап 1/11: Переход на страницу перевода по номеру телефона');
       await this.page.goto('https://web.alfabank.ru/transfers/phone', {
         waitUntil: 'domcontentloaded'
       });
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 3/12: Ввод номера телефона получателя');
+      console.log('[ALFA→TBANK] Этап 2/11: Ввод номера телефона получателя');
       await this.page.waitForSelector('input[data-test-id="phone-intl-input"]', { timeout: 15000 });
       const trimmedPhone = typeof recipientPhone === 'string' ? recipientPhone.trim() : '';
       const normalizedPhone = trimmedPhone
@@ -940,7 +973,7 @@ export class AlfaAutomation {
       }, normalizedPhone);
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 4/12: Выбор шаблона "Себе в другой банк"');
+      console.log('[ALFA→TBANK] Этап 3/11: Выбор шаблона "Себе в другой банк"');
       await this.page.waitForSelector('button[data-test-id="phone-list-item"]', { timeout: 15000 });
       const selfTransferClicked = await this.page.evaluate(() => {
         const items = Array.from(document.querySelectorAll('button[data-test-id="phone-list-item"]'));
@@ -962,7 +995,7 @@ export class AlfaAutomation {
       await this.page.waitForSelector('div[data-test-id="recipient-select-option"]', { timeout: 30000 });
       await this.sleep(2000); // Additional 2s to ensure all options are rendered
 
-      console.log('[ALFA→TBANK] Этап 5/12: Выбор банка "Т-Банк"');
+      console.log('[ALFA→TBANK] Этап 4/11: Выбор банка "Т-Банк"');
       const tbankClicked = await this.page.evaluate(() => {
         // Find the option that contains "Т-Банк" text
         const options = Array.from(document.querySelectorAll('div[data-test-id="recipient-select-option"]'));
@@ -986,7 +1019,7 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 6/12: Получение доступного баланса');
+      console.log('[ALFA→TBANK] Этап 5/11: Получение доступного баланса');
       const accountBalance = await this.page.evaluate(() => {
         const amountElement = document.querySelector('span[data-test-id="amount"]');
         return amountElement ? amountElement.textContent : '0';
@@ -1002,7 +1035,7 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 7/12: Ввод суммы');
+      console.log('[ALFA→TBANK] Этап 6/11: Ввод суммы');
       await this.page.waitForSelector('input[name="amount"]', { timeout: 15000 });
       const amountInputValue = transferAmount.toFixed(2).replace('.', ',');
       await this.page.evaluate(value => {
@@ -1019,24 +1052,24 @@ export class AlfaAutomation {
       }, amountInputValue);
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 8/12: Нажатие "Продолжить"');
+      console.log('[ALFA→TBANK] Этап 7/11: Нажатие "Продолжить"');
       await this.page.waitForSelector('button[type="submit"]', { timeout: 15000 });
       await this.page.click('button[type="submit"]');
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 9/12: Нажатие "Перевести"');
+      console.log('[ALFA→TBANK] Этап 8/11: Нажатие "Перевести"');
       await this.page.waitForSelector('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]', { timeout: 15000 });
       await this.page.click('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]');
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 10/12: Ожидание SMS-кода для подтверждения');
+      console.log('[ALFA→TBANK] Этап 9/11: Ожидание SMS-кода для подтверждения');
       this.pendingInputType = 'alfa_sms';
       this.pendingInputData = {
         message: 'Ожидание SMS-кода для подтверждения перевода'
       };
       await this.waitForAlfaSMSCode(120000);
 
-      console.log('[ALFA→TBANK] Этап 11/12: Ввод SMS-кода');
+      console.log('[ALFA→TBANK] Этап 10/11: Ввод SMS-кода');
       await this.page.waitForSelector('input.KRyR4.uokLS', { timeout: 15000 });
       const codeInputs = await this.page.$$('input.KRyR4.uokLS');
       for (let i = 0; i < 4 && i < this.alfaSmsCode.length; i++) {
@@ -1048,7 +1081,7 @@ export class AlfaAutomation {
 
       await this.sleep(3000);
 
-      console.log('[ALFA→TBANK] Этап 12/12: Проверка успешности перевода');
+      console.log('[ALFA→TBANK] Этап 11/11: Проверка успешности перевода');
       this.pendingInputType = null;
       this.pendingInputData = null;
 
