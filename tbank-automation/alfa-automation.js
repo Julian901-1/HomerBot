@@ -201,40 +201,54 @@ export class AlfaAutomation {
       let trustPromptVisible = false;
 
       while (Date.now() - postLoginStart < postLoginTimeout) {
-        const hasTrustPrompt = await this.page.evaluate(() => {
-          const targetText = 'Доверять этому устройству?';
-          if (!document.body) {
-            return false;
-          }
-
-          const elements = Array.from(document.querySelectorAll('body *'));
-          return elements.some(element => {
-            if (!element.textContent) {
+        let hasTrustPrompt = false;
+        try {
+          hasTrustPrompt = await this.page.evaluate(() => {
+            const targetText = 'Доверять этому устройству?';
+            if (!document.body) {
               return false;
             }
 
-            const normalizedText = element.textContent
-              .replace(/\u00A0/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim();
+            const elements = Array.from(document.querySelectorAll('body *'));
+            return elements.some(element => {
+              if (!element.textContent) {
+                return false;
+              }
 
-            if (!normalizedText.includes(targetText)) {
-              return false;
-            }
+              const normalizedText = element.textContent
+                .replace(/\u00A0/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
 
-            const style = window.getComputedStyle(element);
-            if (!style) {
-              return false;
-            }
+              if (!normalizedText.includes(targetText)) {
+                return false;
+              }
 
-            if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
-              return false;
-            }
+              const style = window.getComputedStyle(element);
+              if (!style) {
+                return false;
+              }
 
-            const rect = element.getBoundingClientRect();
-            return rect.width > 0 && rect.height > 0;
+              if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+                return false;
+              }
+
+              const rect = element.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0;
+            });
           });
-        });
+        } catch (evaluateError) {
+          const errorMessage = evaluateError?.message || '';
+          if (
+            errorMessage.includes('Execution context was destroyed') ||
+            errorMessage.includes('Cannot find context') ||
+            errorMessage.includes('Target closed')
+          ) {
+            await new Promise(resolve => setTimeout(resolve, 250));
+            continue;
+          }
+          throw evaluateError;
+        }
 
         if (hasTrustPrompt) {
           trustPromptVisible = true;
