@@ -1828,7 +1828,6 @@ export class TBankAutomation {
 
       // Poll for SMS confirmation modal for up to 35 seconds
       let smsModalFound = false;
-      let otpInputSelector = null;
       const maxWaitTime = 35000; // 35 seconds
       const checkInterval = 2000; // Check every 2 seconds
       const startTime = Date.now();
@@ -1880,22 +1879,20 @@ export class TBankAutomation {
 
         if (checkResult.hasConfirmationText || checkResult.inputSelector) {
           smsModalFound = true;
-          otpInputSelector = checkResult.inputSelector;
           console.log('[TBANK→SBP] ⚠️ Обнаружено СМС-подтверждение перевода');
+          console.log('[TBANK→SBP] Ожидание СМС-кода для подтверждения перевода...');
 
-          if (otpInputSelector) {
-            console.log(`[TBANK→SBP] Найдено поле ввода СМС: ${otpInputSelector}`);
-            console.log('[TBANK→SBP] Ожидание СМС-кода для подтверждения перевода...');
+          const smsCode = await this.waitForUserInput('sms');
+          console.log(`[TBANK→SBP] Получен СМС-код: ${smsCode}, вводим через клавиатуру...`);
 
-            const smsCode = await this.waitForUserInput('sms');
-            console.log('[TBANK→SBP] Получен СМС-код, вводим...');
-
-            await this.typeWithHumanDelay(otpInputSelector, smsCode);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            console.log('[TBANK→SBP] ✅ СМС-код введён');
-          } else {
-            console.log('[TBANK→SBP] ⚠️ Текст подтверждения найден, но поле ввода не обнаружено');
+          // Type each digit using keyboard events (no need to find input selector)
+          for (const digit of smsCode) {
+            await this.page.keyboard.type(digit);
+            await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 100));
           }
+
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          console.log('[TBANK→SBP] ✅ СМС-код введён');
           break;
         }
 
