@@ -1739,13 +1739,39 @@ export class TBankAutomation {
       }
 
       // Parse balance: "13 774,62 ₽" -> 13774.62
-      const balanceMatch = accountBalance.match(/[\d\s]+,\d+/);
+      const normalizedBalance = accountBalance
+        .replace(/\u00A0/g, ' ')
+        .replace(/[^\d.,\s]/g, '')
+        .trim();
+
+      const balanceMatch = normalizedBalance.match(/[\d\s.,]+/);
       if (!balanceMatch) {
         throw new Error(`Could not parse balance: ${accountBalance}`);
       }
 
-      const balanceStr = balanceMatch[0].replace(/\s/g, '').replace(',', '.');
+      const balanceCandidate = balanceMatch[0].replace(/\s/g, '');
+      const lastComma = balanceCandidate.lastIndexOf(',');
+      const lastDot = balanceCandidate.lastIndexOf('.');
+      let decimalSeparator = null;
+
+      if (lastComma !== -1 || lastDot !== -1) {
+        decimalSeparator = lastComma > lastDot ? ',' : '.';
+      }
+
+      let balanceStr;
+      if (decimalSeparator === ',') {
+        balanceStr = balanceCandidate.replace(/\./g, '').replace(',', '.');
+      } else if (decimalSeparator === '.') {
+        balanceStr = balanceCandidate.replace(/,/g, '');
+      } else {
+        balanceStr = balanceCandidate.replace(/[^\d]/g, '');
+      }
+
       amount = parseFloat(balanceStr);
+
+      if (Number.isNaN(amount)) {
+        throw new Error(`Could not parse balance: ${accountBalance}`);
+      }
 
       console.log(`[TBANK→SBP] Баланс счёта: ${accountBalance} -> используем сумму: ${amount} RUB`);
 
