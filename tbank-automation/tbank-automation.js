@@ -1752,7 +1752,20 @@ export class TBankAutomation {
         return null;
       });
 
-      console.log(`[TBANK→SBP] Баланс счёта: ${accountBalance} (используем переданную сумму: ${amount} RUB)`);
+      if (!accountBalance) {
+        throw new Error('Could not find account balance on the page');
+      }
+
+      // Parse balance: "13 774,62 ₽" -> 13774.62
+      const balanceMatch = accountBalance.match(/[\d\s]+,\d+/);
+      if (!balanceMatch) {
+        throw new Error(`Could not parse balance: ${accountBalance}`);
+      }
+
+      const balanceStr = balanceMatch[0].replace(/\s/g, '').replace(',', '.');
+      amount = parseFloat(balanceStr);
+
+      console.log(`[TBANK→SBP] Баланс счёта: ${accountBalance} -> используем сумму: ${amount} RUB`);
 
       // Step 6: Click "Альфа-Банк" button
       console.log('[TBANK→SBP] Шаг 6/7: Нажатие "Альфа-Банк"...');
