@@ -457,6 +457,8 @@ export class AlfaAutomation {
 
       console.log('[ALFA→SAVING] Этап 1/8: Переход в дашборд');
 
+      let finalDashboardState = null;
+
       const ensureDashboard = async () => {
         try {
           await this.page.waitForFunction(
@@ -474,47 +476,79 @@ export class AlfaAutomation {
         const start = Date.now();
         let trustPromptHandled = false;
 
+        let lastDashboardState = null;
+
         while (Date.now() - start < dashboardTimeout) {
-          const onDashboard = await this.page.evaluate(() => {
-            if (!document.body) return false;
-            const text = document.body.innerText || '';
-            return text.includes('Мои продукты');
+          const dashboardState = await this.page.evaluate(() => {
+            const normalize = text => (text || '').replace(/\s+/g, ' ').trim();
+
+            const hasProductsHeader = Array.from(document.querySelectorAll('h3')).some(
+              header => normalize(header.textContent) === 'Мои продукты'
+            );
+
+            const hasSettingsButton = Boolean(
+              document.querySelector('button[data-test-id="hidden-products-settings-button"]')
+            );
+
+            const hasQuickActionsHeader = Boolean(
+              document.querySelector('h3[data-test-id="quick-actions-header-my-payments"]')
+            );
+
+            const trustButton = document.querySelector('button[data-test-id="trust-device-page-cancel-btn"]');
+            let trustPromptVisible = false;
+
+            if (trustButton) {
+              const style = window.getComputedStyle(trustButton);
+              if (
+                style &&
+                style.display !== 'none' &&
+                style.visibility !== 'hidden' &&
+                Number(style.opacity) !== 0
+              ) {
+                const rect = trustButton.getBoundingClientRect();
+                trustPromptVisible = rect.width > 0 && rect.height > 0;
+              }
+            }
+
+            return {
+              hasProductsHeader,
+              hasSettingsButton,
+              hasQuickActionsHeader,
+              trustPromptVisible
+            };
           });
 
-          if (onDashboard) {
+          lastDashboardState = dashboardState;
+          finalDashboardState = dashboardState;
+
+          if (
+            dashboardState.hasProductsHeader &&
+            dashboardState.hasSettingsButton &&
+            dashboardState.hasQuickActionsHeader
+          ) {
+            console.log('[ALFA→SAVING] Подтверждено наличие всех элементов дашборда');
             return true;
           }
 
-          if (!trustPromptHandled) {
-            const trustPromptVisible = await this.page.evaluate(() => {
-              const button = document.querySelector('button[data-test-id="trust-device-page-cancel-btn"]');
-              if (!button) return false;
-
-              const style = window.getComputedStyle(button);
-              if (!style || style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
-                return false;
-              }
-
-              const rect = button.getBoundingClientRect();
-              return rect.width > 0 && rect.height > 0;
-            });
-
-            if (trustPromptVisible) {
-              console.log('[ALFA→SAVING] Обнаружен диалог "Доверять этому устройству?", нажимаем "Не доверять"');
-              try {
-                await this.page.click('button[data-test-id="trust-device-page-cancel-btn"]');
-                trustPromptHandled = true;
-                await this.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                continue;
-              } catch (trustError) {
-                console.log(`[ALFA→SAVING] ⚠️ Не удалось нажать "Не доверять": ${trustError.message}`);
-                trustPromptHandled = true;
-              }
+          if (!trustPromptHandled && dashboardState.trustPromptVisible) {
+            console.log('[ALFA→SAVING] Обнаружен диалог "Доверять этому устройству?", нажимаем "Не доверять"');
+            try {
+              await this.page.click('button[data-test-id="trust-device-page-cancel-btn"]');
+              trustPromptHandled = true;
+              await this.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              continue;
+            } catch (trustError) {
+              console.log(`[ALFA→SAVING] ⚠️ Не удалось нажать "Не доверять": ${trustError.message}`);
+              trustPromptHandled = true;
             }
           }
 
           await new Promise(resolve => setTimeout(resolve, checkInterval));
+        }
+
+        if (lastDashboardState) {
+          console.log('[ALFA→SAVING] Финальное состояние дашборда:', lastDashboardState);
         }
 
         return false;
@@ -522,7 +556,21 @@ export class AlfaAutomation {
 
       const dashboardReady = await ensureDashboard();
       if (!dashboardReady) {
-        throw new Error('Не удалось убедиться, что открыта главная страница (нет текста "Мои продукты")');
+        if (finalDashboardState) {
+          console.log('[ALFA→SAVING] Финальное состояние проверок дашборда:', finalDashboardState);
+        }
+
+        const missingIndicators = [];
+        if (!finalDashboardState?.hasProductsHeader) missingIndicators.push('заголовок "Мои продукты"');
+        if (!finalDashboardState?.hasSettingsButton) missingIndicators.push('кнопка настройки скрытия продуктов');
+        if (!finalDashboardState?.hasQuickActionsHeader) missingIndicators.push('секция "Мои платежи"');
+        if (finalDashboardState?.trustPromptVisible) missingIndicators.push('диалог "Доверять этому устройству?" остается открыт');
+
+        const details = missingIndicators.length
+          ? `Отсутствуют элементы: ${missingIndicators.join(', ')}`
+          : 'Неизвестное состояние дашборда';
+
+        throw new Error(`Не удалось убедиться, что открыта главная страница. ${details}`);
       }
 
       await waitBetweenSteps();
