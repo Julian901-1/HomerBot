@@ -1767,20 +1767,53 @@ export class TBankAutomation {
 
       console.log(`[TBANK→SBP] Баланс счёта: ${accountBalance} -> используем сумму: ${amount} RUB`);
 
-      // Step 6: Click "Альфа-Банк" button
-      console.log('[TBANK→SBP] Шаг 6/7: Нажатие "Альфа-Банк"...');
-
-      const alfaBankButton = await this.page.evaluateHandle(() => {
-        const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="bank-plate"]'));
-        return buttons.find(btn => btn.textContent.includes('Альфа-Банк'));
+      // Check for "Максимум запросов" error message
+      const hasMaxRequestsError = await this.page.evaluate(() => {
+        const errorDiv = document.querySelector('div[data-qa-type="molecule-desktop-whom-errorMessage"]');
+        return errorDiv && errorDiv.textContent.includes('Максимум запросов в другие банки на сегодня');
       });
 
-      if (!alfaBankButton || alfaBankButton.asElement() === null) {
-        throw new Error('Could not find "Альфа-Банк" button');
-      }
+      if (hasMaxRequestsError) {
+        console.log('[TBANK→SBP] ⚠️ Обнаружено сообщение "Максимум запросов в другие банки на сегодня"');
 
-      await alfaBankButton.asElement().click();
-      await new Promise(resolve => setTimeout(resolve, 2000));
+        // Step 5.1: Click "Другой банк"
+        console.log('[TBANK→SBP] Шаг 5.1: Нажатие "Другой банк"...');
+
+        const otherBankButton = await this.page.$('button[data-qa-type*="bank-plate-other-bank"]');
+        if (!otherBankButton) {
+          throw new Error('Could not find "Другой банк" button');
+        }
+
+        await otherBankButton.click();
+
+        // Step 5.2: Wait 10 seconds and click "Альфа-Банк" in popup
+        console.log('[TBANK→SBP] Шаг 5.2: Ожидание 10 секунд и нажатие "Альфа-Банк" в списке...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+
+        const alfaBankInPopup = await this.page.$('div[data-qa-type="banks-popup-item-title-100000000008"]');
+        if (!alfaBankInPopup) {
+          throw new Error('Could not find "Альфа-Банк" in banks popup');
+        }
+
+        await alfaBankInPopup.click();
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+      } else {
+        // Step 6: Click "Альфа-Банк" button (standard flow)
+        console.log('[TBANK→SBP] Шаг 6/7: Нажатие "Альфа-Банк"...');
+
+        const alfaBankButton = await this.page.evaluateHandle(() => {
+          const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="bank-plate"]'));
+          return buttons.find(btn => btn.textContent.includes('Альфа-Банк'));
+        });
+
+        if (!alfaBankButton || alfaBankButton.asElement() === null) {
+          throw new Error('Could not find "Альфа-Банк" button');
+        }
+
+        await alfaBankButton.asElement().click();
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
 
       // Step 7: Enter amount in the "Сумма" field
       console.log(`[TBANK→SBP] Шаг 7/7: Ввод суммы ${amount}...`);
