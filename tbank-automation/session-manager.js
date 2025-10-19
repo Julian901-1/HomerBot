@@ -190,10 +190,25 @@ export class SessionManager {
    * @returns {string|null} Session ID if found
    */
   findSessionByUsername(username) {
-    // Always return null - allow creating new sessions on top of old ones
-    // No session reuse mechanism
-    console.log(`[SESSION] Not looking for existing session for user ${username} - will create new`);
-    return null;
+    let matchedSessionId = null;
+    let newestCreatedAt = -Infinity;
+
+    for (const [sessionId, session] of this.sessions.entries()) {
+      if (session.username === username) {
+        if (session.createdAt > newestCreatedAt) {
+          newestCreatedAt = session.createdAt;
+          matchedSessionId = sessionId;
+        }
+      }
+    }
+
+    if (matchedSessionId) {
+      console.log(`[SESSION] Located existing session ${matchedSessionId} for user ${username}`);
+    } else {
+      console.log(`[SESSION] No existing session found for user ${username}`);
+    }
+
+    return matchedSessionId;
   }
 
   /**
