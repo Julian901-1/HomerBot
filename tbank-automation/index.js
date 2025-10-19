@@ -744,6 +744,9 @@ app.post('/api/transfer/to-saving', async (req, res) => {
  * Body: { username }
  */
 app.post('/api/evening-transfer', async (req, res) => {
+  let tbankAutomation = null;
+  let alfaAutomation = null;
+
   try {
     const { username } = req.body;
 
@@ -754,95 +757,137 @@ app.post('/api/evening-transfer', async (req, res) => {
       });
     }
 
-    console.log(`[API] Manual evening transfer requested for ${username}`);
+    console.log(`[API] 🌆 Evening transfer requested for ${username}`);
 
-    // Find authenticated session for this user
-    console.log(`[API] Searching for authenticated session among ${sessionManager.sessions.size} sessions...`);
-    let targetSessionId = null;
-    for (const [sessionId, session] of sessionManager.sessions.entries()) {
-      console.log(`[API] Checking session ${sessionId}: username=${session.username}, authenticated=${session.authenticated}`);
-      if (session.username === username && session.authenticated) {
-        targetSessionId = sessionId;
-        break;
-      }
+    // Get fixed credentials from environment
+    const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE;
+    const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE;
+    const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD;
+
+    if (!FIXED_TBANK_PHONE || !FIXED_ALFA_PHONE || !FIXED_ALFA_CARD) {
+      throw new Error('Missing required environment variables: FIXED_TBANK_PHONE, FIXED_ALFA_PHONE, FIXED_ALFA_CARD');
     }
 
-    if (!targetSessionId) {
-      console.log(`[API] ❌ No authenticated session found for user ${username}`);
-      return res.status(404).json({
-        success: false,
-        error: 'No authenticated session found for this user'
-      });
+    // Fetch Alfa credentials from Google Sheets
+    console.log(`[API] Fetching Alfa credentials from Google Sheets...`);
+    const GOOGLE_SHEETS_URL = process.env.GOOGLE_SHEETS_SCRIPT_URL;
+    const alfaUrl = `${GOOGLE_SHEETS_URL}?action=alfaGetCredentials&username=${encodeURIComponent(username)}`;
+    const alfaResp = await fetch(alfaUrl);
+    const alfaData = await alfaResp.json();
+
+    if (!alfaData.success || !alfaData.savingAccountId) {
+      throw new Error('Failed to fetch Alfa-Bank credentials from Google Sheets');
     }
 
-    console.log(`[API] ✅ Found session ${targetSessionId} for user ${username}`);
+    const { savingAccountId: alfaSavingAccountId } = alfaData;
+    console.log(`[API] ✅ Alfa credentials loaded: savingId=${alfaSavingAccountId}`);
 
-    const session = sessionManager.getSession(targetSessionId);
-
-    // Fetch user schedule and Alfa credentials from Google Sheets
-    console.log(`[API] Fetching user schedule from Google Sheets...`);
-    const scheduleResp = await sessionManager.fetchUserSchedule(username);
-
-    if (!scheduleResp || !scheduleResp.success) {
-      console.log(`[API] ❌ Failed to fetch schedule:`, scheduleResp);
-      return res.status(400).json({
-        success: false,
-        error: 'Failed to fetch user schedule from Google Sheets'
-      });
-    }
-
-    console.log(`[API] ✅ Schedule fetched successfully`);
-
-    const {
-      eveningTransferTime,
-      morningTransferTime,
-      alfaPhone,
-      alfaCardNumber,
-      alfaSavingAccountId,
-      alfaSavingAccountName,
-      userTimezone
-    } = scheduleResp;
-
-    console.log(`[API] Alfa credentials: phone=${alfaPhone}, card=${alfaCardNumber}, savingId=${alfaSavingAccountId}`);
-
-    // Update session metadata
-    sessionManager.updateSessionMetadata(targetSessionId, {
-      eveningTransferTime,
-      morningTransferTime,
-      alfaPhone,
-      alfaCardNumber,
-      alfaSavingAccountId,
-      alfaSavingAccountName,
-      userTimezone
+    // STEP 1: Create T-Bank automation and login
+    console.log(`[API] Step 1: Creating T-Bank automation instance...`);
+    tbankAutomation = new TBankAutomation({
+      username,
+      phone: FIXED_TBANK_PHONE,
+      password: null,
+      encryptionService: null,
+      onAuthenticated: null
     });
 
-    // Create Alfa automation instance if not exists
-    if (!session.alfaAutomation) {
-      console.log('[API] Creating Alfa-Bank automation instance...');
-      const alfaAutomation = new AlfaAutomation({
-        username,
-        phone: alfaPhone,
-        cardNumber: alfaCardNumber,
-        encryptionService: null // Not using encryption for manual transfers
-      });
+    console.log(`[API] Step 2: Logging in to T-Bank...`);
+    const loginResult = await tbankAutomation.login();
+    if (!loginResult.success) {
+      throw new Error(`T-Bank login failed: ${loginResult.error}`);
+    }
+    console.log(`[API] ✅ T-Bank login successful`);
 
-      session.alfaAutomation = alfaAutomation;
-    } else {
-      console.log('[API] Using existing Alfa-Bank automation instance');
+    // STEP 2: Get T-Bank debit balance
+    console.log(`[API] Step 3: Getting T-Bank debit balance...`);
+    const debitAccounts = await tbankAutomation.getAccounts();
+    if (!debitAccounts || debitAccounts.length === 0) {
+      throw new Error('No T-Bank debit accounts found');
     }
 
-    // Execute evening transfer
-    console.log('[API] 🚀 Starting evening transfer execution...');
-    await sessionManager.executeEveningTransfer(session);
-    console.log('[API] ✅ Evening transfer completed successfully');
+    const totalBalance = debitAccounts.reduce((sum, acc) => sum + acc.balance, 0);
+    console.log(`[API] ✅ Total T-Bank balance: ${totalBalance} RUB`);
+
+    if (totalBalance <= 0) {
+      await tbankAutomation.close();
+      return res.json({
+        success: true,
+        message: 'No funds to transfer (balance is 0)'
+      });
+    }
+
+    // STEP 3: Transfer from T-Bank to Alfa via SBP
+    console.log(`[API] Step 4: Transferring ${totalBalance} RUB from T-Bank to Alfa via SBP...`);
+    const transferResult = await tbankAutomation.transferViaSBP(FIXED_ALFA_PHONE, totalBalance);
+    if (!transferResult.success) {
+      throw new Error(`T-Bank SBP transfer failed: ${transferResult.error}`);
+    }
+    console.log(`[API] ✅ T-Bank -> Alfa SBP transfer successful`);
+
+    // Close T-Bank browser
+    await tbankAutomation.close();
+    tbankAutomation = null;
+
+    // STEP 4: Wait for funds to arrive
+    console.log(`[API] Step 5: Waiting 30 seconds for funds to arrive at Alfa...`);
+    await new Promise(resolve => setTimeout(resolve, 30000));
+
+    // STEP 5: Create Alfa automation and login
+    console.log(`[API] Step 6: Creating Alfa-Bank automation instance...`);
+    alfaAutomation = new AlfaAutomation({
+      username,
+      phone: FIXED_ALFA_PHONE,
+      cardNumber: FIXED_ALFA_CARD,
+      encryptionService: null
+    });
+
+    console.log(`[API] Step 7: Logging in to Alfa-Bank...`);
+    const alfaLoginResult = await alfaAutomation.loginAlfa();
+    if (!alfaLoginResult.success) {
+      throw new Error(`Alfa-Bank login failed: ${alfaLoginResult.error}`);
+    }
+    console.log(`[API] ✅ Alfa-Bank login successful`);
+
+    // STEP 6: Transfer from Alfa debit to Alfa saving
+    console.log(`[API] Step 8: Transferring ${totalBalance} RUB from Alfa debit to saving...`);
+    const alfaTransferResult = await alfaAutomation.transferToAlfaSaving(alfaSavingAccountId, totalBalance);
+    if (!alfaTransferResult.success) {
+      throw new Error(`Alfa debit -> saving transfer failed: ${alfaTransferResult.error}`);
+    }
+    console.log(`[API] ✅ Alfa debit -> saving transfer successful`);
+
+    // Close Alfa browser
+    await alfaAutomation.close();
+    alfaAutomation = null;
+
+    console.log(`[API] 🎉 Evening transfer completed successfully!`);
 
     res.json({
       success: true,
-      message: 'Evening transfer completed'
+      message: 'Evening transfer completed',
+      amount: totalBalance
     });
 
   } catch (error) {
-    console.error('[API] Evening transfer error:', error);
+    console.error('[API] ❌ Evening transfer error:', error);
+
+    // Cleanup browsers on error
+    if (tbankAutomation) {
+      try {
+        await tbankAutomation.close();
+      } catch (e) {
+        console.error('[API] Error closing T-Bank browser:', e);
+      }
+    }
+    if (alfaAutomation) {
+      try {
+        await alfaAutomation.close();
+      } catch (e) {
+        console.error('[API] Error closing Alfa browser:', e);
+      }
+    }
+
     res.status(500).json({
       success: false,
       error: error.message
@@ -853,11 +898,13 @@ app.post('/api/evening-transfer', async (req, res) => {
 /**
  * Manual morning transfer (Alfa-Bank -> T-Bank)
  * POST /api/morning-transfer
- * Body: { username }
+ * Body: { username, amount } - amount is optional, if not provided will use full balance
  */
 app.post('/api/morning-transfer', async (req, res) => {
+  let alfaAutomation = null;
+
   try {
-    const { username } = req.body;
+    const { username, amount } = req.body;
 
     if (!username) {
       return res.status(400).json({
@@ -866,80 +913,86 @@ app.post('/api/morning-transfer', async (req, res) => {
       });
     }
 
-    console.log(`[API] Manual morning transfer requested for ${username}`);
+    console.log(`[API] 🌅 Morning transfer requested for ${username}`);
 
-    // Find authenticated session for this user
-    let targetSessionId = null;
-    for (const [sessionId, session] of sessionManager.sessions.entries()) {
-      if (session.username === username && session.authenticated) {
-        targetSessionId = sessionId;
-        break;
-      }
+    // Get fixed credentials from environment
+    const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE;
+    const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE;
+    const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD;
+
+    if (!FIXED_TBANK_PHONE || !FIXED_ALFA_PHONE || !FIXED_ALFA_CARD) {
+      throw new Error('Missing required environment variables: FIXED_TBANK_PHONE, FIXED_ALFA_PHONE, FIXED_ALFA_CARD');
     }
 
-    if (!targetSessionId) {
-      return res.status(404).json({
-        success: false,
-        error: 'No authenticated session found for this user'
-      });
+    // Fetch Alfa credentials from Google Sheets
+    console.log(`[API] Fetching Alfa credentials from Google Sheets...`);
+    const GOOGLE_SHEETS_URL = process.env.GOOGLE_SHEETS_SCRIPT_URL;
+    const alfaUrl = `${GOOGLE_SHEETS_URL}?action=alfaGetCredentials&username=${encodeURIComponent(username)}`;
+    const alfaResp = await fetch(alfaUrl);
+    const alfaData = await alfaResp.json();
+
+    if (!alfaData.success || !alfaData.savingAccountId) {
+      throw new Error('Failed to fetch Alfa-Bank credentials from Google Sheets');
     }
 
-    const session = sessionManager.getSession(targetSessionId);
+    const { savingAccountId: alfaSavingAccountId } = alfaData;
+    console.log(`[API] ✅ Alfa credentials loaded: savingId=${alfaSavingAccountId}`);
 
-    // Fetch user schedule and Alfa credentials from Google Sheets
-    const scheduleResp = await sessionManager.fetchUserSchedule(username);
-
-    if (!scheduleResp || !scheduleResp.success) {
-      return res.status(400).json({
-        success: false,
-        error: 'Failed to fetch user schedule from Google Sheets'
-      });
-    }
-
-    const {
-      eveningTransferTime,
-      morningTransferTime,
-      alfaPhone,
-      alfaCardNumber,
-      alfaSavingAccountId,
-      alfaSavingAccountName,
-      userTimezone
-    } = scheduleResp;
-
-    // Update session metadata
-    sessionManager.updateSessionMetadata(targetSessionId, {
-      eveningTransferTime,
-      morningTransferTime,
-      alfaPhone,
-      alfaCardNumber,
-      alfaSavingAccountId,
-      alfaSavingAccountName,
-      userTimezone
+    // STEP 1: Create Alfa automation and login
+    console.log(`[API] Step 1: Creating Alfa-Bank automation instance...`);
+    alfaAutomation = new AlfaAutomation({
+      username,
+      phone: FIXED_ALFA_PHONE,
+      cardNumber: FIXED_ALFA_CARD,
+      encryptionService: null
     });
 
-    // Create Alfa automation instance if not exists
-    if (!session.alfaAutomation) {
-      console.log('[API] Creating Alfa-Bank automation instance...');
-      const alfaAutomation = new AlfaAutomation({
-        username,
-        phone: alfaPhone,
-        cardNumber: alfaCardNumber,
-        encryptionService: null // Not using encryption for manual transfers
-      });
-
-      session.alfaAutomation = alfaAutomation;
+    console.log(`[API] Step 2: Logging in to Alfa-Bank...`);
+    const alfaLoginResult = await alfaAutomation.loginAlfa();
+    if (!alfaLoginResult.success) {
+      throw new Error(`Alfa-Bank login failed: ${alfaLoginResult.error}`);
     }
+    console.log(`[API] ✅ Alfa-Bank login successful`);
 
-    // Execute morning transfer
-    await sessionManager.executeMorningTransfer(session);
+    // STEP 2: Transfer from Alfa saving to T-Bank via SBP
+    const transferAmount = amount || null; // If amount not provided, transferToTBankSBP will use full balance
+    console.log(`[API] Step 3: Transferring ${transferAmount || 'full balance'} from Alfa saving to T-Bank...`);
+
+    const transferResult = await alfaAutomation.transferToTBankSBP(
+      alfaSavingAccountId,
+      FIXED_TBANK_PHONE,
+      transferAmount
+    );
+
+    if (!transferResult.success) {
+      throw new Error(`Alfa -> T-Bank SBP transfer failed: ${transferResult.error}`);
+    }
+    console.log(`[API] ✅ Alfa -> T-Bank SBP transfer successful (${transferResult.amount || transferAmount} RUB)`);
+
+    // Close Alfa browser
+    await alfaAutomation.close();
+    alfaAutomation = null;
+
+    console.log(`[API] 🎉 Morning transfer completed successfully!`);
 
     res.json({
       success: true,
-      message: 'Morning transfer completed'
+      message: 'Morning transfer completed',
+      amount: transferResult.amount || transferAmount
     });
 
   } catch (error) {
-    console.error('[API] Morning transfer error:', error);
+    console.error('[API] ❌ Morning transfer error:', error);
+
+    // Cleanup browser on error
+    if (alfaAutomation) {
+      try {
+        await alfaAutomation.close();
+      } catch (e) {
+        console.error('[API] Error closing Alfa browser:', e);
+      }
+    }
+
     res.status(500).json({
       success: false,
       error: error.message
