@@ -452,10 +452,46 @@ export class AlfaAutomation {
       }
 
       console.log('[ALFA→SAVING] Этап 1/8: Переход в дашборд');
-      await this.page.goto('https://web.alfabank.ru/dashboard', {
-        waitUntil: 'networkidle2'
-      });
-      await this.randomDelay(2000, 3000);
+
+      const ensureDashboard = async () => {
+        try {
+          await this.page.waitForFunction(
+            () => window.location.href.includes('web.alfabank.ru/dashboard'),
+            { timeout: 3000 }
+          );
+        } catch {
+          await this.page.goto('https://web.alfabank.ru/dashboard', {
+            waitUntil: 'domcontentloaded'
+          });
+        }
+
+        const dashboardTimeout = 15000;
+        const checkInterval = 1000;
+        const start = Date.now();
+
+        while (Date.now() - start < dashboardTimeout) {
+          const onDashboard = await this.page.evaluate(() => {
+            if (!document.body) return false;
+            const text = document.body.innerText || '';
+            return text.includes('Мои продукты');
+          });
+
+          if (onDashboard) {
+            return true;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, checkInterval));
+        }
+
+        return false;
+      };
+
+      const dashboardReady = await ensureDashboard();
+      if (!dashboardReady) {
+        throw new Error('Не удалось убедиться, что открыта главная страница (нет текста "Мои продукты")');
+      }
+
+      await this.randomDelay(1000, 2000);
 
       console.log('[ALFA→SAVING] Этап 2/8: Нажатие на накопительный счёт');
       const savingAccountSelector = `button[data-test-id="product-view-content-${savingAccountId}"]`;
