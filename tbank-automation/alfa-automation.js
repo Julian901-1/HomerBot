@@ -134,9 +134,9 @@ export class AlfaAutomation {
         await this.initBrowser();
       }
 
-      // Decrypt credentials
-      const phone = this.encryptionService.decrypt(this.phone);
-      const cardNumber = this.encryptionService.decrypt(this.cardNumber);
+      // Decrypt credentials (if encryptionService is available, otherwise use as-is)
+      const phone = this.encryptionService ? this.encryptionService.decrypt(this.phone) : this.phone;
+      const cardNumber = this.encryptionService ? this.encryptionService.decrypt(this.cardNumber) : this.cardNumber;
 
       console.log('[ALFA-LOGIN] Этап 1/9: Переход на web.alfabank.ru');
       await this.page.goto('https://web.alfabank.ru/', {

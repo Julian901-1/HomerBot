@@ -1842,7 +1842,58 @@ export class TBankAutomation {
       }
 
       await submitButton.click();
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Check if SMS confirmation is required
+      console.log('[TBANK→SBP] Проверка необходимости СМС-подтверждения...');
+      const smsConfirmationText = await this.page.evaluate(() => {
+        const body = document.body.textContent || '';
+        return body.includes('Мы отправили СМС с кодом на');
+      });
+
+      if (smsConfirmationText) {
+        console.log('[TBANK→SBP] ⚠️ Требуется СМС-подтверждение перевода');
+
+        // Try to find OTP input field using common patterns
+        const otpInputSelector = await this.page.evaluate(() => {
+          // Pattern 1: automation-id="otp-input"
+          let input = document.querySelector('[automation-id="otp-input"]');
+          if (input) return '[automation-id="otp-input"]';
+
+          // Pattern 2: data-qa-type containing "otp" or "code"
+          input = document.querySelector('[data-qa-type*="otp"], [data-qa-type*="code"]');
+          if (input) return input.getAttribute('data-qa-type');
+
+          // Pattern 3: input with type="tel" or type="text" in visible modal/dialog
+          const inputs = Array.from(document.querySelectorAll('input[type="tel"], input[type="text"]'));
+          const visibleInput = inputs.find(inp => {
+            const rect = inp.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
+          if (visibleInput) {
+            if (visibleInput.id) return `#${visibleInput.id}`;
+            if (visibleInput.className) return `input.${visibleInput.classList[0]}`;
+          }
+
+          return null;
+        });
+
+        if (!otpInputSelector) {
+          console.log('[TBANK→SBP] ⚠️ Не найдено поле для ввода СМС-кода, но текст подтверждения присутствует');
+        } else {
+          console.log(`[TBANK→SBP] Найдено поле ввода СМС: ${otpInputSelector}`);
+          console.log('[TBANK→SBP] Ожидание СМС-кода для подтверждения перевода...');
+
+          const smsCode = await this.waitForUserInput('sms');
+          console.log('[TBANK→SBP] Получен СМС-код, вводим...');
+
+          await this.typeWithHumanDelay(otpInputSelector, smsCode);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          console.log('[TBANK→SBP] ✅ СМС-код введён');
+        }
+      } else {
+        console.log('[TBANK→SBP] СМС-подтверждение не требуется');
+      }
 
       console.log('[TBANK→SBP] ✅ SBP transfer initiated successfully');
       await this.takeDebugScreenshot('sbp-transfer-success');
