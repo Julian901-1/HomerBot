@@ -764,6 +764,7 @@ export class AlfaAutomation {
           '[data-test-id="dest-account-selector"]',
           '[data-test-id="dest-account-dropdown"]',
           '[data-test-id="dest-account"] button',
+          '[data-test-id="dest-account-field"]',
           'button[aria-haspopup="listbox"]',
           '[aria-haspopup="listbox"][role="combobox"]',
           '[data-test-id="dest-account-options-trigger"]'
@@ -777,6 +778,26 @@ export class AlfaAutomation {
             const check = await this.page.$(destOptionSelector);
             if (check) return;
           }
+        }
+
+        // Last resort: click via DOM evaluation on the specific field
+        const fieldOpened = await this.page.evaluate(() => {
+          const field = document.querySelector('[data-test-id="dest-account-field"]');
+          if (field instanceof HTMLElement) {
+            field.click();
+            return true;
+          }
+          const container = document.querySelector('[data-test-id="dest-account"]');
+          if (container instanceof HTMLElement) {
+            container.click();
+            return true;
+          }
+          return false;
+        });
+        if (fieldOpened) {
+          await this.sleep(500);
+          const check = await this.page.$(destOptionSelector);
+          if (check) return;
         }
 
         await this.page.evaluate(() => {
