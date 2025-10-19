@@ -801,16 +801,15 @@ app.post('/api/evening-transfer', async (req, res) => {
       }
     }, 500); // Check every 500ms
 
-    try {
-      console.log(`[API] Step 2: Logging in to T-Bank...`);
-      const loginResult = await tbankAutomation.login();
-      if (!loginResult.success) {
-        throw new Error(`T-Bank login failed: ${loginResult.error}`);
-      }
-      console.log(`[API] ✅ T-Bank login successful`);
+    console.log(`[API] Step 2: Logging in to T-Bank...`);
+    const loginResult = await tbankAutomation.login();
+    if (!loginResult.success) {
+      throw new Error(`T-Bank login failed: ${loginResult.error}`);
+    }
+    console.log(`[API] ✅ T-Bank login successful`);
 
-      // Stop SMS queue checker after successful login
-      clearInterval(smsQueueChecker);
+    // Stop SMS queue checker after successful login
+    clearInterval(smsQueueChecker);
 
     // STEP 2: Get T-Bank debit balance
     console.log(`[API] Step 3: Getting T-Bank debit balance...`);
