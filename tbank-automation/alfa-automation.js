@@ -43,20 +43,22 @@ export class AlfaAutomation {
   }
 
   /**
-   * Take debug screenshot
+   * Take base64 screenshot for logging
+   * @param {string} context - Context description
    */
-  async takeDebugScreenshot(name) {
-    if (!this.page) return;
+  async takeScreenshot(context = 'unknown') {
+    if (!this.page) return null;
 
     try {
-      const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\./g, '-');
-      const filename = `${name}-${timestamp}.png`;
-      const screenshotPath = path.join(__dirname, 'screenshots', filename);
-
-      await this.page.screenshot({ path: screenshotPath, fullPage: true });
-      console.log(`[SCREENSHOT] Сохранён: ${filename}`);
-    } catch (error) {
-      console.error(`[SCREENSHOT] Ошибка сохранения: ${error.message}`);
+      const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
+      console.log(`[ALFA] 📸 [${context}] Screenshot captured (base64 length: ${screenshot.length})`);
+      console.log(`[ALFA] 📸 === SCREENSHOT BASE64 START [${context}] ===`);
+      console.log(screenshot);
+      console.log(`[ALFA] 📸 === SCREENSHOT BASE64 END [${context}] ===`);
+      return screenshot;
+    } catch (e) {
+      console.log(`[ALFA] ⚠️ [${context}] Could not capture screenshot:`, e.message);
+      return null;
     }
   }
 
@@ -198,13 +200,15 @@ export class AlfaAutomation {
       this.pendingInputData = null;
 
       console.log('[ALFA-LOGIN] ✅ Логин успешен');
-      await this.takeDebugScreenshot('alfa-login-success');
 
       return { success: true };
 
     } catch (error) {
       console.error('[ALFA-LOGIN] ❌ Ошибка:', error.message);
-      await this.takeDebugScreenshot('alfa-login-error');
+
+      // Take error screenshot
+      await this.takeScreenshot('alfa-login-error');
+
       this.pendingInputType = null;
       this.pendingInputData = null;
       throw error;
@@ -321,7 +325,6 @@ export class AlfaAutomation {
 
     } catch (error) {
       console.error('[ALFA-ACCOUNTS] ❌ Ошибка:', error.message);
-      await this.takeDebugScreenshot('alfa-get-accounts-error');
       throw error;
     }
   }
@@ -396,13 +399,18 @@ export class AlfaAutomation {
       await this.randomDelay(2000, 3000);
 
       console.log('[ALFA→SAVING] ✅ Перевод успешно завершён');
-      await this.takeDebugScreenshot('alfa-to-saving-success');
+
+      // Take confirmation screenshot
+      await this.takeScreenshot('alfa-to-saving-success');
 
       return { success: true, amount };
 
     } catch (error) {
       console.error('[ALFA→SAVING] ❌ Ошибка:', error.message);
-      await this.takeDebugScreenshot('alfa-to-saving-error');
+
+      // Take error screenshot
+      await this.takeScreenshot('alfa-to-saving-error');
+
       throw error;
     }
   }
@@ -479,13 +487,18 @@ export class AlfaAutomation {
       console.log('[SAVING→ALFA] Этап 9/9: Проверка успешности перевода');
 
       console.log('[SAVING→ALFA] ✅ Перевод успешно завершён');
-      await this.takeDebugScreenshot('saving-to-alfa-success');
+
+      // Take confirmation screenshot
+      await this.takeScreenshot('saving-to-alfa-success');
 
       return { success: true, amount };
 
     } catch (error) {
       console.error('[SAVING→ALFA] ❌ Ошибка:', error.message);
-      await this.takeDebugScreenshot('saving-to-alfa-error');
+
+      // Take error screenshot
+      await this.takeScreenshot('saving-to-alfa-error');
+
       throw error;
     }
   }
@@ -605,13 +618,18 @@ export class AlfaAutomation {
       this.pendingInputData = null;
 
       console.log('[ALFA→TBANK] ✅ Перевод успешно завершён');
-      await this.takeDebugScreenshot('alfa-to-tbank-success');
+
+      // Take confirmation screenshot
+      await this.takeScreenshot('alfa-to-tbank-success');
 
       return { success: true, amount };
 
     } catch (error) {
       console.error('[ALFA→TBANK] ❌ Ошибка:', error.message);
-      await this.takeDebugScreenshot('alfa-to-tbank-error');
+
+      // Take error screenshot
+      await this.takeScreenshot('alfa-to-tbank-error');
+
       this.pendingInputType = null;
       this.pendingInputData = null;
       throw error;

@@ -195,20 +195,7 @@ export class TBankAutomation {
 
       console.log(`[TBANK] 📍 Final URL after stabilization: ${this.page.url()}`);
 
-      // Take screenshot for debugging FIRST (before any evaluate calls)
-      try {
-        const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
-        console.log('[TBANK] 📸 Screenshot captured (base64, length:', screenshot.length, ')');
-        console.log('[TBANK] 📸 === SCREENSHOT BASE64 START ===');
-        console.log(screenshot);
-        console.log('[TBANK] 📸 === SCREENSHOT BASE64 END ===');
-        console.log('[TBANK] 💡 To view: paste the base64 string to https://base64.guru/converter/decode/image');
-        console.log('[TBANK] 💡 Or open in browser: data:image/png;base64,' + screenshot.substring(0, 100) + '...');
-      } catch (e) {
-        console.log('[TBANK] ⚠️ Could not capture screenshot:', e.message);
-      }
-
-      // Now safely get page info
+      // Get page info
       try {
         const title = await this.page.title();
         console.log('[TBANK] 📄 Page title:', title);
@@ -571,24 +558,6 @@ export class TBankAutomation {
   }
 
 
-  /**
-   * Take and log screenshot for debugging
-   * @param {string} context - Context description (e.g., "keep-alive", "login-check")
-   */
-  async takeDebugScreenshot(context = 'unknown') {
-    if (!this.page) return;
-
-    try {
-      const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
-      const timestamp = new Date().toISOString();
-      console.log(`[TBANK] 📸 [${context}] Screenshot at ${timestamp} (length: ${screenshot.length})`);
-      console.log(`[TBANK] 📸 === SCREENSHOT BASE64 START [${context}] ===`);
-      console.log(screenshot);
-      console.log(`[TBANK] 📸 === SCREENSHOT BASE64 END [${context}] ===`);
-    } catch (e) {
-      console.log(`[TBANK] ⚠️ [${context}] Could not capture screenshot:`, e.message);
-    }
-  }
 
   /**
    * Wait for user input dynamically
@@ -606,6 +575,26 @@ export class TBankAutomation {
     return new Promise((resolve) => {
       this.pendingInputResolve = resolve;
     });
+  }
+
+  /**
+   * Take base64 screenshot for logging
+   * @param {string} context - Context description
+   */
+  async takeScreenshot(context = 'unknown') {
+    if (!this.page) return null;
+
+    try {
+      const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
+      console.log(`[TBANK] 📸 [${context}] Screenshot captured (base64 length: ${screenshot.length})`);
+      console.log(`[TBANK] 📸 === SCREENSHOT BASE64 START [${context}] ===`);
+      console.log(screenshot);
+      console.log(`[TBANK] 📸 === SCREENSHOT BASE64 END [${context}] ===`);
+      return screenshot;
+    } catch (e) {
+      console.log(`[TBANK] ⚠️ [${context}] Could not capture screenshot:`, e.message);
+      return null;
+    }
   }
 
   /**
@@ -867,9 +856,8 @@ export class TBankAutomation {
 
         console.log('[TBANK] Keep-alive action completed');
 
-        // Take screenshot every keep-alive cycle for monitoring
-        console.log(`[TBANK] 📸 Taking keep-alive screenshot #${keepAliveCount}`);
-        await this.takeDebugScreenshot(`keep-alive-${keepAliveCount}`);
+        // Keep-alive cycle
+        console.log(`[TBANK] ⏰ Keep-alive cycle #${keepAliveCount}`);
 
         // Check if we're still logged in by verifying URL
         const currentUrl = this.page.url();
@@ -888,8 +876,7 @@ export class TBankAutomation {
 
       } catch (error) {
         console.error('[TBANK] Keep-alive error:', error);
-        // Take screenshot on error
-        await this.takeDebugScreenshot(`keep-alive-error-${keepAliveCount}`);
+        // Error occurred during keep-alive
       }
     }, interval);
   }
@@ -1622,7 +1609,6 @@ export class TBankAutomation {
       console.log('[TRANSFER] 🚀 === STARTING FORCED TRANSFER TO SAVING ===' );
 
       // Step 1: Take initial screenshot
-      await this.takeDebugScreenshot('transfer-start-mybank');
 
       // Step 2: Get all debit accounts
       console.log('[TRANSFER] 📋 Fetching all debit accounts...');
@@ -1653,7 +1639,6 @@ export class TBankAutomation {
           console.log(`[TRANSFER] 💸 Transferring ${debitAccount.balance} RUB from "${debitAccount.name}"...`);
 
           // Take screenshot before transfer
-          await this.takeDebugScreenshot(`transfer-before-${debitAccount.id}`);
 
           const result = await this.transferToSavingAccount(
             debitAccount.name,
@@ -1662,7 +1647,6 @@ export class TBankAutomation {
           );
 
           // Take screenshot after transfer
-          await this.takeDebugScreenshot(`transfer-after-${debitAccount.id}`);
 
           transfers.push({
             from: debitAccount.name,
@@ -1681,7 +1665,6 @@ export class TBankAutomation {
       }
 
       // Step 5: Take final screenshot
-      await this.takeDebugScreenshot('transfer-completed-final');
 
       console.log('[TRANSFER] 🎉 === FORCED TRANSFER COMPLETED ===');
 
@@ -1696,7 +1679,6 @@ export class TBankAutomation {
       console.error('[TRANSFER] ❌ Error executing forced transfer:', error);
 
       // Take error screenshot
-      await this.takeDebugScreenshot('transfer-error');
 
       return {
         success: false,
@@ -1896,7 +1878,9 @@ export class TBankAutomation {
       }
 
       console.log('[TBANK→SBP] ✅ SBP transfer initiated successfully');
-      await this.takeDebugScreenshot('sbp-transfer-success');
+
+      // Take confirmation screenshot
+      await this.takeScreenshot('sbp-transfer-success');
 
       return {
         success: true,
@@ -1905,7 +1889,10 @@ export class TBankAutomation {
 
     } catch (error) {
       console.error('[TBANK→SBP] ❌ Error:', error.message);
-      await this.takeDebugScreenshot('sbp-transfer-error');
+
+      // Take error screenshot
+      await this.takeScreenshot('sbp-transfer-error');
+
       return {
         success: false,
         error: error.message

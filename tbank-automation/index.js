@@ -566,11 +566,24 @@ app.post('/api/auth/auto-sms-alfa', async (req, res) => {
     }
 
     if (!targetSession) {
-      console.log('[AUTO-SMS-ALFA] No session waiting for Alfa SMS code yet - adding to queue');
+      console.log('[AUTO-SMS-ALFA] No session waiting for Alfa SMS code yet - checking queue');
 
-      // Store code in queue with 5-minute TTL
+      // Store code in queue with 5-minute TTL (only if not already there)
       if (username) {
         const queueKey = `alfa_${username}`;
+        const existingCode = smsCodeQueue.get(queueKey);
+
+        if (existingCode && existingCode.code === code) {
+          console.log(`[AUTO-SMS-ALFA] Code ${code} already in queue, skipping`);
+          return res.json({
+            success: true,
+            message: 'Code already queued',
+            code: code,
+            queued: true,
+            duplicate: true
+          });
+        }
+
         smsCodeQueue.set(queueKey, {
           code,
           timestamp: Date.now(),
@@ -824,11 +837,13 @@ app.post('/api/evening-transfer', async (req, res) => {
     // Stop T-Bank SMS queue checker
     clearInterval(smsQueueChecker);
 
-    // Close T-Bank browser
+    // Close T-Bank browser IMMEDIATELY to free ~200MB memory
+    console.log(`[API] Step 4: Closing T-Bank browser to free memory...`);
     await tbankAutomation.close();
     tbankAutomation = null;
+    console.log(`[API] ✅ T-Bank browser closed, memory freed`);
 
-    // STEP 4: Wait for funds to arrive
+    // STEP 5: Wait for funds to arrive
     console.log(`[API] Step 5: Waiting 30 seconds for funds to arrive at Alfa...`);
     await new Promise(resolve => setTimeout(resolve, 30000));
 
@@ -914,6 +929,224 @@ app.post('/api/evening-transfer', async (req, res) => {
         await alfaAutomation.close();
       } catch (e) {
         console.error('[API] Error closing Alfa browser:', e);
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Evening transfer STEP 1: T-Bank -> Alfa SBP
+ * POST /api/evening-transfer-step1
+ * Body: { username }
+ * Returns: { success, amount }
+ */
+app.post('/api/evening-transfer-step1', async (req, res) => {
+  let tbankAutomation = null;
+
+  try {
+    const { username } = req.body;
+
+    if (!username) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing username'
+      });
+    }
+
+    console.log(`[API-STEP1] 🌆 Evening transfer STEP 1 requested for ${username}`);
+
+    // Get T-Bank credentials from environment
+    const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE;
+    const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE;
+
+    if (!FIXED_TBANK_PHONE || !FIXED_ALFA_PHONE) {
+      throw new Error('Missing required environment variables: FIXED_TBANK_PHONE, FIXED_ALFA_PHONE');
+    }
+
+    // Create T-Bank automation
+    tbankAutomation = new TBankAutomation({
+      username,
+      phone: FIXED_TBANK_PHONE,
+      password: null,
+      encryptionService: null,
+      onAuthenticated: null
+    });
+
+    // Start background SMS queue checker
+    const smsQueueChecker = setInterval(() => {
+      if (!tbankAutomation) return;
+
+      const pendingType = tbankAutomation.getPendingInputType();
+      if (pendingType === 'sms') {
+        const queuedSMS = smsCodeQueue.get(username);
+        if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
+          console.log(`[API-STEP1] Found queued SMS code for ${username}, submitting automatically...`);
+          const submitted = tbankAutomation.submitUserInput(queuedSMS.code);
+          if (submitted) {
+            smsCodeQueue.delete(username);
+            console.log(`[API-STEP1] ✅ SMS code auto-submitted and removed from queue`);
+          }
+        }
+      }
+    }, 500);
+
+    // Login to T-Bank
+    console.log(`[API-STEP1] Logging in to T-Bank...`);
+    const loginResult = await tbankAutomation.login();
+    if (!loginResult.success) {
+      throw new Error(`T-Bank login failed: ${loginResult.error}`);
+    }
+    console.log(`[API-STEP1] ✅ T-Bank login successful`);
+
+    // Transfer from T-Bank to Alfa via SBP
+    console.log(`[API-STEP1] Starting SBP transfer from T-Bank to Alfa...`);
+    const transferResult = await tbankAutomation.transferViaSBP(FIXED_ALFA_PHONE, null);
+    if (!transferResult.success) {
+      throw new Error(`T-Bank SBP transfer failed: ${transferResult.error}`);
+    }
+
+    const transferredAmount = transferResult.amount;
+    console.log(`[API-STEP1] ✅ T-Bank -> Alfa SBP transfer successful: ${transferredAmount} RUB`);
+
+    // Stop SMS queue checker
+    clearInterval(smsQueueChecker);
+
+    // Close T-Bank browser to free memory
+    console.log(`[API-STEP1] Closing T-Bank browser...`);
+    await tbankAutomation.close();
+    tbankAutomation = null;
+    console.log(`[API-STEP1] ✅ T-Bank browser closed, memory freed`);
+
+    console.log(`[API-STEP1] 🎉 STEP 1 completed successfully!`);
+
+    res.json({
+      success: true,
+      message: 'Evening transfer STEP 1 completed',
+      amount: transferredAmount
+    });
+
+  } catch (error) {
+    console.error('[API-STEP1] ❌ Error:', error);
+
+    if (tbankAutomation) {
+      try {
+        await tbankAutomation.close();
+      } catch (e) {
+        console.error('[API-STEP1] Error closing T-Bank browser:', e);
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Evening transfer STEP 2: Alfa debit -> Alfa saving
+ * POST /api/evening-transfer-step2
+ * Body: { username, amount }
+ * Returns: { success }
+ */
+app.post('/api/evening-transfer-step2', async (req, res) => {
+  let alfaAutomation = null;
+
+  try {
+    const { username, amount } = req.body;
+
+    if (!username || !amount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing username or amount'
+      });
+    }
+
+    console.log(`[API-STEP2] 🌆 Evening transfer STEP 2 requested for ${username}, amount: ${amount} RUB`);
+
+    // Get Alfa credentials from environment
+    const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE;
+    const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD;
+    const FIXED_ALFA_SAVING_ACCOUNT_ID = process.env.FIXED_ALFA_SAVING_ACCOUNT_ID;
+
+    if (!FIXED_ALFA_PHONE || !FIXED_ALFA_CARD || !FIXED_ALFA_SAVING_ACCOUNT_ID) {
+      throw new Error('Missing required environment variables for Alfa-Bank');
+    }
+
+    // Wait 30 seconds for funds to arrive (if step1 just completed)
+    console.log(`[API-STEP2] Waiting 30 seconds for funds to arrive at Alfa...`);
+    await new Promise(resolve => setTimeout(resolve, 30000));
+
+    // Create Alfa automation
+    console.log(`[API-STEP2] Creating Alfa-Bank automation instance...`);
+    alfaAutomation = new AlfaAutomation({
+      username,
+      phone: FIXED_ALFA_PHONE,
+      cardNumber: FIXED_ALFA_CARD,
+      encryptionService: null
+    });
+
+    // Start background SMS queue checker for Alfa
+    const alfaSmsQueueChecker = setInterval(() => {
+      if (!alfaAutomation) return;
+
+      const pendingType = alfaAutomation.getPendingInputType();
+      if (pendingType === 'alfa_sms') {
+        const queueKey = `alfa_${username}`;
+        const queuedSMS = smsCodeQueue.get(queueKey);
+        if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
+          console.log(`[API-STEP2] Found queued Alfa SMS code for ${username}, submitting automatically...`);
+          const submitted = alfaAutomation.submitAlfaSMSCode(queuedSMS.code);
+          if (submitted) {
+            smsCodeQueue.delete(queueKey);
+            console.log(`[API-STEP2] ✅ Alfa SMS code auto-submitted and removed from queue`);
+          }
+        }
+      }
+    }, 500);
+
+    // Login to Alfa-Bank
+    console.log(`[API-STEP2] Logging in to Alfa-Bank...`);
+    const alfaLoginResult = await alfaAutomation.loginAlfa();
+    if (!alfaLoginResult.success) {
+      clearInterval(alfaSmsQueueChecker);
+      throw new Error(`Alfa-Bank login failed: ${alfaLoginResult.error}`);
+    }
+    console.log(`[API-STEP2] ✅ Alfa-Bank login successful`);
+    clearInterval(alfaSmsQueueChecker);
+
+    // Transfer from Alfa debit to Alfa saving
+    console.log(`[API-STEP2] Transferring ${amount} RUB from Alfa debit to saving...`);
+    const alfaTransferResult = await alfaAutomation.transferToAlfaSaving(FIXED_ALFA_SAVING_ACCOUNT_ID, amount);
+    if (!alfaTransferResult.success) {
+      throw new Error(`Alfa debit -> saving transfer failed: ${alfaTransferResult.error}`);
+    }
+    console.log(`[API-STEP2] ✅ Alfa debit -> saving transfer successful`);
+
+    // Close Alfa browser
+    await alfaAutomation.close();
+    alfaAutomation = null;
+
+    console.log(`[API-STEP2] 🎉 STEP 2 completed successfully!`);
+
+    res.json({
+      success: true,
+      message: 'Evening transfer STEP 2 completed'
+    });
+
+  } catch (error) {
+    console.error('[API-STEP2] ❌ Error:', error);
+
+    if (alfaAutomation) {
+      try {
+        await alfaAutomation.close();
+      } catch (e) {
+        console.error('[API-STEP2] Error closing Alfa browser:', e);
       }
     }
 
