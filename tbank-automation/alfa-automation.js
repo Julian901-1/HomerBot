@@ -533,12 +533,63 @@ export class AlfaAutomation {
       await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] Этап 3/8: Выбор счёта списания "Расчётный счёт ··7167"');
-      const accountSelector = 'div[data-test-id="src-account-option"]';
-      await this.page.waitForSelector(accountSelector, { timeout: 60000 });
+      const accountOptionSelector = 'div[data-test-id="src-account-option"]';
+      const optionsListSelector = 'div[data-test-id="src-account-options-list"]';
+
+      const ensureAccountDropdownOpen = async () => {
+        const optionVisible = await this.page.$(accountOptionSelector);
+        if (optionVisible) return;
+
+        const triggerSelectors = [
+          '[data-test-id="src-account-select"]',
+          '[data-test-id="src-account-selector"]',
+          '[data-test-id="src-account-dropdown"]',
+          '[data-test-id="src-account"] button',
+          '[aria-haspopup="listbox"][role="combobox"]',
+          'button[aria-haspopup="listbox"]',
+          '[data-test-id="src-account-options-trigger"]'
+        ];
+
+        for (const selector of triggerSelectors) {
+          const handle = await this.page.$(selector);
+          if (handle) {
+            await handle.click();
+            return;
+          }
+        }
+
+        await this.page.evaluate(() => {
+          const candidates = Array.from(
+            document.querySelectorAll('[aria-haspopup="listbox"], [data-test-id]')
+          );
+
+          for (const candidate of candidates) {
+            if (!(candidate instanceof HTMLElement)) continue;
+
+            const dataset = candidate.dataset || {};
+            const isSourceTrigger = Object.keys(dataset).some(key =>
+              key.toLowerCase().includes('src') && key.toLowerCase().includes('account')
+            );
+
+            if (isSourceTrigger || candidate.getAttribute('role') === 'combobox') {
+              candidate.click();
+              break;
+            }
+          }
+        });
+      };
+
+      await ensureAccountDropdownOpen();
+      await this.page.waitForSelector(`${optionsListSelector}, ${accountOptionSelector}`, { timeout: 60000 });
+      await ensureAccountDropdownOpen();
+      await this.page.waitForSelector(accountOptionSelector, { timeout: 60000 });
+
       await this.page.evaluate(() => {
         const options = Array.from(document.querySelectorAll('div[data-test-id="src-account-option"]'));
         const targetOption = options.find(opt => opt.textContent.includes('··7167'));
-        if (targetOption) targetOption.click();
+        if (targetOption instanceof HTMLElement) {
+          targetOption.click();
+        }
       });
 
       await waitBetweenSteps();
