@@ -66,6 +66,26 @@ export class AlfaAutomation {
   async initBrowser() {
     console.log('[ALFA-BROWSER] Инициализация браузера...');
 
+    // Kill any stray Chrome/Chromium processes before launching
+    try {
+      console.log(`[ALFA-BROWSER] Checking for existing browser processes...`);
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      if (process.platform === 'win32') {
+        await execAsync('taskkill /F /IM chrome.exe /T 2>nul || exit 0').catch(() => {});
+        await execAsync('taskkill /F /IM chromium.exe /T 2>nul || exit 0').catch(() => {});
+      } else {
+        // Linux/macOS - kill all Chrome processes
+        await execAsync('pkill -9 chrome || true').catch(() => {});
+        await execAsync('pkill -9 chromium || true').catch(() => {});
+      }
+      console.log(`[ALFA-BROWSER] Cleaned up any existing browser processes`);
+    } catch (err) {
+      console.log(`[ALFA-BROWSER] No existing processes to clean up`);
+    }
+
     this.browser = await puppeteer.launch({
       headless: true,
       args: [
@@ -637,6 +657,24 @@ export class AlfaAutomation {
         this.browser = null;
         this.page = null;
         console.log('[ALFA-BROWSER] ✅ Браузер закрыт');
+      }
+
+      // Force kill any remaining browser processes
+      try {
+        const { exec } = await import('child_process');
+        const { promisify } = await import('util');
+        const execAsync = promisify(exec);
+
+        if (process.platform === 'win32') {
+          await execAsync('taskkill /F /IM chrome.exe /T 2>nul || exit 0').catch(() => {});
+          await execAsync('taskkill /F /IM chromium.exe /T 2>nul || exit 0').catch(() => {});
+        } else {
+          await execAsync('pkill -9 chrome || true').catch(() => {});
+          await execAsync('pkill -9 chromium || true').catch(() => {});
+        }
+        console.log('[ALFA-BROWSER] Force killed any remaining browser processes');
+      } catch (err) {
+        // Ignore errors
       }
     } catch (error) {
       console.error('[ALFA-BROWSER] Ошибка закрытия браузера:', error.message);

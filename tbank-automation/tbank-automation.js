@@ -44,6 +44,26 @@ export class TBankAutomation {
     // Use persistent user data directory for better session persistence
     const userDataDir = `./user-data/${this.username}`;
 
+    // Kill any existing browser processes using this userDataDir
+    try {
+      console.log(`[TBANK] Checking for existing browser processes...`);
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      // Kill Chrome/Chromium processes that might be using this profile
+      if (process.platform === 'win32') {
+        await execAsync('taskkill /F /IM chrome.exe /T 2>nul || exit 0').catch(() => {});
+        await execAsync('taskkill /F /IM chromium.exe /T 2>nul || exit 0').catch(() => {});
+      } else {
+        // Linux/macOS - kill processes using this specific userDataDir
+        await execAsync(`pkill -f "${userDataDir}" || true`).catch(() => {});
+      }
+      console.log(`[TBANK] Cleaned up any existing browser processes`);
+    } catch (err) {
+      console.log(`[TBANK] No existing processes to clean up`);
+    }
+
     const launchOptions = {
       headless: true,
       args: [
@@ -1948,6 +1968,24 @@ export class TBankAutomation {
         console.error('[TBANK] Error closing browser:', e.message);
       }
       this.browser = null;
+    }
+
+    // Force kill any remaining browser processes for this user
+    try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+      const userDataDir = `./user-data/${this.username}`;
+
+      if (process.platform === 'win32') {
+        await execAsync('taskkill /F /IM chrome.exe /T 2>nul || exit 0').catch(() => {});
+        await execAsync('taskkill /F /IM chromium.exe /T 2>nul || exit 0').catch(() => {});
+      } else {
+        await execAsync(`pkill -9 -f "${userDataDir}" || true`).catch(() => {});
+      }
+      console.log('[TBANK] Force killed any remaining browser processes');
+    } catch (err) {
+      // Ignore errors
     }
 
     // Force garbage collection hint (if available)
