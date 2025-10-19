@@ -1729,63 +1729,16 @@ export class TBankAutomation {
         await new Promise(resolve => setTimeout(resolve, 3000));
       }
 
-      // Step 2: Click on the debit account widget
-      console.log('[TBANK→SBP] Шаг 2/7: Нажатие на дебетовый счёт...');
+      // Step 2-4: Direct navigation to pre-filled transfer form
+      console.log('[TBANK→SBP] Шаг 2-4/7: Переход по прямой ссылке на форму перевода...');
 
-      const debitAccountWidget = await this.page.evaluateHandle(() => {
-        const widgets = Array.from(document.querySelectorAll('[data-qa-type^="atomPanel widget widget-debit"]'));
-        // Find first debit account
-        return widgets[0];
-      });
+      const transferUrl = `https://www.tbank.ru/mybank/payments/persons/phone/?predefined=%7B%22accountId%22%3A%225564362781%22%2C%22moneyAmount%22%3A%22%3AmoneyAmount%22%2C%22phone%22%3A%22%2B79166435494%22%7D&requiredParams=%5B%22accountId%22%5D`;
 
-      if (!debitAccountWidget || debitAccountWidget.asElement() === null) {
-        throw new Error('Could not find debit account widget');
-      }
-
-      const debitLink = await debitAccountWidget.asElement().$('a[data-qa-type="link click-area"]');
-      if (!debitLink) {
-        throw new Error('Could not find link in debit account widget');
-      }
-
-      await debitLink.click();
-      await this.page.waitForNavigation({
+      await this.page.goto(transferUrl, {
         waitUntil: 'networkidle2',
         timeout: 15000
-      }).catch(e => console.log('[TBANK→SBP] Navigation timeout:', e.message));
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Step 3: Click "Перевести" button
-      console.log('[TBANK→SBP] Шаг 3/7: Нажатие кнопки "Перевести"...');
-
-      const transferButton = await this.page.evaluateHandle(() => {
-        const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="transferButton"]'));
-        return buttons.find(btn => btn.textContent.includes('Перевести'));
       });
 
-      if (!transferButton || transferButton.asElement() === null) {
-        throw new Error('Could not find "Перевести" button');
-      }
-
-      await transferButton.asElement().click();
-      await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
-
-      // Step 4: Click "Себе" button
-      console.log('[TBANK→SBP] Шаг 4/7: Нажатие "Себе"...');
-
-      const selfButton = await this.page.evaluateHandle(() => {
-        const divs = Array.from(document.querySelectorAll('div[data-qa-type*="contactItem"]'));
-        const selfDiv = divs.find(div => {
-          const paragraph = div.querySelector('p[data-qa-type="tui/typography"]');
-          return paragraph && paragraph.textContent.trim() === 'Себе';
-        });
-        return selfDiv ? selfDiv.querySelector('button') : null;
-      });
-
-      if (!selfButton || selfButton.asElement() === null) {
-        throw new Error('Could not find "Себе" button');
-      }
-
-      await selfButton.asElement().click();
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Step 5: Get current account balance (from the selector on the page)
