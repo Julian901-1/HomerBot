@@ -1863,8 +1863,22 @@ export class TBankAutomation {
         await new Promise(resolve => setTimeout(resolve, checkInterval));
 
         const hasConfirmationText = await this.page.evaluate(text => {
-          const bodyText = document.body ? document.body.textContent || '' : '';
-          return bodyText.includes(text);
+          if (!document.body) return false;
+
+          const elements = Array.from(document.body.querySelectorAll('*'));
+          return elements.some(element => {
+            if (!element.textContent || !element.textContent.includes(text)) {
+              return false;
+            }
+
+            const style = window.getComputedStyle(element);
+            if (!style || style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+              return false;
+            }
+
+            const rect = element.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
         }, confirmationText);
 
         if (hasConfirmationText) {
@@ -1879,46 +1893,6 @@ export class TBankAutomation {
       if (smsConfirmationRequired) {
         console.log('[TBANK→SBP] ⚠️ Обнаружено требование СМС-подтверждения перевода');
         console.log('[TBANK→SBP] Ожидание СМС-кода для подтверждения перевода...');
-
-        // Try to focus the OTP input field if it exists
-        const otpSelector = await this.page.evaluate(() => {
-          const patterns = [
-            '[automation-id="otp-input"]',
-            '[data-qa-type*="otp"]',
-            '[data-qa-type*="code"]'
-          ];
-
-          for (const selector of patterns) {
-            const candidate = document.querySelector(selector);
-            if (candidate) {
-              return selector;
-            }
-          }
-
-          const inputs = Array.from(document.querySelectorAll('input[type="tel"], input[type="text"]'));
-          const visibleInput = inputs.find(inp => {
-            const rect = inp.getBoundingClientRect();
-            return rect.width > 0 && rect.height > 0;
-          });
-
-          if (!visibleInput) {
-            return null;
-          }
-
-          if (visibleInput.id) return `#${visibleInput.id}`;
-          if (visibleInput.name) return `input[name="${visibleInput.name}"]`;
-          if (visibleInput.classList.length > 0) return `.${visibleInput.classList[0]}`;
-
-          return null;
-        });
-
-        if (otpSelector) {
-          try {
-            await this.page.focus(otpSelector);
-          } catch (err) {
-            console.log(`[TBANK→SBP] Не удалось сфокусироваться на поле ввода СМС-кода (${err.message}), продолжаем без фокуса`);
-          }
-        }
 
         const smsCode = await this.waitForUserInput('sms');
         console.log(`[TBANK→SBP] Получен СМС-код: ${smsCode}, вводим через клавиатуру...`);
