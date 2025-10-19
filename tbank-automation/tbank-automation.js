@@ -1773,8 +1773,12 @@ export class TBankAutomation {
       console.log('[TBANK→SBP] Шаг 4/7: Нажатие "Себе"...');
 
       const selfButton = await this.page.evaluateHandle(() => {
-        const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="contactItem"]'));
-        return buttons.find(btn => btn.textContent.includes('Себе'));
+        const divs = Array.from(document.querySelectorAll('div[data-qa-type*="contactItem"]'));
+        const selfDiv = divs.find(div => {
+          const paragraph = div.querySelector('p[data-qa-type="tui/typography"]');
+          return paragraph && paragraph.textContent.trim() === 'Себе';
+        });
+        return selfDiv ? selfDiv.querySelector('button') : null;
       });
 
       if (!selfButton || selfButton.asElement() === null) {

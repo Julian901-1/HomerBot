@@ -811,31 +811,16 @@ app.post('/api/evening-transfer', async (req, res) => {
     // Stop SMS queue checker after successful login
     clearInterval(smsQueueChecker);
 
-    // STEP 2: Get T-Bank debit balance
-    console.log(`[API] Step 3: Getting T-Bank debit balance...`);
-    const debitAccounts = await tbankAutomation.getAccounts();
-    if (!debitAccounts || debitAccounts.length === 0) {
-      throw new Error('No T-Bank debit accounts found');
-    }
-
-    const totalBalance = debitAccounts.reduce((sum, acc) => sum + acc.balance, 0);
-    console.log(`[API] ✅ Total T-Bank balance: ${totalBalance} RUB`);
-
-    if (totalBalance <= 0) {
-      await tbankAutomation.close();
-      return res.json({
-        success: true,
-        message: 'No funds to transfer (balance is 0)'
-      });
-    }
-
-    // STEP 3: Transfer from T-Bank to Alfa via SBP
-    console.log(`[API] Step 4: Transferring ${totalBalance} RUB from T-Bank to Alfa via SBP...`);
-    const transferResult = await tbankAutomation.transferViaSBP(FIXED_ALFA_PHONE, totalBalance);
+    // STEP 2: Transfer from T-Bank to Alfa via SBP
+    // Amount will be parsed from the page during transfer (step 5)
+    console.log(`[API] Step 3: Starting SBP transfer from T-Bank to Alfa...`);
+    const transferResult = await tbankAutomation.transferViaSBP(FIXED_ALFA_PHONE, null);
     if (!transferResult.success) {
       throw new Error(`T-Bank SBP transfer failed: ${transferResult.error}`);
     }
-    console.log(`[API] ✅ T-Bank -> Alfa SBP transfer successful`);
+
+    const transferredAmount = transferResult.amount;
+    console.log(`[API] ✅ T-Bank -> Alfa SBP transfer successful: ${transferredAmount} RUB`);
 
     // Close T-Bank browser
     await tbankAutomation.close();
@@ -884,8 +869,8 @@ app.post('/api/evening-transfer', async (req, res) => {
     clearInterval(alfaSmsQueueChecker);
 
     // STEP 6: Transfer from Alfa debit to Alfa saving
-    console.log(`[API] Step 8: Transferring ${totalBalance} RUB from Alfa debit to saving...`);
-    const alfaTransferResult = await alfaAutomation.transferToAlfaSaving(alfaSavingAccountId, totalBalance);
+    console.log(`[API] Step 8: Transferring ${transferredAmount} RUB from Alfa debit to saving...`);
+    const alfaTransferResult = await alfaAutomation.transferToAlfaSaving(alfaSavingAccountId, transferredAmount);
     if (!alfaTransferResult.success) {
       throw new Error(`Alfa debit -> saving transfer failed: ${alfaTransferResult.error}`);
     }
@@ -900,7 +885,7 @@ app.post('/api/evening-transfer', async (req, res) => {
     res.json({
       success: true,
       message: 'Evening transfer completed',
-      amount: totalBalance
+      amount: transferredAmount
     });
 
   } catch (error) {
