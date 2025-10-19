@@ -437,14 +437,26 @@ export class TBankAutomation {
           console.log('[TBANK] Question:', questionText);
           console.log('[TBANK] Input field:', firstInput.automationId);
 
-          // Ask user for input
-          const userAnswer = await this.waitForUserInput('dynamic-question', {
-            question: questionText,
-            fieldType: firstInput.automationId,
-            inputType: firstInput.type
-          });
+          // Check if we can auto-answer this question
+          let userAnswer = null;
 
-          console.log('[TBANK] Received answer from user, typing into field...');
+          // Auto-answer for card number question
+          if (firstInput.automationId === 'card-input' && process.env.FIXED_TBANK_CARD_NUMBER) {
+            console.log('[TBANK] Auto-answering card number question from environment variable');
+            userAnswer = process.env.FIXED_TBANK_CARD_NUMBER;
+          }
+
+          // If no auto-answer, ask user for input
+          if (!userAnswer) {
+            userAnswer = await this.waitForUserInput('dynamic-question', {
+              question: questionText,
+              fieldType: firstInput.automationId,
+              inputType: firstInput.type
+            });
+            console.log('[TBANK] Received answer from user, typing into field...');
+          } else {
+            console.log('[TBANK] Using auto-answer, typing into field...');
+          }
 
           // Type the answer into the field with human-like delays
           const inputSelector = `[automation-id="${firstInput.automationId}"]`;
