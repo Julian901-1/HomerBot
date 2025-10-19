@@ -1012,6 +1012,7 @@ app.post('/api/evening-transfer-step2', async (req, res) => {
  */
 app.post('/api/morning-transfer', async (req, res) => {
   let alfaAutomation = null;
+  let alfaSmsQueueChecker = null;
 
   try {
     const { username, amount } = req.body;
@@ -1047,6 +1048,22 @@ app.post('/api/morning-transfer', async (req, res) => {
       encryptionService: null
     });
 
+    // Poll SMS queue (like evening flow) to auto-submit codes when pending
+    alfaSmsQueueChecker = setInterval(() => {
+      if (!alfaAutomation) return;
+      const pendingType = alfaAutomation.getPendingInputType();
+      if (pendingType === 'alfa_sms') {
+        const queueKey = `alfa_${username}`;
+        const queuedSMS = smsCodeQueue.get(queueKey);
+        if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
+          const submitted = alfaAutomation.submitAlfaSMSCode(queuedSMS.code);
+          if (submitted) {
+            smsCodeQueue.delete(queueKey);
+          }
+        }
+      }
+    }, 500);
+
     console.log(`[API] Step 2: Logging in to Alfa-Bank...`);
     const alfaLoginResult = await alfaAutomation.loginAlfa();
     if (!alfaLoginResult.success) {
@@ -1069,6 +1086,11 @@ app.post('/api/morning-transfer', async (req, res) => {
     }
     console.log(`[API] ✅ Alfa -> T-Bank SBP transfer successful (${transferResult.amount || transferAmount} RUB)`);
 
+    if (alfaSmsQueueChecker) {
+      clearInterval(alfaSmsQueueChecker);
+      alfaSmsQueueChecker = null;
+    }
+
     // Close Alfa browser
     await alfaAutomation.close();
     alfaAutomation = null;
@@ -1083,6 +1105,11 @@ app.post('/api/morning-transfer', async (req, res) => {
 
   } catch (error) {
     console.error('[API] ❌ Morning transfer error:', error);
+
+    if (alfaSmsQueueChecker) {
+      clearInterval(alfaSmsQueueChecker);
+      alfaSmsQueueChecker = null;
+    }
 
     // Cleanup browser on error
     if (alfaAutomation) {
