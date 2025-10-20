@@ -52,6 +52,52 @@ export class AlfaAutomation {
   }
 
   /**
+   * Wait for selector with retry logic
+   * @param {string} selector - CSS selector to wait for
+   * @param {Object} options - Options object with timeout, retries, etc.
+   * @returns {Promise<ElementHandle>}
+   */
+  async waitForSelectorWithRetry(selector, options = {}) {
+    const {
+      timeout = 30000,
+      retries = 3,
+      retryDelay = 2000,
+      visible = false,
+      hidden = false
+    } = options;
+
+    let lastError;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`[ALFA-RETRY] Попытка ${attempt}/${retries}: Ожидание элемента "${selector}"...`);
+
+        const element = await this.page.waitForSelector(selector, {
+          timeout,
+          visible,
+          hidden
+        });
+
+        console.log(`[ALFA-RETRY] ✅ Элемент "${selector}" найден на попытке ${attempt}`);
+        return element;
+
+      } catch (error) {
+        lastError = error;
+        console.log(`[ALFA-RETRY] ⚠️ Попытка ${attempt}/${retries} неудачна для "${selector}": ${error.message}`);
+
+        if (attempt < retries) {
+          console.log(`[ALFA-RETRY] Ожидание ${retryDelay}ms перед следующей попыткой...`);
+          await this.sleep(retryDelay);
+        }
+      }
+    }
+
+    // All retries failed
+    console.log(`[ALFA-RETRY] ❌ Все ${retries} попытки исчерпаны для "${selector}"`);
+    throw lastError;
+  }
+
+  /**
    * Take base64 screenshot for logging
    * @param {string} context - Context description
    */
@@ -1209,7 +1255,7 @@ export class AlfaAutomation {
       await waitBetweenSteps();
 
       console.log('[ALFA→TBANK] Этап 2/11: Ввод номера телефона получателя');
-      await this.page.waitForSelector('input[data-test-id="phone-intl-input"]', { timeout: 15000 });
+      await this.waitForSelectorWithRetry('input[data-test-id="phone-intl-input"]', { timeout: 15000, retries: 3 });
       const trimmedPhone = typeof recipientPhone === 'string' ? recipientPhone.trim() : '';
       const normalizedPhone = trimmedPhone
         ? (trimmedPhone.startsWith('+') ? trimmedPhone : `+${trimmedPhone}`)
@@ -1257,7 +1303,7 @@ export class AlfaAutomation {
       console.log('[ALFA→TBANK] Ожидание загрузки списка банков...');
       // Wait for bank options to load after clicking "Себе в другой банк"
       // Using the selector from your HTML: div[data-test-id="recipient-select-option"]
-      await this.page.waitForSelector('div[data-test-id="recipient-select-option"]', { timeout: 60000 });
+      await this.waitForSelectorWithRetry('div[data-test-id="recipient-select-option"]', { timeout: 30000, retries: 3 });
       await this.sleep(2000); // Additional 2s to ensure all options are rendered
 
       console.log('[ALFA→TBANK] Этап 4/11: Выбор банка "Т-Банк"');
@@ -1332,7 +1378,7 @@ export class AlfaAutomation {
       await waitBetweenSteps();
 
       console.log('[ALFA→TBANK] Этап 8/11: Нажатие "Перевести"');
-      await this.page.waitForSelector('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]', { timeout: 15000 });
+      await this.waitForSelectorWithRetry('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]', { timeout: 15000, retries: 3 });
       await this.page.click('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]');
       await waitBetweenSteps();
 
