@@ -1091,6 +1091,14 @@ app.post('/api/morning-transfer', async (req, res) => {
 
     // === CLEAN UP SESSION BEFORE STAGE 2 (memory optimization for Render 512MB limit) ===
     console.log('[API] 🧹 Closing Alfa session and clearing cache before STAGE 2...');
+
+    // CRITICAL: Stop SMS queue checker BEFORE closing alfaAutomation to prevent race condition crash
+    if (alfaSmsQueueChecker) {
+      clearInterval(alfaSmsQueueChecker);
+      alfaSmsQueueChecker = null;
+      console.log('[API] ✅ SMS queue checker stopped');
+    }
+
     await alfaAutomation.close();
     alfaAutomation = null; // Release reference
     console.log('[API] ✅ Alfa session closed, cache cleared');
@@ -1117,6 +1125,23 @@ app.post('/api/morning-transfer', async (req, res) => {
       cardNumber: FIXED_ALFA_CARD,
       encryptionService: null
     });
+
+    // Re-create SMS queue checker for Stage 2 (needed for re-login)
+    alfaSmsQueueChecker = setInterval(() => {
+      if (!alfaAutomation) return;
+      const pendingType = alfaAutomation.getPendingInputType();
+      if (pendingType === 'alfa_sms') {
+        const queueKey = `alfa_${username}`;
+        const queuedSMS = smsCodeQueue.get(queueKey);
+        if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
+          const submitted = alfaAutomation.submitAlfaSMSCode(queuedSMS.code);
+          if (submitted) {
+            smsCodeQueue.delete(queueKey);
+          }
+        }
+      }
+    }, 500);
+    console.log('[API] ✅ SMS queue checker re-created for Stage 2');
 
     console.log('[API] Step 4b: Re-logging in to Alfa-Bank for Stage 2...');
     const alfaLoginResult2 = await alfaAutomation.loginAlfa();
