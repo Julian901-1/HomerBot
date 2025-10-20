@@ -1098,9 +1098,33 @@ app.post('/api/morning-transfer', async (req, res) => {
     console.log(`[API]    External: ${(memAfterStage1.external / 1024 / 1024).toFixed(2)} MB`);
 
     // === STAGE 2: ALFA→TBANK ===
-    // NOTE: No cleanup/re-login needed - continue with same Alfa session (like evening transfer)
-    // Memory usage is low (~90MB), cleanup causes crashes, so we continue without it
+    // NOTE: No re-login needed - continue with same Alfa session
     console.log('[API] === STAGE 2/2: ALFA→TBANK ===');
+
+    // Clear browser cache to free memory (but keep session alive)
+    try {
+      console.log('[API] 🧹 Clearing browser cache before Stage 2...');
+      const client = await alfaAutomation.page.target().createCDPSession();
+      await client.send('Network.clearBrowserCookies');
+      await client.send('Network.clearBrowserCache');
+      console.log('[API] ✅ Browser cache cleared');
+
+      // Run garbage collection if available
+      if (global.gc) {
+        console.log('[API] 🧹 Running garbage collection...');
+        global.gc();
+        console.log('[API] ✅ Garbage collection complete');
+      }
+
+      // Log memory after cache clear
+      const memAfterCacheClear = process.memoryUsage();
+      console.log('[API] 📊 Memory after cache clear:');
+      console.log(`[API]    RSS: ${(memAfterCacheClear.rss / 1024 / 1024).toFixed(2)} MB`);
+      console.log(`[API]    Heap Used: ${(memAfterCacheClear.heapUsed / 1024 / 1024).toFixed(2)} MB`);
+
+    } catch (cacheError) {
+      console.log('[API] ⚠️ Cache clear failed (non-fatal):', cacheError.message);
+    }
 
     const sbpAmount = transferAmount != null ? transferAmount : null;
     const sbpAmountLabel = sbpAmount != null ? `${sbpAmount}` : 'full balance';
