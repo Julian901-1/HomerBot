@@ -98,7 +98,7 @@ export class AlfaAutomation {
     // 2. Cause server restart on platforms like Render
     // 3. Not needed - each Puppeteer instance manages its own isolated browser process
 
-    this.browser = await puppeteer.launch({
+    const launchOptions = {
       headless: true,
       args: [
         '--no-sandbox',
@@ -128,7 +128,17 @@ export class AlfaAutomation {
         // MEMORY OPTIMIZATION: Removed '--single-process' as it causes memory leaks
         // Single-process mode forces all Chromium processes into one, causing poor memory management
       ]
-    });
+    };
+
+    // IMPORTANT: puppeteer-core requires executablePath
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      console.log(`[ALFA-BROWSER] Using Chrome from: ${process.env.PUPPETEER_EXECUTABLE_PATH}`);
+    } else {
+      throw new Error('PUPPETEER_EXECUTABLE_PATH environment variable is required when using puppeteer-core');
+    }
+
+    this.browser = await puppeteer.launch(launchOptions);
 
     this.page = await this.browser.newPage();
 

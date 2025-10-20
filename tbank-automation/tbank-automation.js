@@ -84,9 +84,12 @@ export class TBankAutomation {
       // DISK SPACE OPTIMIZATION: No userDataDir - stateless browser
     };
 
+    // IMPORTANT: puppeteer-core requires executablePath
     if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       console.log(`[TBANK] Using Chrome from: ${process.env.PUPPETEER_EXECUTABLE_PATH}`);
+    } else {
+      throw new Error('PUPPETEER_EXECUTABLE_PATH environment variable is required when using puppeteer-core');
     }
 
     this.browser = await puppeteer.launch(launchOptions);
