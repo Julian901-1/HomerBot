@@ -198,7 +198,7 @@ export class AlfaAutomation {
       await this.randomDelay(2000, 4000);
 
       console.log('[ALFA-LOGIN] Этап 2/9: Ввод номера телефона');
-      await this.page.waitForSelector('input[data-test-id="phoneInput"]', { timeout: 10000 });
+      await this.page.waitForSelector('input[data-test-id="phoneInput"]', { timeout: 30000 });
       await this.page.type('input[data-test-id="phoneInput"]', phone, { delay: 100 });
       await this.randomDelay(500, 1000);
 
@@ -207,7 +207,7 @@ export class AlfaAutomation {
       await this.randomDelay(2000, 3000);
 
       console.log('[ALFA-LOGIN] Этап 4/9: Ввод номера карты');
-      await this.page.waitForSelector('input[data-test-id="card-input"]', { timeout: 10000 });
+      await this.page.waitForSelector('input[data-test-id="card-input"]', { timeout: 30000 });
       await this.page.type('input[data-test-id="card-input"]', cardNumber, { delay: 100 });
       await this.randomDelay(500, 1000);
 
@@ -224,12 +224,12 @@ export class AlfaAutomation {
       await this.waitForAlfaSMSCode(120000); // 2 minutes timeout
 
       console.log('[ALFA-LOGIN] Этап 7/9: Ввод SMS-кода');
-      await this.page.waitForSelector('input.code-input__input_71x65', { timeout: 10000 });
+      await this.page.waitForSelector('input.code-input__input_71x65', { timeout: 30000 });
       await this.enterAlfaSMSCode(this.alfaSmsCode);
       await this.randomDelay(2000, 4000);
 
       console.log('[ALFA-LOGIN] Этап 8/9: Проверка успешной авторизации');
-      const postLoginTimeout = 30000;
+      const postLoginTimeout = 60000; // Increased to 60 seconds for slow page loads
       const pollInterval = 1000;
       const postLoginStart = Date.now();
       let dashboardReached = false;
@@ -300,13 +300,13 @@ export class AlfaAutomation {
       }
 
       if (!dashboardReached && !trustPromptVisible) {
-        throw new Error('Не удалось подтвердить успешную авторизацию: ни дашборд, ни диалог доверия не появились в течение 30 секунд');
+        throw new Error('Не удалось подтвердить успешную авторизацию: ни дашборд, ни диалог доверия не появились в течение 60 секунд');
       }
 
-      console.log('[ALFA-LOGIN] Этап 9/9: Проверка диалога "Доверять устройству?" (ожидание до 40 секунд)');
+      console.log('[ALFA-LOGIN] Этап 9/9: Проверка диалога "Доверять устройству?" (ожидание до 60 секунд)');
 
-      // Wait up to 40 seconds for trust dialog to appear (even if dashboard already reached)
-      const trustDialogTimeout = 40000;
+      // Wait up to 60 seconds for trust dialog to appear (even if dashboard already reached)
+      const trustDialogTimeout = 60000;
       const trustDialogCheckInterval = 1000;
       const trustDialogCheckStart = Date.now();
       let trustDialogFound = false;
@@ -1237,7 +1237,7 @@ export class AlfaAutomation {
       console.log('[ALFA→TBANK] Ожидание загрузки списка банков...');
       // Wait for bank options to load after clicking "Себе в другой банк"
       // Using the selector from your HTML: div[data-test-id="recipient-select-option"]
-      await this.page.waitForSelector('div[data-test-id="recipient-select-option"]', { timeout: 30000 });
+      await this.page.waitForSelector('div[data-test-id="recipient-select-option"]', { timeout: 60000 });
       await this.sleep(2000); // Additional 2s to ensure all options are rendered
 
       console.log('[ALFA→TBANK] Этап 4/11: Выбор банка "Т-Банк"');
