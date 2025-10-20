@@ -61,7 +61,7 @@ export class AlfaAutomation {
     const {
       timeout = 30000,
       retries = 3,
-      retryDelay = 2000,
+      retryDelay = 5000, // Increased to 5 seconds for slow page loads
       visible = false,
       hidden = false
     } = options;
@@ -254,7 +254,7 @@ export class AlfaAutomation {
       await this.randomDelay(2000, 4000);
 
       console.log('[ALFA-LOGIN] Этап 2/9: Ввод номера телефона');
-      await this.page.waitForSelector('input[data-test-id="phoneInput"]', { timeout: 30000 });
+      await this.waitForSelectorWithRetry('input[data-test-id="phoneInput"]', { timeout: 30000, retries: 3 });
       await this.page.type('input[data-test-id="phoneInput"]', phone, { delay: 100 });
       await this.randomDelay(500, 1000);
 
@@ -263,7 +263,7 @@ export class AlfaAutomation {
       await this.randomDelay(2000, 3000);
 
       console.log('[ALFA-LOGIN] Этап 4/9: Ввод номера карты');
-      await this.page.waitForSelector('input[data-test-id="card-input"]', { timeout: 30000 });
+      await this.waitForSelectorWithRetry('input[data-test-id="card-input"]', { timeout: 30000, retries: 3 });
       await this.page.type('input[data-test-id="card-input"]', cardNumber, { delay: 100 });
       await this.randomDelay(500, 1000);
 
@@ -280,7 +280,7 @@ export class AlfaAutomation {
       await this.waitForAlfaSMSCode(120000); // 2 minutes timeout
 
       console.log('[ALFA-LOGIN] Этап 7/9: Ввод SMS-кода');
-      await this.page.waitForSelector('input.code-input__input_71x65', { timeout: 30000 });
+      await this.waitForSelectorWithRetry('input.code-input__input_71x65', { timeout: 30000, retries: 3 });
       await this.enterAlfaSMSCode(this.alfaSmsCode);
       await this.randomDelay(2000, 4000);
 
@@ -1356,7 +1356,7 @@ export class AlfaAutomation {
       await waitBetweenSteps();
 
       console.log('[ALFA→TBANK] Этап 6/11: Ввод суммы');
-      await this.page.waitForSelector('input[name="amount"]', { timeout: 15000 });
+      await this.waitForSelectorWithRetry('input[name="amount"]', { timeout: 15000, retries: 3 });
       const amountInputValue = transferAmount.toFixed(2).replace('.', ',');
       await this.page.evaluate(value => {
         const input = document.querySelector('input[name="amount"]');
@@ -1373,7 +1373,7 @@ export class AlfaAutomation {
       await waitBetweenSteps();
 
       console.log('[ALFA→TBANK] Этап 7/11: Нажатие "Продолжить"');
-      await this.page.waitForSelector('button[type="submit"]', { timeout: 15000 });
+      await this.waitForSelectorWithRetry('button[type="submit"]', { timeout: 15000, retries: 3 });
       await this.page.click('button[type="submit"]');
       await waitBetweenSteps();
 
@@ -1392,7 +1392,7 @@ export class AlfaAutomation {
       console.log('[ALFA→TBANK] Этап 10/11: Ввод SMS-кода');
       console.log(`[ALFA→TBANK] 📝 SMS-код для ввода: "${this.alfaSmsCode}" (длина: ${this.alfaSmsCode ? this.alfaSmsCode.length : 0})`);
 
-      await this.page.waitForSelector('input.KRyR4.uokLS', { timeout: 15000 });
+      await this.waitForSelectorWithRetry('input.KRyR4.uokLS', { timeout: 15000, retries: 3 });
       const codeInputs = await this.page.$$('input.KRyR4.uokLS');
 
       console.log(`[ALFA→TBANK] 📊 Найдено ${codeInputs.length} полей для ввода кода`);
