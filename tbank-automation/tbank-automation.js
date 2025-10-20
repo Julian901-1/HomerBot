@@ -2019,7 +2019,7 @@ export class TBankAutomation {
         console.log('[TBANK🌅] ⚠️ Таймаут навигации (некритично), продолжаем выполнение...');
       }
 
-      await this.page.waitForTimeout(3000);
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       await this.takeScreenshot('morning-post-transfer-before');
 
@@ -2060,7 +2060,7 @@ export class TBankAutomation {
       }
 
       console.log('[TBANK🌅] ✅ Кнопка "Пополнить" нажата');
-      await this.page.waitForTimeout(2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Шаг 20: баннер "Со счёта Альфа-Банка"
       console.log('[TBANK🌅] 20/23: выбираем "Со счёта в Альфа-Банке"...');
@@ -2069,7 +2069,7 @@ export class TBankAutomation {
         throw new Error('Не удалось выбрать пункт "Со счёта в Альфа-Банке"');
       }
 
-      await this.page.waitForTimeout(waitAfterSourceMs);
+      await new Promise(resolve => setTimeout(resolve, waitAfterSourceMs));
 
       // Шаг 21: выбор счёта по маске
       console.log(`[TBANK🌅] 21/23: ищем счёт с маской ${sourceAccountMask}...`);
@@ -2096,7 +2096,7 @@ export class TBankAutomation {
       if (!accountSelected) {
         throw new Error(`Не удалось выбрать счёт с маской ${sourceAccountMask}`);
       }
-      await this.page.waitForTimeout(2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Шаг 22: кнопка "Всё"
       console.log('[TBANK🌅] 22/23: нажимаем "Всё"...');
@@ -2104,7 +2104,7 @@ export class TBankAutomation {
       if (!allClicked) {
         throw new Error('Не удалось нажать кнопку "Всё"');
       }
-      await this.page.waitForTimeout(1500);
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
       // Шаг 23: кнопка "Перевести"
       console.log('[TBANK🌅] 23/23: подтверждаем перевод...');
@@ -2138,7 +2138,7 @@ export class TBankAutomation {
       }
 
       await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
-      await this.page.waitForTimeout(3000);
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       await this.takeScreenshot('morning-post-transfer-after');
       console.log('[TBANK🌅] ✅ Шаги 19-23 выполнены успешно');
