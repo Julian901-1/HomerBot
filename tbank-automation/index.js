@@ -1372,21 +1372,36 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
     console.log('[API] ✅ STAGE 2 completed: ALFA→TBANK');
 
     // Cleanup Alfa
+    console.log('[API] Cleaning up Alfa browser and SMS checker...');
     if (alfaSmsQueueChecker) {
       clearInterval(alfaSmsQueueChecker);
       alfaSmsQueueChecker = null;
+      console.log('[API] ✅ Alfa SMS checker cleared');
     }
 
-    await alfaAutomation.close();
-    alfaAutomation = null;
+    console.log('[API] Closing Alfa browser...');
+    try {
+      await alfaAutomation.close();
+      alfaAutomation = null;
+      console.log('[API] ✅ Alfa browser closed successfully');
+    } catch (closeError) {
+      console.error('[API] ⚠️ Error closing Alfa browser (continuing anyway):', closeError.message);
+      alfaAutomation = null;
+    }
 
     if (global.gc) {
       console.log('[API] 🧹 Running garbage collection after STAGE 2...');
-      global.gc();
+      try {
+        global.gc();
+        console.log('[API] ✅ Garbage collection completed');
+      } catch (gcError) {
+        console.error('[API] ⚠️ Garbage collection error (continuing anyway):', gcError.message);
+      }
     }
 
     // === STAGE 3: TBANK post-transfer steps (19-23) ===
     console.log('[API] === STAGE 3: TBANK post-transfer steps 19-23 ===');
+    console.log('[API] Preparing to start T-Bank automation...');
 
     const tbankSourceMask = process.env.TBANK_POST_TRANSFER_ACCOUNT_MASK || '7167';
     const rawTbankWaitMs = parseInt(process.env.TBANK_POST_TRANSFER_WAIT_MS || '', 10);
@@ -1455,7 +1470,8 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[API] ❌ ALFA→TBANK with T-Bank steps error:', error);
+    console.error('[API] ❌ ALFA→TBANK with T-Bank steps error:', error.message);
+    console.error('[API] ❌ Error stack:', error.stack);
 
     if (alfaSmsQueueChecker) {
       clearInterval(alfaSmsQueueChecker);

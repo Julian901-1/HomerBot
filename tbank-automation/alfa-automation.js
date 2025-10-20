@@ -966,9 +966,6 @@ export class AlfaAutomation {
 
       console.log('[ALFA→SAVING] ✅ Перевод успешно завершён');
 
-      // MEMORY OPTIMIZATION: Clean up CDP sessions after operation
-      await this.cleanupCDPSessions();
-
       return { success: true, amount };
 
     } catch (error) {
@@ -1254,9 +1251,6 @@ export class AlfaAutomation {
       console.log('[SAVING→ALFA] Этап 6/6: Проверка успешности перевода');
       console.log('[SAVING→ALFA] ✅ Перевод успешно завершён');
 
-      // MEMORY OPTIMIZATION: Clean up CDP sessions after operation
-      await this.cleanupCDPSessions();
-
       return { success: true, amount };
 
     } catch (error) {
@@ -1509,12 +1503,6 @@ export class AlfaAutomation {
       this.alfaSmsCode = null;
 
       console.log('[ALFA→TBANK] ✅ Перевод успешно завершён');
-
-      // Take final success screenshot
-      await this.takeScreenshot('alfa-to-tbank-success');
-
-      // MEMORY OPTIMIZATION: Clean up CDP sessions after operation
-      await this.cleanupCDPSessions();
 
       return { success: true, amount: transferAmount };
 
