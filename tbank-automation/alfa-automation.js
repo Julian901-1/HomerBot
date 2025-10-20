@@ -280,6 +280,7 @@ export class AlfaAutomation {
       await this.waitForAlfaSMSCode(120000); // 2 minutes timeout
 
       console.log('[ALFA-LOGIN] Этап 7/9: Ввод SMS-кода');
+      console.log(`[ALFA-LOGIN] 📝 SMS-код для ввода: "${this.alfaSmsCode}" (длина: ${this.alfaSmsCode ? this.alfaSmsCode.length : 0})`);
       await this.waitForSelectorWithRetry('input.code-input__input_71x65', { timeout: 30000, retries: 3 });
       await this.enterAlfaSMSCode(this.alfaSmsCode);
       await this.randomDelay(2000, 4000);
@@ -493,6 +494,10 @@ export class AlfaAutomation {
    * Wait for Alfa SMS code
    */
   async waitForAlfaSMSCode(timeout = 120000) {
+    // Clear any old SMS code from memory before waiting for a new one
+    console.log('[ALFA-SMS] 🧹 Очистка старого SMS-кода перед ожиданием нового');
+    this.alfaSmsCode = null;
+
     return new Promise((resolve, reject) => {
       this.alfaSmsCodeResolver = resolve;
 
@@ -512,14 +517,17 @@ export class AlfaAutomation {
   submitAlfaSMSCode(code) {
     // Only log if this is a new code (prevent spam from 500ms interval checker)
     if (this.alfaSmsCode !== code) {
-      console.log(`[ALFA-LOGIN] Получен SMS-код: ${code}`);
+      console.log(`[ALFA-SMS] 📨 Получен новый SMS-код: ${code}`);
       this.alfaSmsCode = code;
     }
 
     if (this.alfaSmsCodeResolver) {
+      console.log(`[ALFA-SMS] ✅ SMS-код передан в ожидающий процесс: ${code}`);
       clearTimeout(this.alfaSmsCodeTimeout);
       this.alfaSmsCodeResolver(code);
       this.alfaSmsCodeResolver = null;
+    } else {
+      console.log(`[ALFA-SMS] ⚠️ SMS-код получен, но никто его не ждёт (будет сохранён в памяти): ${code}`);
     }
   }
 
