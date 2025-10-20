@@ -1098,39 +1098,48 @@ app.post('/api/morning-transfer', async (req, res) => {
     console.log(`[API]    External: ${(memAfterStage1.external / 1024 / 1024).toFixed(2)} MB`);
 
     // === STAGE 2: ALFA→TBANK ===
-    // NOTE: No re-login needed - continue with same Alfa session
     console.log('[API] === STAGE 2/2: ALFA→TBANK ===');
 
-    // Clear browser cache to free memory (but keep session alive)
-    try {
-      console.log('[API] 🧹 Clearing browser cache before Stage 2...');
-      const client = await alfaAutomation.page.target().createCDPSession();
-      await client.send('Network.clearBrowserCookies');
-      await client.send('Network.clearBrowserCache');
-      console.log('[API] ✅ Browser cache cleared');
+    // IMPORTANT: Close browser after Stage 1 and re-login for Stage 2
+    // This ensures clean state and prevents errors in transfer flow
+    console.log('[API] Step 3: Closing Stage 1 browser...');
+    await alfaAutomation.close();
+    alfaAutomation = null;
 
-      // Run garbage collection if available
-      if (global.gc) {
-        console.log('[API] 🧹 Running garbage collection...');
-        global.gc();
-        console.log('[API] ✅ Garbage collection complete');
-      }
-
-      // Log memory after cache clear
-      const memAfterCacheClear = process.memoryUsage();
-      console.log('[API] 📊 Memory after cache clear:');
-      console.log(`[API]    RSS: ${(memAfterCacheClear.rss / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`[API]    Heap Used: ${(memAfterCacheClear.heapUsed / 1024 / 1024).toFixed(2)} MB`);
-
-    } catch (cacheError) {
-      console.log('[API] ⚠️ Cache clear failed (non-fatal):', cacheError.message);
+    // Run garbage collection after closing browser
+    if (global.gc) {
+      console.log('[API] 🧹 Running garbage collection after Stage 1...');
+      global.gc();
     }
+
+    // Log memory after Stage 1 cleanup
+    const memAfterStage1Cleanup = process.memoryUsage();
+    console.log('[API] 📊 Memory after Stage 1 cleanup:');
+    console.log(`[API]    RSS: ${(memAfterStage1Cleanup.rss / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`[API]    Heap Used: ${(memAfterStage1Cleanup.heapUsed / 1024 / 1024).toFixed(2)} MB`);
+
+    // Re-create Alfa automation instance for Stage 2
+    console.log(`[API] Step 4: Creating new Alfa-Bank automation instance for Stage 2...`);
+    alfaAutomation = new AlfaAutomation({
+      username,
+      phone: FIXED_ALFA_PHONE,
+      cardNumber: FIXED_ALFA_CARD,
+      encryptionService: null
+    });
+
+    // Re-login to Alfa-Bank
+    console.log(`[API] Step 5: Logging in to Alfa-Bank for Stage 2...`);
+    const alfaLoginResult2 = await alfaAutomation.loginAlfa();
+    if (!alfaLoginResult2.success) {
+      throw new Error(`Alfa-Bank Stage 2 login failed: ${alfaLoginResult2.error}`);
+    }
+    console.log(`[API] ✅ Alfa-Bank Stage 2 login successful`);
 
     const sbpAmount = transferAmount != null ? transferAmount : null;
     const sbpAmountLabel = sbpAmount != null ? `${sbpAmount}` : 'full balance';
 
-    // STEP 3: Transfer from Alfa debit to T-Bank via SBP
-    console.log(`[API] Step 4: Transferring ${sbpAmountLabel} from Alfa debit to T-Bank via SBP...`);
+    // STEP 6: Transfer from Alfa debit to T-Bank via SBP
+    console.log(`[API] Step 6: Transferring ${sbpAmountLabel} from Alfa debit to T-Bank via SBP...`);
 
     const transferResult = await alfaAutomation.transferToTBankSBP(
       alfaSavingAccountId,
@@ -1187,6 +1196,140 @@ app.post('/api/morning-transfer', async (req, res) => {
     // MEMORY OPTIMIZATION: Run GC after error cleanup
     if (global.gc) {
       console.log('[API] 🧹 Running garbage collection after error cleanup...');
+      global.gc();
+    }
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * ALFA→TBANK transfer only (Stage 2)
+ * POST /api/alfa-to-tbank
+ * Body: { username, amount (optional) }
+ */
+app.post('/api/alfa-to-tbank', async (req, res) => {
+  let alfaAutomation = null;
+  let alfaSmsQueueChecker = null;
+
+  try {
+    const { username, amount } = req.body;
+
+    if (!username) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing username'
+      });
+    }
+
+    console.log(`[API] 🔄 ALFA→TBANK transfer requested for ${username}`);
+
+    // Get fixed credentials from environment
+    const FIXED_TBANK_PHONE = process.env.FIXED_TBANK_PHONE;
+    const FIXED_ALFA_PHONE = process.env.FIXED_ALFA_PHONE;
+    const FIXED_ALFA_CARD = process.env.FIXED_ALFA_CARD;
+    const FIXED_ALFA_SAVING_ACCOUNT_ID = process.env.FIXED_ALFA_SAVING_ACCOUNT_ID;
+
+    if (!FIXED_TBANK_PHONE || !FIXED_ALFA_PHONE || !FIXED_ALFA_CARD || !FIXED_ALFA_SAVING_ACCOUNT_ID) {
+      throw new Error('Missing required environment variables');
+    }
+
+    console.log(`[API] ✅ Using credentials from environment variables`);
+    const alfaSavingAccountId = FIXED_ALFA_SAVING_ACCOUNT_ID;
+
+    // STEP 1: Create Alfa automation and login
+    console.log(`[API] Step 1: Creating Alfa-Bank automation instance...`);
+    alfaAutomation = new AlfaAutomation({
+      username,
+      phone: FIXED_ALFA_PHONE,
+      cardNumber: FIXED_ALFA_CARD,
+      encryptionService: null
+    });
+
+    // Poll SMS queue to auto-submit codes when pending
+    alfaSmsQueueChecker = setInterval(() => {
+      if (!alfaAutomation) return;
+      const pendingType = alfaAutomation.getPendingInputType();
+      if (pendingType === 'alfa_sms') {
+        const queueKey = `alfa_${username}`;
+        const queuedSMS = smsCodeQueue.get(queueKey);
+        if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
+          const submitted = alfaAutomation.submitAlfaSMSCode(queuedSMS.code);
+          if (submitted) {
+            smsCodeQueue.delete(queueKey);
+          }
+        }
+      }
+    }, 500);
+
+    console.log(`[API] Step 2: Logging in to Alfa-Bank...`);
+    const alfaLoginResult = await alfaAutomation.loginAlfa();
+    if (!alfaLoginResult.success) {
+      throw new Error(`Alfa-Bank login failed: ${alfaLoginResult.error}`);
+    }
+    console.log(`[API] ✅ Alfa-Bank login successful`);
+
+    // STEP 2: Transfer from Alfa debit to T-Bank via SBP
+    const sbpAmount = amount ?? null; // null => transfer full balance
+    const sbpAmountLabel = sbpAmount != null ? `${sbpAmount}` : 'full balance';
+
+    console.log(`[API] Step 3: Transferring ${sbpAmountLabel} from Alfa debit to T-Bank via SBP...`);
+
+    const transferResult = await alfaAutomation.transferToTBankSBP(
+      alfaSavingAccountId,
+      FIXED_TBANK_PHONE,
+      sbpAmount
+    );
+
+    if (!transferResult.success) {
+      throw new Error(`Alfa -> T-Bank SBP transfer failed: ${transferResult.error}`);
+    }
+    console.log(`[API] ✅ Alfa -> T-Bank SBP transfer successful (${transferResult.amount || amount} RUB)`);
+
+    // Cleanup
+    if (alfaSmsQueueChecker) {
+      clearInterval(alfaSmsQueueChecker);
+      alfaSmsQueueChecker = null;
+    }
+
+    await alfaAutomation.close();
+    alfaAutomation = null;
+
+    if (global.gc) {
+      console.log('[API] 🧹 Running garbage collection...');
+      global.gc();
+    }
+
+    console.log(`[API] 🎉 ALFA→TBANK transfer completed successfully!`);
+
+    res.json({
+      success: true,
+      message: 'ALFA→TBANK transfer completed',
+      amount: transferResult.amount || amount
+    });
+
+  } catch (error) {
+    console.error('[API] ❌ ALFA→TBANK transfer error:', error);
+
+    if (alfaSmsQueueChecker) {
+      clearInterval(alfaSmsQueueChecker);
+      alfaSmsQueueChecker = null;
+    }
+
+    if (alfaAutomation) {
+      try {
+        await alfaAutomation.close();
+      } catch (e) {
+        console.error('[API] Error closing Alfa browser:', e);
+      }
+      alfaAutomation = null;
+    }
+
+    if (global.gc) {
+      console.log('[API] 🧹 Running garbage collection after error...');
       global.gc();
     }
 

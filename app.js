@@ -2305,6 +2305,38 @@ async function testTransferFromAlfa() {
   }
 }
 
+async function testAlfaToTBank() {
+  const btn = document.getElementById('testAlfaToTBankBtn');
+
+  if (btn) btn.disabled = true;
+
+  try {
+    showPopup('🔄 Выполняется перевод с Альфы на Т-Банк (Stage 2)...');
+
+    const response = await fetch(`${TBANK_API_URL}/api/alfa-to-tbank`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username })
+    });
+
+    const resp = await response.json();
+
+    if (resp && resp.success) {
+      showPopup('✅ Перевод ALFA→TBANK выполнен успешно!');
+      console.log('[EVENING_PERCENT] ALFA→TBANK transfer completed:', resp);
+    } else {
+      showPopup('❌ Ошибка: ' + ((resp && resp.error) || 'unknown'));
+    }
+  } catch (e) {
+    console.error('[EVENING_PERCENT] Error in ALFA→TBANK transfer:', e);
+    showPopup('❌ Ошибка сети: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // -------- INIT --------
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
