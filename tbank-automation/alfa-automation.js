@@ -149,7 +149,7 @@ export class AlfaAutomation {
       console.log('[ALFA-LOGIN] Этап 1/9: Переход на web.alfabank.ru');
       await this.page.goto('https://web.alfabank.ru/', {
         waitUntil: 'networkidle2',
-        timeout: 30000
+        timeout: 60000
       });
       await this.randomDelay(2000, 4000);
 
@@ -447,7 +447,8 @@ export class AlfaAutomation {
       const currentUrl = this.page.url();
       if (!currentUrl.includes('/dashboard')) {
         await this.page.goto('https://web.alfabank.ru/dashboard', {
-          waitUntil: 'networkidle2'
+          waitUntil: 'networkidle2',
+          timeout: 60000
         });
         await this.randomDelay(2000, 3000);
       }
@@ -513,7 +514,8 @@ export class AlfaAutomation {
       );
     } catch {
       await this.page.goto('https://web.alfabank.ru/dashboard', {
-        waitUntil: 'domcontentloaded'
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
       });
     }
 
@@ -655,7 +657,7 @@ export class AlfaAutomation {
         console.log(`[ALFA→SAVING] ⚠️ Используем предписанный счёт ${requiredSavingAccountId} вместо переданного ${savingAccountId}`);
       }
       const transferUrl = `https://web.alfabank.ru/transfers/account-to-account?destinationAccount=${requiredSavingAccountId}&type=FROM_ALFA_ACCOUNT`;
-      await this.page.goto(transferUrl, { waitUntil: 'domcontentloaded' });
+      await this.page.goto(transferUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] Этап 2/5: Выбор счёта списания "Расчётный счёт ··7167"');
@@ -780,7 +782,7 @@ export class AlfaAutomation {
 
       console.log('[SAVING→ALFA] Этап 1/6: Переход на страницу перевода между своими счетами');
       const transferUrl = `https://web.alfabank.ru/transfers/account-to-account?sourceAccount=${savingAccountId}`;
-      await this.page.goto(transferUrl, { waitUntil: 'domcontentloaded' });
+      await this.page.goto(transferUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await waitBetweenSteps();
 
       console.log('[SAVING→ALFA] Открытие поля "Куда"...');
@@ -996,7 +998,8 @@ export class AlfaAutomation {
 
       console.log('[ALFA→TBANK] Этап 1/11: Переход на страницу перевода по номеру телефона');
       await this.page.goto('https://web.alfabank.ru/transfers/phone', {
-        waitUntil: 'domcontentloaded'
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
       });
       await waitBetweenSteps();
 
