@@ -38,28 +38,8 @@ export class TBankAutomation {
 
     console.log(`[TBANK] Initializing browser for user ${this.username}`);
 
-    // Use dedicated user data directory for isolated browser state
-    const userDataDir = `./user-data/${this.username}`;
-
-    // Kill any existing browser processes using this userDataDir
-    try {
-      console.log(`[TBANK] Checking for existing browser processes...`);
-      const { exec } = await import('child_process');
-      const { promisify } = await import('util');
-      const execAsync = promisify(exec);
-
-      // Kill Chrome/Chromium processes that might be using this profile
-      if (process.platform === 'win32') {
-        await execAsync('taskkill /F /IM chrome.exe /T 2>nul || exit 0').catch(() => {});
-        await execAsync('taskkill /F /IM chromium.exe /T 2>nul || exit 0').catch(() => {});
-      } else {
-        // Linux/macOS - kill processes using this specific userDataDir
-        await execAsync(`pkill -f "${userDataDir}" || true`).catch(() => {});
-      }
-      console.log(`[TBANK] Cleaned up any existing browser processes`);
-    } catch (err) {
-      console.log(`[TBANK] No existing processes to clean up`);
-    }
+    // DISK SPACE OPTIMIZATION: Removed userDataDir to avoid creating persistent files
+    // Each browser launch is now stateless and creates no disk files
 
     const launchOptions = {
       headless: true,
@@ -86,26 +66,28 @@ export class TBankAutomation {
         '--safebrowsing-disable-auto-update',
         '--disable-default-apps',
         '--no-zygote',
-        '--single-process',
         '--window-size=1366,768',
         '--disable-webrtc',
         '--disable-webrtc-hw-encoding',
         '--disable-webrtc-hw-decoding',
         '--lang=ru-RU',
-        '--timezone=Europe/Moscow'
+        '--timezone=Europe/Moscow',
+        // MEMORY OPTIMIZATION: Set memory limits for V8 engine
+        '--max-old-space-size=256',
+        '--js-flags=--max-old-space-size=256'
+        // MEMORY OPTIMIZATION: Removed '--single-process' as it causes memory leaks
       ],
       defaultViewport: {
         width: 1366,
         height: 768
-      },
-      userDataDir: userDataDir
+      }
+      // DISK SPACE OPTIMIZATION: No userDataDir - stateless browser
     };
 
     if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      console.log(`[TBANK] Using Chrome from: ${process.env.PUPPETEER_EXECUTABLE_PATH}`);
     }
-
-    console.log(`[TBANK] Using user data directory: ${userDataDir}`);
 
     this.browser = await puppeteer.launch(launchOptions);
     this.page = await this.browser.newPage();
@@ -1993,23 +1975,8 @@ export class TBankAutomation {
       this.browser = null;
     }
 
-    // Force kill any remaining browser processes for this user
-    try {
-      const { exec } = await import('child_process');
-      const { promisify } = await import('util');
-      const execAsync = promisify(exec);
-      const userDataDir = `./user-data/${this.username}`;
-
-      if (process.platform === 'win32') {
-        await execAsync('taskkill /F /IM chrome.exe /T 2>nul || exit 0').catch(() => {});
-        await execAsync('taskkill /F /IM chromium.exe /T 2>nul || exit 0').catch(() => {});
-      } else {
-        await execAsync(`pkill -9 -f "${userDataDir}" || true`).catch(() => {});
-      }
-      console.log('[TBANK] Force killed any remaining browser processes');
-    } catch (err) {
-      // Ignore errors
-    }
+    // DISK SPACE OPTIMIZATION: Removed userDataDir cleanup (no longer used)
+    // Browser processes are cleaned up automatically by Puppeteer
 
     // Force garbage collection hint (if available)
     if (global.gc) {
