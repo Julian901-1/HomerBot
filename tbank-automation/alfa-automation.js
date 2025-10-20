@@ -1390,22 +1390,74 @@ export class AlfaAutomation {
       await this.waitForAlfaSMSCode(120000);
 
       console.log('[ALFA→TBANK] Этап 10/11: Ввод SMS-кода');
+      console.log(`[ALFA→TBANK] 📝 SMS-код для ввода: "${this.alfaSmsCode}" (длина: ${this.alfaSmsCode ? this.alfaSmsCode.length : 0})`);
+
       await this.page.waitForSelector('input.KRyR4.uokLS', { timeout: 15000 });
       const codeInputs = await this.page.$$('input.KRyR4.uokLS');
+
+      console.log(`[ALFA→TBANK] 📊 Найдено ${codeInputs.length} полей для ввода кода`);
+
+      // Log all input fields found on the page
+      const allInputs = await this.page.$$('input');
+      console.log(`[ALFA→TBANK] 📊 Всего input элементов на странице: ${allInputs.length}`);
+
+      for (let i = 0; i < allInputs.length; i++) {
+        const inputInfo = await this.page.evaluate(el => {
+          return {
+            type: el.type,
+            className: el.className,
+            name: el.name,
+            id: el.id,
+            placeholder: el.placeholder,
+            value: el.value
+          };
+        }, allInputs[i]);
+        console.log(`[ALFA→TBANK] 📊 Input ${i + 1}:`, JSON.stringify(inputInfo));
+      }
+
+      // Enter code digit by digit
       for (let i = 0; i < 4 && i < this.alfaSmsCode.length; i++) {
         await codeInputs[i].click();
         await this.sleep(150);
-        await codeInputs[i].type(this.alfaSmsCode[i]);
+        const digit = this.alfaSmsCode[i];
+        console.log(`[ALFA→TBANK] ⌨️  Ввод цифры ${i + 1}/4: "${digit}"`);
+        await codeInputs[i].type(digit);
         await this.sleep(350);
       }
 
+      console.log('[ALFA→TBANK] ✅ SMS-код введён, ожидание обработки...');
       await this.sleep(3000);
 
+      // Take screenshot after code entry
+      console.log('[ALFA→TBANK] 📸 Создание скриншота после ввода SMS-кода...');
+      await this.takeScreenshot('alfa-to-tbank-after-sms-code');
+
       console.log('[ALFA→TBANK] Этап 11/11: Проверка успешности перевода');
+
+      // Check for error messages
+      const errorMessages = await this.page.evaluate(() => {
+        const errors = [];
+        document.querySelectorAll('[class*="error"], [class*="Error"], .error-message, .alert-danger').forEach(el => {
+          if (el.textContent.trim()) {
+            errors.push(el.textContent.trim());
+          }
+        });
+        return errors;
+      });
+
+      if (errorMessages.length > 0) {
+        console.log('[ALFA→TBANK] ⚠️ Обнаружены сообщения об ошибках на странице:', errorMessages);
+      } else {
+        console.log('[ALFA→TBANK] ✅ Ошибок на странице не обнаружено');
+      }
+
       this.pendingInputType = null;
       this.pendingInputData = null;
 
       console.log('[ALFA→TBANK] ✅ Перевод успешно завершён');
+
+      // Take final success screenshot
+      await this.takeScreenshot('alfa-to-tbank-success');
 
       // MEMORY OPTIMIZATION: Clean up CDP sessions after operation
       await this.cleanupCDPSessions();

@@ -532,10 +532,18 @@ app.post('/api/auth/auto-sms-alfa', async (req, res) => {
     console.log('[AUTO-SMS-ALFA] Received SMS message:', message);
 
     // Extract code using regex (4 digits for Alfa)
-    const codeMatch = message.match(/Код для входа в Альфа-Онлайн:\s*(\d{4})/i);
+    // Supports multiple formats:
+    // 1. "Код для входа в Альфа-Онлайн: 8105"
+    // 2. "Код: 3348. Подтвердите перевод..."
+    let codeMatch = message.match(/Код для входа в Альфа-Онлайн:\s*(\d{4})/i);
 
     if (!codeMatch) {
-      console.log('[AUTO-SMS-ALFA] No code found in message');
+      // Try alternative format: "Код: 3348"
+      codeMatch = message.match(/Код:\s*(\d{4})/i);
+    }
+
+    if (!codeMatch) {
+      console.log('[AUTO-SMS-ALFA] No code found in message (tried both patterns)');
       return res.status(400).json({
         success: false,
         error: 'Could not extract code from message'
