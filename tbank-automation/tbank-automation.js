@@ -2047,24 +2047,39 @@ export class TBankAutomation {
       // Шаг 20: Ввести сумму в поле (шаг 22 инструкции)
       console.log(`[TBANK🌅] 20/21: вводим сумму ${accountAmount} в поле...`);
 
-      const amountEntered = await this.page.evaluate((amount) => {
-        // Ищем поле ввода суммы
+      // Wait for input field to appear
+      await this.waitForSelectorWithRetry('[data-qa-type="amount-from.input"]', {
+        timeout: 10000,
+        retries: 3
+      });
+
+      // Click on input to focus
+      await this.page.click('[data-qa-type="amount-from.input"]');
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Clear existing value first
+      await this.page.evaluate(() => {
         const input = document.querySelector('[data-qa-type="amount-from.input"]');
-        if (!input) return false;
+        if (input) {
+          input.value = '';
+        }
+      });
 
-        input.scrollIntoView({ behavior: 'instant', block: 'center' });
-        input.focus();
-        input.value = amount;
+      // Type the amount using Puppeteer's type method (simulates real keyboard input)
+      await this.page.type('[data-qa-type="amount-from.input"]', accountAmount, { delay: 50 });
 
-        // Триггерим события изменения
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new Event('change', { bubbles: true }));
+      // Wait a bit and verify the value was entered
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-        return true;
-      }, accountAmount);
+      const valueEntered = await this.page.evaluate(() => {
+        const input = document.querySelector('[data-qa-type="amount-from.input"]');
+        return input ? input.value : null;
+      });
 
-      if (!amountEntered) {
-        throw new Error('Не удалось ввести сумму в поле');
+      console.log(`[TBANK🌅] 📝 Проверка введённой суммы: "${valueEntered}"`);
+
+      if (!valueEntered || valueEntered.trim() === '') {
+        throw new Error('Не удалось ввести сумму в поле (поле пустое)');
       }
 
       console.log('[TBANK🌅] ✅ Сумма введена');
