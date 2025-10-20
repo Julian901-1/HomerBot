@@ -732,7 +732,14 @@ export class AlfaAutomation {
         const options = Array.from(document.querySelectorAll('div[data-test-id="src-account-option"]'));
         const targetOption = options.find(opt => opt.textContent.includes('··7167'));
         if (targetOption instanceof HTMLElement) {
-          targetOption.click();
+          // Try to find clickable child element (section with tabindex)
+          const clickableSection = targetOption.querySelector('section[tabindex]');
+          if (clickableSection instanceof HTMLElement) {
+            clickableSection.click();
+          } else {
+            // Fallback: try clicking the div itself
+            targetOption.click();
+          }
         }
       });
 
@@ -872,6 +879,15 @@ export class AlfaAutomation {
         const targetOption = options.find(opt => normalize(opt.textContent).includes(targetNormalized));
         if (targetOption instanceof HTMLElement) {
           targetOption.scrollIntoView({ block: 'center' });
+
+          // Try to find clickable child element (section with tabindex)
+          const clickableSection = targetOption.querySelector('section[tabindex]');
+          if (clickableSection instanceof HTMLElement) {
+            clickableSection.click();
+            return true;
+          }
+
+          // Fallback: try clicking the div itself
           targetOption.click();
           return true;
         }
@@ -1005,8 +1021,17 @@ export class AlfaAutomation {
         });
 
         if (tbankOption instanceof HTMLElement) {
-          // Scroll into view and click
+          // Scroll into view
           tbankOption.scrollIntoView({ block: 'center' });
+
+          // Try to find clickable child element (section with tabindex)
+          const clickableSection = tbankOption.querySelector('section[tabindex]');
+          if (clickableSection instanceof HTMLElement) {
+            clickableSection.click();
+            return true;
+          }
+
+          // Fallback: try clicking the div itself
           tbankOption.click();
           return true;
         }
