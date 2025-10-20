@@ -1089,113 +1089,24 @@ app.post('/api/morning-transfer', async (req, res) => {
     console.log('[API] ✅ Alfa saving -> debit transfer successful');
     console.log('[API] ✅ STAGE 1/2 completed: SAVING→ALFA');
 
-    // Log memory usage before cleanup
-    const memBefore = process.memoryUsage();
-    console.log('[API] 📊 Memory usage BEFORE cleanup:');
-    console.log(`[API]    RSS: ${(memBefore.rss / 1024 / 1024).toFixed(2)} MB (Resident Set Size - total memory)`);
-    console.log(`[API]    Heap Used: ${(memBefore.heapUsed / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`[API]    Heap Total: ${(memBefore.heapTotal / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`[API]    External: ${(memBefore.external / 1024 / 1024).toFixed(2)} MB`);
-
-    // === CLEAN UP SESSION BEFORE STAGE 2 (memory optimization for Render 512MB limit) ===
-    console.log('[API] 🧹 Closing Alfa session and clearing cache before STAGE 2...');
-
-    try {
-      // CRITICAL: Stop SMS queue checker BEFORE closing alfaAutomation to prevent race condition crash
-      if (alfaSmsQueueChecker) {
-        clearInterval(alfaSmsQueueChecker);
-        alfaSmsQueueChecker = null;
-        console.log('[API] ✅ SMS queue checker stopped');
-      }
-
-      if (alfaAutomation) {
-        await alfaAutomation.close();
-        alfaAutomation = null; // Release reference
-        console.log('[API] ✅ Alfa session closed, cache cleared');
-      }
-
-      // Force garbage collection if available
-      if (global.gc) {
-        console.log('[API] 🧹 Running garbage collection...');
-        global.gc();
-        console.log('[API] ✅ Garbage collection complete');
-      }
-
-      // Add delay to ensure cleanup is complete
-      console.log('[API] ⏳ Waiting 5 seconds for cleanup to complete...');
-      await new Promise(resolve => setTimeout(resolve, 5000));
-
-      console.log('[API] ✅ Cleanup completed successfully');
-
-      // Log memory usage after cleanup
-      const memAfter = process.memoryUsage();
-      console.log('[API] 📊 Memory usage AFTER cleanup:');
-      console.log(`[API]    RSS: ${(memAfter.rss / 1024 / 1024).toFixed(2)} MB (Resident Set Size - total memory)`);
-      console.log(`[API]    Heap Used: ${(memAfter.heapUsed / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`[API]    Heap Total: ${(memAfter.heapTotal / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`[API]    External: ${(memAfter.external / 1024 / 1024).toFixed(2)} MB`);
-
-      // Calculate memory freed
-      const memFreed = {
-        rss: memBefore.rss - memAfter.rss,
-        heapUsed: memBefore.heapUsed - memAfter.heapUsed,
-        heapTotal: memBefore.heapTotal - memAfter.heapTotal,
-        external: memBefore.external - memAfter.external
-      };
-      console.log('[API] 🔽 Memory freed:');
-      console.log(`[API]    RSS: ${(memFreed.rss / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`[API]    Heap Used: ${(memFreed.heapUsed / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`[API]    Heap Total: ${(memFreed.heapTotal / 1024 / 1024).toFixed(2)} MB`);
-      console.log(`[API]    External: ${(memFreed.external / 1024 / 1024).toFixed(2)} MB`);
-
-    } catch (cleanupError) {
-      console.error('[API] ⚠️ Cleanup error (non-fatal):', cleanupError.message);
-      console.error('[API] ⚠️ Stack trace:', cleanupError.stack);
-      // Continue anyway - cleanup errors shouldn't block Stage 2
-      alfaAutomation = null; // Force nullify even if close() failed
-    }
+    // Log memory usage after Stage 1
+    const memAfterStage1 = process.memoryUsage();
+    console.log('[API] 📊 Memory usage after STAGE 1:');
+    console.log(`[API]    RSS: ${(memAfterStage1.rss / 1024 / 1024).toFixed(2)} MB (Resident Set Size - total memory)`);
+    console.log(`[API]    Heap Used: ${(memAfterStage1.heapUsed / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`[API]    Heap Total: ${(memAfterStage1.heapTotal / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`[API]    External: ${(memAfterStage1.external / 1024 / 1024).toFixed(2)} MB`);
 
     // === STAGE 2: ALFA→TBANK ===
+    // NOTE: No cleanup/re-login needed - continue with same Alfa session (like evening transfer)
+    // Memory usage is low (~90MB), cleanup causes crashes, so we continue without it
     console.log('[API] === STAGE 2/2: ALFA→TBANK ===');
-
-    // Re-create Alfa automation instance
-    console.log('[API] Step 4a: Re-creating Alfa-Bank automation instance...');
-    alfaAutomation = new AlfaAutomation({
-      username,
-      phone: FIXED_ALFA_PHONE,
-      cardNumber: FIXED_ALFA_CARD,
-      encryptionService: null
-    });
-
-    // Re-create SMS queue checker for Stage 2 (needed for re-login)
-    alfaSmsQueueChecker = setInterval(() => {
-      if (!alfaAutomation) return;
-      const pendingType = alfaAutomation.getPendingInputType();
-      if (pendingType === 'alfa_sms') {
-        const queueKey = `alfa_${username}`;
-        const queuedSMS = smsCodeQueue.get(queueKey);
-        if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
-          const submitted = alfaAutomation.submitAlfaSMSCode(queuedSMS.code);
-          if (submitted) {
-            smsCodeQueue.delete(queueKey);
-          }
-        }
-      }
-    }, 500);
-    console.log('[API] ✅ SMS queue checker re-created for Stage 2');
-
-    console.log('[API] Step 4b: Re-logging in to Alfa-Bank for Stage 2...');
-    const alfaLoginResult2 = await alfaAutomation.loginAlfa();
-    if (!alfaLoginResult2.success) {
-      throw new Error(`Alfa-Bank re-login failed: ${alfaLoginResult2.error}`);
-    }
-    console.log('[API] ✅ Alfa-Bank re-login successful');
 
     const sbpAmount = transferAmount != null ? transferAmount : null;
     const sbpAmountLabel = sbpAmount != null ? `${sbpAmount}` : 'full balance';
 
     // STEP 3: Transfer from Alfa debit to T-Bank via SBP
-    console.log(`[API] Step 4c: Transferring ${sbpAmountLabel} from Alfa debit to T-Bank via SBP...`);
+    console.log(`[API] Step 4: Transferring ${sbpAmountLabel} from Alfa debit to T-Bank via SBP...`);
 
     const transferResult = await alfaAutomation.transferToTBankSBP(
       alfaSavingAccountId,
