@@ -647,6 +647,67 @@ export class TBankAutomation {
   }
 
   /**
+   * Click the first visible element that matches selector and contains the provided text
+   * @param {string} selector
+   * @param {string} text
+   * @param {object} options
+   * @param {boolean} [options.exact=false]
+   * @param {number} [options.timeout=8000]
+   * @returns {Promise<boolean>}
+   */
+  async clickElementByText(selector, text, { exact = false, timeout = 8000 } = {}) {
+    const deadline = Date.now() + timeout;
+
+    while (Date.now() < deadline) {
+      const clicked = await this.page.evaluate(
+        (cssSelector, searchText, exactMatch) => {
+          const normalize = (value) => (value || '')
+            .replace(/\u00A0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          const elements = Array.from(document.querySelectorAll(cssSelector));
+
+          for (const element of elements) {
+            const textContent = normalize(element.textContent);
+            if (!textContent) continue;
+
+            const isMatch = exactMatch
+              ? textContent === searchText
+              : textContent.includes(searchText);
+
+            if (!isMatch) continue;
+
+            const style = window.getComputedStyle(element);
+            if (!style || style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity || '1') === 0) {
+              continue;
+            }
+
+            const rect = element.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) continue;
+
+            const clickable = element.closest('button, [role="button"], a, div[data-test-id="banner-wrapper"]') || element;
+            clickable.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+            clickable.click();
+            return true;
+          }
+
+          return false;
+        },
+        selector,
+        text,
+        exact
+      );
+
+      if (clicked) return true;
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    return false;
+  }
+
+  /**
    * Start keep-alive mechanism to prevent session timeout
    */
   startKeepAlive() {
@@ -1859,6 +1920,116 @@ export class TBankAutomation {
       // Take error screenshot
       await this.takeScreenshot('sbp-transfer-error');
 
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Execute instruction steps 19-23 after SBP перевод в Т-Банк
+   * @param {object} options
+   * @param {string} [options.sourceAccountMask='7167'] - часть текста, по которой ищем счёт
+   * @param {number} [options.waitAfterSourceMs=5000] - пауза перед выбором счёта (мс)
+   */
+  async runMorningPostTransferFlow({ sourceAccountMask = '7167', waitAfterSourceMs = 5000 } = {}) {
+    try {
+      if (!this.sessionActive) {
+        throw new Error('Not logged in');
+      }
+
+      console.log('[TBANK🌅] ▶️ Запуск шагов 19-23 для утреннего перевода...');
+
+      // Убедиться, что находимся на главной
+      if (!this.page.url().includes('/mybank/')) {
+        console.log('[TBANK🌅] ℹ️ Не на /mybank/, выполняем переход...');
+        await this.page.goto('https://www.tbank.ru/mybank/', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+        await this.page.waitForTimeout(3000);
+      }
+
+      await this.takeScreenshot('morning-post-transfer-before');
+
+      // Шаг 19: кнопка "Пополнить"
+      console.log('[TBANK🌅] 19/23: нажимаем "Пополнить"...');
+      const topUpClicked = await this.clickElementByText('button, [role="button"]', 'Пополнить', { timeout: 10000 });
+      if (!topUpClicked) {
+        throw new Error('Не удалось нажать кнопку "Пополнить"');
+      }
+      await this.page.waitForTimeout(2000);
+
+      // Шаг 20: баннер "Со счёта Альфа-Банка"
+      console.log('[TBANK🌅] 20/23: выбираем "Со счёта в Альфа-Банке"...');
+      const alfaSourceClicked = await this.clickElementByText('button, [role="button"], div[data-test-id="banner-wrapper"]', 'Со счёта', { timeout: 10000 });
+      if (!alfaSourceClicked) {
+        throw new Error('Не удалось выбрать пункт "Со счёта в Альфа-Банке"');
+      }
+
+      await this.page.waitForTimeout(waitAfterSourceMs);
+
+      // Шаг 21: выбор счёта по маске
+      console.log(`[TBANK🌅] 21/23: ищем счёт с маской ${sourceAccountMask}...`);
+      await this.page.waitForSelector('div[data-test-id="src-account-option"]', { timeout: 15000 });
+      const accountSelected = await this.page.evaluate((mask) => {
+        const options = Array.from(document.querySelectorAll('div[data-test-id="src-account-option"]'));
+        for (const option of options) {
+          const text = (option.textContent || '')
+            .replace(/\u00A0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (!text.includes(mask)) continue;
+
+          option.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+          option.click();
+          return true;
+        }
+        return false;
+      }, sourceAccountMask);
+
+      if (!accountSelected) {
+        throw new Error(`Не удалось выбрать счёт с маской ${sourceAccountMask}`);
+      }
+      await this.page.waitForTimeout(2000);
+
+      // Шаг 22: кнопка "Всё"
+      console.log('[TBANK🌅] 22/23: нажимаем "Всё"...');
+      const allClicked = await this.clickElementByText('button, [role="button"]', 'Всё', { timeout: 8000 });
+      if (!allClicked) {
+        throw new Error('Не удалось нажать кнопку "Всё"');
+      }
+      await this.page.waitForTimeout(1500);
+
+      // Шаг 23: кнопка "Перевести"
+      console.log('[TBANK🌅] 23/23: подтверждаем перевод...');
+      let submitClicked = await this.page.evaluate(() => {
+        const button = document.querySelector('button[data-test-id="payment-button"]');
+        if (!button) return false;
+        button.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+        button.click();
+        return true;
+      });
+
+      if (!submitClicked) {
+        submitClicked = await this.clickElementByText('button, [role="button"]', 'Перевести', { timeout: 8000 });
+      }
+
+      if (!submitClicked) {
+        throw new Error('Не удалось нажать кнопку "Перевести"');
+      }
+
+      await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
+      await this.page.waitForTimeout(3000);
+
+      await this.takeScreenshot('morning-post-transfer-after');
+      console.log('[TBANK🌅] ✅ Шаги 19-23 выполнены успешно');
+
+      return { success: true };
+    } catch (error) {
+      console.error('[TBANK🌅] ❌ Ошибка при выполнении шагов 19-23:', error.message);
+      await this.takeScreenshot('morning-post-transfer-error');
       return {
         success: false,
         error: error.message

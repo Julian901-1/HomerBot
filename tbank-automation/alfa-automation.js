@@ -29,6 +29,7 @@ export class AlfaAutomation {
     this.pendingInputData = null;
     this.alfaSmsCode = null;
     this.alfaSmsCodeResolver = null;
+    this.lastAlfaSmsCodeWarning = null;
 
     // Session stats
     this.sessionStartTime = Date.now();
@@ -515,10 +516,13 @@ export class AlfaAutomation {
    * Submit Alfa SMS code (called from external API)
    */
   submitAlfaSMSCode(code) {
+    const isNewCode = this.alfaSmsCode !== code;
+
     // Only log if this is a new code (prevent spam from 500ms interval checker)
-    if (this.alfaSmsCode !== code) {
+    if (isNewCode) {
       console.log(`[ALFA-SMS] 📨 Получен новый SMS-код: ${code}`);
       this.alfaSmsCode = code;
+      this.lastAlfaSmsCodeWarning = null;
     }
 
     if (this.alfaSmsCodeResolver) {
@@ -526,9 +530,16 @@ export class AlfaAutomation {
       clearTimeout(this.alfaSmsCodeTimeout);
       this.alfaSmsCodeResolver(code);
       this.alfaSmsCodeResolver = null;
-    } else {
-      console.log(`[ALFA-SMS] ⚠️ SMS-код получен, но никто его не ждёт (будет сохранён в памяти): ${code}`);
+      this.lastAlfaSmsCodeWarning = null;
+      return true;
     }
+
+    if (this.lastAlfaSmsCodeWarning !== code) {
+      console.log(`[ALFA-SMS] ⚠️ SMS-код получен, но никто его не ждёт (будет сохранён в памяти): ${code}`);
+      this.lastAlfaSmsCodeWarning = code;
+    }
+
+    return false;
   }
 
   /**
