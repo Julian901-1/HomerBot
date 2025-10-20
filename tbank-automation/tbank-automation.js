@@ -11,15 +11,18 @@ puppeteer.use(StealthPlugin());
  * T-Bank automation using Puppeteer with anti-detection
  */
 export class TBankAutomation {
-  constructor({ username, phone, password, encryptionService, onAuthenticated }) {
+  constructor({ username, phone, password, encryptionService, onAuthenticated, existingBrowser = null, existingPage = null }) {
     this.username = username;
     this.encryptedPhone = phone;
     this.encryptedPassword = password;
     this.encryptionService = encryptionService;
     this.onAuthenticated = onAuthenticated; // Callback to mark session as authenticated
 
-    this.browser = null;
-    this.page = null;
+    // Allow reusing existing browser/page from Alfa automation
+    this.browser = existingBrowser;
+    this.page = existingPage;
+    this.reusingBrowser = !!(existingBrowser && existingPage);
+
     this.keepAliveInterval = null;
     this.sessionActive = false;
     this.sessionStartTime = null;
@@ -34,9 +37,14 @@ export class TBankAutomation {
    * Initialize browser instance
    */
   async init() {
-    if (this.browser) return;
+    if (this.browser && this.page) {
+      if (this.reusingBrowser) {
+        console.log(`[TBANK] Reusing existing browser for user ${this.username}`);
+      }
+      return;
+    }
 
-    console.log(`[TBANK] Initializing browser for user ${this.username}`);
+    console.log(`[TBANK] Initializing new browser for user ${this.username}`);
 
     // DISK SPACE OPTIMIZATION: Removed userDataDir to avoid creating persistent files
     // Each browser launch is now stateless and creates no disk files
@@ -2123,6 +2131,14 @@ export class TBankAutomation {
     }
     this.pendingInputType = null;
     this.pendingInputData = null;
+
+    // If browser was reused from Alfa automation, don't close it
+    if (this.reusingBrowser) {
+      console.log('[TBANK] Browser was reused from Alfa automation, skipping close');
+      this.browser = null;
+      this.page = null;
+      return;
+    }
 
     // Close page first to free memory
     if (this.page) {

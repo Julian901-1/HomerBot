@@ -16,35 +16,42 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 
-// Custom error handler for body-parser to catch JSON parse errors
-app.use(bodyParser.json({
-  verify: (req, _res, buf, encoding) => {
+// Custom JSON parser that sanitizes control characters from SMS messages
+app.use(bodyParser.text({ type: 'application/json' }));
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'string') {
     try {
-      // Store raw body for error logging
-      req.rawBody = buf.toString(encoding || 'utf8');
+      // Store original for debugging
+      req.rawBody = req.body;
+
+      // Sanitize control characters (newlines, tabs, etc.) from JSON string
+      // This is needed because MacroDroid sends SMS with unescaped newlines
+      const sanitized = req.body
+        .replace(/\r\n/g, ' ')  // Windows line endings
+        .replace(/\n/g, ' ')     // Unix line endings
+        .replace(/\r/g, ' ')     // Old Mac line endings
+        .replace(/\t/g, ' ')     // Tabs
+        .replace(/\s+/g, ' ');   // Multiple spaces to single space
+
+      req.body = JSON.parse(sanitized);
+      next();
     } catch (e) {
-      console.error('[BODY-PARSER] Error storing raw body:', e.message);
+      console.error('[BODY-PARSER] ❌ JSON Parse Error:', e.message);
+      console.error('[BODY-PARSER] ❌ Raw body:', req.rawBody ? req.rawBody.substring(0, 500) : 'N/A');
+      console.error('[BODY-PARSER] ❌ Content-Type:', req.headers['content-type']);
+
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid JSON in request body',
+        details: e.message
+      });
     }
+  } else {
+    next();
   }
-}));
+});
 
 app.use(bodyParser.urlencoded({ extended: true }));
-
-// Error handler for JSON parse errors
-app.use((err, req, res, next) => {
-  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    console.error('[BODY-PARSER] ❌ JSON Parse Error:', err.message);
-    console.error('[BODY-PARSER] ❌ Raw body:', req.rawBody ? req.rawBody.substring(0, 500) : 'N/A');
-    console.error('[BODY-PARSER] ❌ Content-Type:', req.headers['content-type']);
-
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid JSON in request body',
-      details: err.message
-    });
-  }
-  next();
-});
 
 // Services
 const encryptionService = new EncryptionService(process.env.ENCRYPTION_SECRET_KEY || process.env.ENCRYPTION_KEY);
@@ -1405,54 +1412,34 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
     console.log(`[API] ✅ Alfa -> T-Bank SBP transfer successful (${transferResult.amount || amount} RUB)`);
     console.log('[API] ✅ STAGE 2 completed: ALFA→TBANK');
 
-    // Cleanup Alfa
-    console.log('[API] Cleaning up Alfa browser and SMS checker...');
+    // Cleanup Alfa SMS checker
+    console.log('[API] Cleaning up Alfa SMS checker...');
     if (alfaSmsQueueChecker) {
       clearInterval(alfaSmsQueueChecker);
       alfaSmsQueueChecker = null;
       console.log('[API] ✅ Alfa SMS checker cleared');
     }
 
-    console.log('[API] Closing Alfa browser...');
-    try {
-      await alfaAutomation.close();
-      alfaAutomation = null;
-      console.log('[API] ✅ Alfa browser closed successfully');
-    } catch (closeError) {
-      console.error('[API] ⚠️ Error closing Alfa browser (continuing anyway):', closeError.message);
-      alfaAutomation = null;
-    }
-
-    if (global.gc) {
-      console.log('[API] 🧹 Running garbage collection after STAGE 2...');
-      try {
-        global.gc();
-        console.log('[API] ✅ Garbage collection completed');
-      } catch (gcError) {
-        console.error('[API] ⚠️ Garbage collection error (continuing anyway):', gcError.message);
-      }
-    }
-
-    // CRITICAL: Wait for browser cleanup to complete before starting new browser
-    // This prevents crashes from puppeteer-extra plugins (rimraf cleanup, etc.)
-    console.log('[API] ⏳ Waiting 10 seconds for browser cleanup and memory to free...');
-    await new Promise(resolve => setTimeout(resolve, 10000));
-    console.log('[API] ✅ Cleanup wait completed');
-
     // === STAGE 3: TBANK post-transfer steps (19-23) ===
     console.log('[API] === STAGE 3: TBANK post-transfer steps 19-23 ===');
-    console.log('[API] Preparing to start T-Bank automation...');
+    console.log('[API] Reusing browser, navigating to T-Bank...');
 
     const tbankSourceMask = process.env.TBANK_POST_TRANSFER_ACCOUNT_MASK || '7167';
     const rawTbankWaitMs = parseInt(process.env.TBANK_POST_TRANSFER_WAIT_MS || '', 10);
     const waitAfterSourceMs = Number.isNaN(rawTbankWaitMs) ? 5000 : rawTbankWaitMs;
+
+    // Reuse Alfa browser and page for T-Bank
+    const reusedBrowser = alfaAutomation.browser;
+    const reusedPage = alfaAutomation.page;
 
     tbankAutomation = new TBankAutomation({
       username,
       phone: FIXED_TBANK_PHONE,
       password: null,
       encryptionService: null,
-      onAuthenticated: null
+      onAuthenticated: null,
+      existingBrowser: reusedBrowser,
+      existingPage: reusedPage
     });
 
     tbankSmsQueueChecker = setInterval(() => {
@@ -1486,7 +1473,7 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
     }
     console.log('[API] ✅ T-Bank steps 19-23 completed');
 
-    // Cleanup T-Bank
+    // Cleanup T-Bank (doesn't close browser since it was reused)
     if (tbankSmsQueueChecker) {
       clearInterval(tbankSmsQueueChecker);
       tbankSmsQueueChecker = null;
@@ -1494,6 +1481,13 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
 
     await tbankAutomation.close();
     tbankAutomation = null;
+
+    // Now close the original Alfa browser
+    console.log('[API] Closing shared browser...');
+    if (alfaAutomation) {
+      await alfaAutomation.close();
+      alfaAutomation = null;
+    }
 
     if (global.gc) {
       console.log('[API] 🧹 Running garbage collection after STAGE 3...');
