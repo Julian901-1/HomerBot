@@ -559,12 +559,70 @@ export class TBankAutomation {
     try {
       const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
       console.log(`[TBANK] 📸 [${context}] Screenshot captured (base64 length: ${screenshot.length})`);
-      // Note: Base64 screenshot data NOT logged to avoid JSON parse errors in monitoring systems
+
+      // Log base64 only for error screenshots to help debug issues
+      if (context.includes('error')) {
+        console.log(`[TBANK] 📸 === SCREENSHOT BASE64 START [${context}] ===`);
+        console.log(screenshot);
+        console.log(`[TBANK] 📸 === SCREENSHOT BASE64 END [${context}] ===`);
+      }
+
       return screenshot;
     } catch (e) {
       console.log(`[TBANK] ⚠️ [${context}] Could not capture screenshot:`, e.message);
       return null;
     }
+  }
+
+  /**
+   * Wait for selector with retry logic (for slow page loads)
+   * @param {string} selector - CSS selector to wait for
+   * @param {Object} options - Options object
+   * @param {number} options.timeout - Timeout for each attempt (default: 30000ms)
+   * @param {number} options.retries - Number of retry attempts (default: 3)
+   * @param {number} options.retryDelay - Delay between retries (default: 5000ms)
+   * @param {boolean} options.visible - Wait for element to be visible (default: false)
+   * @param {boolean} options.hidden - Wait for element to be hidden (default: false)
+   * @returns {Promise<ElementHandle>} - Element handle when found
+   */
+  async waitForSelectorWithRetry(selector, options = {}) {
+    const {
+      timeout = 30000,
+      retries = 3,
+      retryDelay = 5000, // 5 seconds for slow page loads
+      visible = false,
+      hidden = false
+    } = options;
+
+    let lastError;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`[TBANK-RETRY] Попытка ${attempt}/${retries}: Ожидание элемента "${selector}"...`);
+
+        const element = await this.page.waitForSelector(selector, {
+          timeout,
+          visible,
+          hidden
+        });
+
+        console.log(`[TBANK-RETRY] ✅ Элемент "${selector}" найден на попытке ${attempt}`);
+        return element;
+
+      } catch (error) {
+        lastError = error;
+        console.log(`[TBANK-RETRY] ⚠️ Попытка ${attempt}/${retries} неудачна для "${selector}": ${error.message}`);
+
+        if (attempt < retries) {
+          console.log(`[TBANK-RETRY] Ожидание ${retryDelay}ms перед следующей попыткой...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+    }
+
+    // All retries failed
+    console.log(`[TBANK-RETRY] ❌ Все ${retries} попытки исчерпаны для "${selector}"`);
+    throw lastError;
   }
 
   /**
@@ -1961,10 +2019,41 @@ export class TBankAutomation {
 
       // Шаг 19: кнопка "Пополнить"
       console.log('[TBANK🌅] 19/23: нажимаем "Пополнить"...');
-      const topUpClicked = await this.clickElementByText('button, [role="button"]', 'Пополнить', { timeout: 10000 });
+
+      // Try multiple selectors for the "Пополнить" button
+      let topUpClicked = false;
+
+      // Wait for button to appear with retry
+      try {
+        await this.waitForSelectorWithRetry('button[data-schema-path="replenishmentButton"]', {
+          timeout: 10000,
+          retries: 3
+        });
+
+        // Try by data-schema-path attribute
+        topUpClicked = await this.page.evaluate(() => {
+          const button = document.querySelector('button[data-schema-path="replenishmentButton"]');
+          if (button) {
+            button.scrollIntoView({ behavior: 'instant', block: 'center' });
+            button.click();
+            return true;
+          }
+          return false;
+        });
+      } catch (e) {
+        console.log('[TBANK🌅] ⚠️ Селектор data-schema-path не найден после retry, пробуем по тексту...');
+      }
+
+      if (!topUpClicked) {
+        console.log('[TBANK🌅] ⚠️ Попытка через data-schema-path не удалась, пробуем по тексту...');
+        topUpClicked = await this.clickElementByText('button, [role="button"]', 'Пополнить', { timeout: 10000 });
+      }
+
       if (!topUpClicked) {
         throw new Error('Не удалось нажать кнопку "Пополнить"');
       }
+
+      console.log('[TBANK🌅] ✅ Кнопка "Пополнить" нажата');
       await this.page.waitForTimeout(2000);
 
       // Шаг 20: баннер "Со счёта Альфа-Банка"
@@ -1978,7 +2067,10 @@ export class TBankAutomation {
 
       // Шаг 21: выбор счёта по маске
       console.log(`[TBANK🌅] 21/23: ищем счёт с маской ${sourceAccountMask}...`);
-      await this.page.waitForSelector('div[data-test-id="src-account-option"]', { timeout: 15000 });
+      await this.waitForSelectorWithRetry('div[data-test-id="src-account-option"]', {
+        timeout: 15000,
+        retries: 3
+      });
       const accountSelected = await this.page.evaluate((mask) => {
         const options = Array.from(document.querySelectorAll('div[data-test-id="src-account-option"]'));
         for (const option of options) {
@@ -2010,13 +2102,26 @@ export class TBankAutomation {
 
       // Шаг 23: кнопка "Перевести"
       console.log('[TBANK🌅] 23/23: подтверждаем перевод...');
-      let submitClicked = await this.page.evaluate(() => {
-        const button = document.querySelector('button[data-test-id="payment-button"]');
-        if (!button) return false;
-        button.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
-        button.click();
-        return true;
-      });
+
+      let submitClicked = false;
+
+      // Wait for button with retry
+      try {
+        await this.waitForSelectorWithRetry('button[data-test-id="payment-button"]', {
+          timeout: 10000,
+          retries: 3
+        });
+
+        submitClicked = await this.page.evaluate(() => {
+          const button = document.querySelector('button[data-test-id="payment-button"]');
+          if (!button) return false;
+          button.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+          button.click();
+          return true;
+        });
+      } catch (e) {
+        console.log('[TBANK🌅] ⚠️ Селектор payment-button не найден после retry, пробуем по тексту...');
+      }
 
       if (!submitClicked) {
         submitClicked = await this.clickElementByText('button, [role="button"]', 'Перевести', { timeout: 8000 });
