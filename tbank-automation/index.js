@@ -1087,12 +1087,49 @@ app.post('/api/morning-transfer', async (req, res) => {
       throw new Error(`Alfa saving -> debit transfer failed: ${alfaWithdrawResult.error}`);
     }
     console.log('[API] ✅ Alfa saving -> debit transfer successful');
+    console.log('[API] ✅ STAGE 1/2 completed: SAVING→ALFA');
+
+    // === CLEAN UP SESSION BEFORE STAGE 2 (memory optimization for Render 512MB limit) ===
+    console.log('[API] 🧹 Closing Alfa session and clearing cache before STAGE 2...');
+    await alfaAutomation.close();
+    alfaAutomation = null; // Release reference
+    console.log('[API] ✅ Alfa session closed, cache cleared');
+
+    // Force garbage collection if available
+    if (global.gc) {
+      console.log('[API] 🧹 Running garbage collection...');
+      global.gc();
+      console.log('[API] ✅ Garbage collection complete');
+    }
+
+    // Add delay to ensure cleanup is complete
+    console.log('[API] ⏳ Waiting 5 seconds for cleanup to complete...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // === STAGE 2: ALFA→TBANK ===
+    console.log('[API] === STAGE 2/2: ALFA→TBANK ===');
+
+    // Re-create Alfa automation instance
+    console.log('[API] Step 4a: Re-creating Alfa-Bank automation instance...');
+    alfaAutomation = new AlfaAutomation({
+      username,
+      phone: FIXED_ALFA_PHONE,
+      cardNumber: FIXED_ALFA_CARD,
+      encryptionService: null
+    });
+
+    console.log('[API] Step 4b: Re-logging in to Alfa-Bank for Stage 2...');
+    const alfaLoginResult2 = await alfaAutomation.loginAlfa();
+    if (!alfaLoginResult2.success) {
+      throw new Error(`Alfa-Bank re-login failed: ${alfaLoginResult2.error}`);
+    }
+    console.log('[API] ✅ Alfa-Bank re-login successful');
 
     const sbpAmount = transferAmount != null ? transferAmount : null;
     const sbpAmountLabel = sbpAmount != null ? `${sbpAmount}` : 'full balance';
 
     // STEP 3: Transfer from Alfa debit to T-Bank via SBP
-    console.log(`[API] Step 4: Transferring ${sbpAmountLabel} from Alfa debit to T-Bank via SBP...`);
+    console.log(`[API] Step 4c: Transferring ${sbpAmountLabel} from Alfa debit to T-Bank via SBP...`);
 
     const transferResult = await alfaAutomation.transferToTBankSBP(
       alfaSavingAccountId,
@@ -1104,6 +1141,7 @@ app.post('/api/morning-transfer', async (req, res) => {
       throw new Error(`Alfa -> T-Bank SBP transfer failed: ${transferResult.error}`);
     }
     console.log(`[API] ✅ Alfa -> T-Bank SBP transfer successful (${transferResult.amount || transferAmount} RUB)`);
+    console.log('[API] ✅ STAGE 2/2 completed: ALFA→TBANK');
 
     if (alfaSmsQueueChecker) {
       clearInterval(alfaSmsQueueChecker);
