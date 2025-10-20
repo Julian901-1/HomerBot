@@ -899,11 +899,62 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[SAVING→ALFA] Этап 4/6: Нажатие "Перевести"');
-      await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
-      await this.page.click('button[data-test-id="payment-button"]');
+      console.log('[SAVING→ALFA] Этап 4/6: Нажатие "Перевести" (с retry при ошибках)');
 
-      await waitBetweenSteps();
+      const maxRetries = 5;
+      let transferSuccess = false;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        console.log(`[SAVING→ALFA] Попытка ${attempt}/${maxRetries}: Нажатие "Перевести"`);
+
+        await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
+        await this.page.click('button[data-test-id="payment-button"]');
+
+        // Wait 15 seconds and check for error message
+        console.log('[SAVING→ALFA] Ожидание 15 секунд для проверки на ошибку...');
+        await this.sleep(15000);
+
+        // Check if error message appeared
+        const hasError = await this.page.evaluate(() => {
+          const errorText = 'Извините, что-то пошло не так';
+          const elements = Array.from(document.querySelectorAll('body *'));
+          return elements.some(el => {
+            if (!el.textContent) return false;
+            const text = el.textContent.replace(/\s+/g, ' ').trim();
+            if (!text.includes(errorText)) return false;
+
+            // Check if element is visible
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+              return false;
+            }
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
+        });
+
+        if (hasError) {
+          console.log(`[SAVING→ALFA] ⚠️ Обнаружена ошибка "Извините, что-то пошло не так" на попытке ${attempt}`);
+
+          if (attempt === maxRetries) {
+            throw new Error('Превышено максимальное количество попыток перевода (5). Ошибка "Извините, что-то пошло не так" не исчезла.');
+          }
+
+          // Wait a bit before retry
+          console.log('[SAVING→ALFA] Ожидание 5 секунд перед повторной попыткой...');
+          await this.sleep(5000);
+          continue; // Retry
+        }
+
+        // No error found - transfer successful
+        console.log(`[SAVING→ALFA] ✅ Ошибки не обнаружено, перевод выполнен успешно`);
+        transferSuccess = true;
+        break;
+      }
+
+      if (!transferSuccess) {
+        throw new Error('Не удалось выполнить перевод после всех попыток');
+      }
 
       console.log('[SAVING→ALFA] Этап 5/6: Нажатие "Готово"');
       await this.page.waitForSelector('button[data-test-id="ready-button"]', { timeout: 15000 });
