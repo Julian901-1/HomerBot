@@ -678,23 +678,49 @@ export class AlfaAutomation {
           '[data-test-id="src-account-options-trigger"]'
         ];
 
+        const clickTrigger = async selector => {
+          const clicked = await this.page.evaluate(sel => {
+            const el = document.querySelector(sel);
+            if (!el) return false;
+            if (typeof el.click === 'function') {
+              el.click();
+              return true;
+            }
+            if (el instanceof SVGElement) {
+              el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+              return true;
+            }
+            return false;
+          }, selector);
+
+          if (!clicked) {
+            return false;
+          }
+
+          return true;
+        };
+
         for (const selector of triggerSelectors) {
-          const handle = await this.page.$(selector);
-          if (handle) {
-            await handle.click();
+          const opened = await clickTrigger(selector);
+          if (opened) {
             await this.sleep(500);
             const check = await this.page.$(accountOptionSelector);
             if (check) return;
           }
         }
 
-        await this.page.evaluate(() => {
+        const fallbackTriggered = await this.page.evaluate(() => {
           const candidates = Array.from(
             document.querySelectorAll('[aria-haspopup="listbox"], [data-test-id]')
           );
 
           for (const candidate of candidates) {
-            if (!(candidate instanceof HTMLElement)) continue;
+            if (
+              !(candidate instanceof HTMLElement) &&
+              !(candidate instanceof SVGElement)
+            ) {
+              continue;
+            }
 
             const dataset = candidate.dataset || {};
             const isSourceTrigger = Object.keys(dataset).some(key =>
@@ -702,12 +728,20 @@ export class AlfaAutomation {
             );
 
             if (isSourceTrigger || candidate.getAttribute('role') === 'combobox') {
-              candidate.click();
-              break;
+              if (typeof candidate.click === 'function') {
+                candidate.click();
+              } else {
+                candidate.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+              }
+              return true;
             }
           }
+          return false;
         });
-        await this.sleep(500);
+
+        if (fallbackTriggered) {
+          await this.sleep(500);
+        }
       };
 
       await ensureAccountDropdownOpen();
@@ -715,20 +749,60 @@ export class AlfaAutomation {
       await ensureAccountDropdownOpen();
       await this.page.waitForSelector(accountOptionSelector, { timeout: 60000 });
 
-      await this.page.evaluate(() => {
+      const sourceAccountName = 'Расчётный счёт ··7167';
+      const sourceAccountDigits = sourceAccountName.replace(/\D/g, '').slice(-4);
+      const sourceAccountSelected = await this.page.evaluate(selectionData => {
+        const normalize = text =>
+          (text || '')
+            .replace(/\u00A0/g, ' ')
+            .replace(/[·•]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+
         const options = Array.from(document.querySelectorAll('div[data-test-id="src-account-option"]'));
-        const targetOption = options.find(opt => opt.textContent.includes('··7167'));
-        if (targetOption instanceof HTMLElement) {
-          // Try to find clickable child element (section with tabindex)
-          const clickableSection = targetOption.querySelector('section[tabindex]');
-          if (clickableSection instanceof HTMLElement) {
-            clickableSection.click();
-          } else {
-            // Fallback: try clicking the div itself
-            targetOption.click();
+        const normalizedTargetName = normalize(selectionData.accountName);
+
+        const targetOption = options.find(opt => {
+          const optionText = normalize(opt.textContent);
+          if (normalizedTargetName && optionText.includes(normalizedTargetName)) {
+            return true;
           }
+
+          if (selectionData.accountDigits) {
+            const digits = (opt.textContent || '').replace(/\D/g, '');
+            if (digits.endsWith(selectionData.accountDigits)) {
+              return true;
+            }
+          }
+
+          return false;
+        });
+
+        if (!targetOption || !(targetOption instanceof HTMLElement)) {
+          return false;
         }
-      });
+
+        targetOption.scrollIntoView({ block: 'center' });
+
+        const clickable = targetOption.querySelector('section[tabindex], button, [role="option"]');
+        if (clickable instanceof HTMLElement) {
+          clickable.click();
+          return true;
+        }
+
+        if (typeof targetOption.click === 'function') {
+          targetOption.click();
+          return true;
+        }
+
+        targetOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        return true;
+      }, { accountName: sourceAccountName, accountDigits: sourceAccountDigits });
+
+      if (!sourceAccountSelected) {
+        throw new Error(`Не удалось выбрать счёт списания "${sourceAccountName}"`);
+      }
 
       await waitBetweenSteps();
 
@@ -805,10 +879,34 @@ export class AlfaAutomation {
           '[data-test-id="dest-account-options-trigger"]'
         ];
 
+        const clickTrigger = async selector => {
+          const clicked = await this.page.evaluate(sel => {
+            const el = document.querySelector(sel);
+            if (!el) return false;
+
+            if (typeof el.click === 'function') {
+              el.click();
+              return true;
+            }
+
+            if (el instanceof SVGElement) {
+              el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+              return true;
+            }
+
+            return false;
+          }, selector);
+
+          if (!clicked) {
+            return false;
+          }
+
+          return true;
+        };
+
         for (const selector of triggerSelectors) {
-          const handle = await this.page.$(selector);
-          if (handle) {
-            await handle.click();
+          const opened = await clickTrigger(selector);
+          if (opened) {
             await this.sleep(500);
             const check = await this.page.$(destOptionSelector);
             if (check) return;
@@ -818,13 +916,21 @@ export class AlfaAutomation {
         // Last resort: click via DOM evaluation on the specific field
         const fieldOpened = await this.page.evaluate(() => {
           const field = document.querySelector('[data-test-id="dest-account-field"]');
-          if (field instanceof HTMLElement) {
-            field.click();
+          if (field instanceof HTMLElement || field instanceof SVGElement) {
+            if (typeof field.click === 'function') {
+              field.click();
+            } else {
+              field.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            }
             return true;
           }
           const container = document.querySelector('[data-test-id="dest-account"]');
-          if (container instanceof HTMLElement) {
-            container.click();
+          if (container instanceof HTMLElement || container instanceof SVGElement) {
+            if (typeof container.click === 'function') {
+              container.click();
+            } else {
+              container.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            }
             return true;
           }
           return false;
@@ -835,48 +941,87 @@ export class AlfaAutomation {
           if (check) return;
         }
 
-        await this.page.evaluate(() => {
+        const fallbackTriggered = await this.page.evaluate(() => {
           const candidates = Array.from(document.querySelectorAll('[aria-haspopup="listbox"], [data-test-id]'));
           for (const candidate of candidates) {
-            if (!(candidate instanceof HTMLElement)) continue;
+            if (
+              !(candidate instanceof HTMLElement) &&
+              !(candidate instanceof SVGElement)
+            ) {
+              continue;
+            }
             const dataset = candidate.dataset || {};
             const matchesDataset = Object.keys(dataset).some(key =>
               key.toLowerCase().includes('dest') && key.toLowerCase().includes('account')
             );
             if (matchesDataset || candidate.getAttribute('role') === 'combobox') {
-              candidate.click();
-              break;
+              if (typeof candidate.click === 'function') {
+                candidate.click();
+              } else {
+                candidate.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+              }
+              return true;
             }
           }
+          return false;
         });
-        await this.sleep(500);
+        if (fallbackTriggered) {
+          await this.sleep(500);
+        }
       };
 
       await ensureDestinationDropdownOpen();
       await this.page.waitForSelector(`${destListSelector}, ${destOptionSelector}`, { timeout: 60000 });
       await ensureDestinationDropdownOpen();
 
-      const destinationSelected = await this.page.evaluate((targetName) => {
-        const normalize = text => (text || '').replace(/\s+/g, ' ').trim();
-        const targetNormalized = normalize(targetName);
-        const options = Array.from(document.querySelectorAll('div[data-test-id="dest-account-option"]'));
-        const targetOption = options.find(opt => normalize(opt.textContent).includes(targetNormalized));
-        if (targetOption instanceof HTMLElement) {
-          targetOption.scrollIntoView({ block: 'center' });
+      const destinationDigits = (toAccountName || '').replace(/\D/g, '').slice(-4);
+      const destinationSelected = await this.page.evaluate(selectionData => {
+        const normalize = text =>
+          (text || '')
+            .replace(/\u00A0/g, ' ')
+            .replace(/[·•]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
 
-          // Try to find clickable child element (section with tabindex)
-          const clickableSection = targetOption.querySelector('section[tabindex]');
-          if (clickableSection instanceof HTMLElement) {
-            clickableSection.click();
+        const targetNormalized = normalize(selectionData.targetName);
+        const options = Array.from(document.querySelectorAll('div[data-test-id="dest-account-option"]'));
+        const targetOption = options.find(opt => {
+          const optionText = normalize(opt.textContent);
+          if (targetNormalized && optionText.includes(targetNormalized)) {
             return true;
           }
 
-          // Fallback: try clicking the div itself
+          if (selectionData.targetDigits) {
+            const digits = (opt.textContent || '').replace(/\D/g, '');
+            if (digits.endsWith(selectionData.targetDigits)) {
+              return true;
+            }
+          }
+
+          return false;
+        });
+
+        if (!targetOption || !(targetOption instanceof HTMLElement)) {
+          return false;
+        }
+
+        targetOption.scrollIntoView({ block: 'center' });
+
+        const clickableSection = targetOption.querySelector('section[tabindex], button, [role="option"]');
+        if (clickableSection instanceof HTMLElement) {
+          clickableSection.click();
+          return true;
+        }
+
+        if (typeof targetOption.click === 'function') {
           targetOption.click();
           return true;
         }
-        return false;
-      }, toAccountName);
+
+        targetOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        return true;
+      }, { targetName: toAccountName, targetDigits: destinationDigits });
 
       if (!destinationSelected) {
         throw new Error(`Не удалось выбрать счёт назначения "${toAccountName}"`);
