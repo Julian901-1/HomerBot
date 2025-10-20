@@ -15,8 +15,36 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json());
+
+// Custom error handler for body-parser to catch JSON parse errors
+app.use(bodyParser.json({
+  verify: (req, _res, buf, encoding) => {
+    try {
+      // Store raw body for error logging
+      req.rawBody = buf.toString(encoding || 'utf8');
+    } catch (e) {
+      console.error('[BODY-PARSER] Error storing raw body:', e.message);
+    }
+  }
+}));
+
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// Error handler for JSON parse errors
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    console.error('[BODY-PARSER] ❌ JSON Parse Error:', err.message);
+    console.error('[BODY-PARSER] ❌ Raw body:', req.rawBody ? req.rawBody.substring(0, 500) : 'N/A');
+    console.error('[BODY-PARSER] ❌ Content-Type:', req.headers['content-type']);
+
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid JSON in request body',
+      details: err.message
+    });
+  }
+  next();
+});
 
 // Services
 const encryptionService = new EncryptionService(process.env.ENCRYPTION_SECRET_KEY || process.env.ENCRYPTION_KEY);
@@ -1172,6 +1200,12 @@ app.post('/api/morning-transfer', async (req, res) => {
     await alfaAutomation.close();
     alfaAutomation = null;
 
+    // CRITICAL: Wait for browser cleanup to complete before starting new browser
+    // This prevents crashes from puppeteer-extra plugins (rimraf cleanup, etc.)
+    console.log('[API] ⏳ Waiting 10 seconds for browser cleanup and memory to free...');
+    await new Promise(resolve => setTimeout(resolve, 10000));
+    console.log('[API] ✅ Cleanup wait completed');
+
     // === STAGE 3: TBANK post-transfer steps (19-23) ===
     console.log('[API] === STAGE 3: TBANK post-transfer steps 19-23 ===');
 
@@ -1398,6 +1432,12 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
         console.error('[API] ⚠️ Garbage collection error (continuing anyway):', gcError.message);
       }
     }
+
+    // CRITICAL: Wait for browser cleanup to complete before starting new browser
+    // This prevents crashes from puppeteer-extra plugins (rimraf cleanup, etc.)
+    console.log('[API] ⏳ Waiting 10 seconds for browser cleanup and memory to free...');
+    await new Promise(resolve => setTimeout(resolve, 10000));
+    console.log('[API] ✅ Cleanup wait completed');
 
     // === STAGE 3: TBANK post-transfer steps (19-23) ===
     console.log('[API] === STAGE 3: TBANK post-transfer steps 19-23 ===');
