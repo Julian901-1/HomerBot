@@ -283,7 +283,7 @@ export class AlfaAutomation {
         message: 'Ожидание SMS-кода от Альфа-Банка'
       };
 
-      await this.waitForAlfaSMSCode(120000); // 2 minutes timeout
+      await this.waitForAlfaSMSCode(120000, 3); // 2 minutes timeout per attempt, max 3 retries
 
       console.log('[ALFA-LOGIN] Этап 7/9: Ввод SMS-кода');
       console.log(`[ALFA-LOGIN] 📝 SMS-код для ввода: "${this.alfaSmsCode}" (длина: ${this.alfaSmsCode ? this.alfaSmsCode.length : 0})`);
@@ -497,24 +497,86 @@ export class AlfaAutomation {
   }
 
   /**
-   * Wait for Alfa SMS code
+   * Wait for Alfa SMS code with retry logic
+   * @param {number} timeout - Timeout in milliseconds for each attempt
+   * @param {number} maxRetries - Maximum number of retry attempts
    */
-  async waitForAlfaSMSCode(timeout = 120000) {
-    // Clear any old SMS code from memory before waiting for a new one
-    console.log('[ALFA-SMS] 🧹 Очистка старого SMS-кода перед ожиданием нового');
-    this.alfaSmsCode = null;
+  async waitForAlfaSMSCode(timeout = 120000, maxRetries = 3) {
+    let attempt = 0;
 
-    return new Promise((resolve, reject) => {
-      this.alfaSmsCodeResolver = resolve;
+    while (attempt < maxRetries) {
+      attempt++;
+      console.log(`[ALFA-SMS] 📱 Попытка ${attempt}/${maxRetries}: Ожидание SMS-кода...`);
 
-      const timeoutId = setTimeout(() => {
-        this.alfaSmsCodeResolver = null;
-        reject(new Error('Alfa SMS code timeout'));
-      }, timeout);
+      // Clear any old SMS code from memory before waiting for a new one
+      console.log('[ALFA-SMS] 🧹 Очистка старого SMS-кода перед ожиданием нового');
+      this.alfaSmsCode = null;
 
-      // Store timeout ID to clear it when code arrives
-      this.alfaSmsCodeTimeout = timeoutId;
-    });
+      try {
+        await new Promise((resolve, reject) => {
+          this.alfaSmsCodeResolver = resolve;
+
+          const timeoutId = setTimeout(() => {
+            this.alfaSmsCodeResolver = null;
+            reject(new Error('Alfa SMS code timeout'));
+          }, timeout);
+
+          // Store timeout ID to clear it when code arrives
+          this.alfaSmsCodeTimeout = timeoutId;
+        });
+
+        // If we got here, the code was successfully received
+        console.log('[ALFA-SMS] ✅ SMS-код получен успешно');
+        return;
+
+      } catch (error) {
+        console.log(`[ALFA-SMS] ⏱️ Таймаут ожидания SMS-кода (попытка ${attempt}/${maxRetries})`);
+
+        if (attempt >= maxRetries) {
+          console.log('[ALFA-SMS] ❌ Превышено максимальное количество попыток');
+          throw new Error('Alfa SMS code timeout after all retries');
+        }
+
+        // Try to find and click "Запросить код повторно" button
+        console.log('[ALFA-SMS] 🔄 Попытка запросить код повторно...');
+
+        // Take screenshot before retry
+        await this.takeScreenshot(`alfa-sms-timeout-retry-${attempt}`);
+
+        try {
+          const resendClicked = await this.page.evaluate(() => {
+            // Try specific selector first (from HTML example)
+            let resendButton = document.querySelector('button.confirmation__getCodeButton_o4w4f');
+
+            // Fallback to finding by text
+            if (!resendButton) {
+              const buttons = Array.from(document.querySelectorAll('button'));
+              resendButton = buttons.find(btn =>
+                btn.textContent.includes('Запросить код повторно') ||
+                btn.textContent.includes('Отправить код повторно')
+              );
+            }
+
+            if (resendButton) {
+              resendButton.scrollIntoView({ behavior: 'instant', block: 'center' });
+              resendButton.click();
+              return true;
+            }
+            return false;
+          });
+
+          if (resendClicked) {
+            console.log('[ALFA-SMS] ✅ Кнопка "Запросить код повторно" нажата');
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for request to process
+          } else {
+            console.log('[ALFA-SMS] ⚠️ Кнопка "Запросить код повторно" не найдена');
+            // Continue to next attempt anyway
+          }
+        } catch (clickError) {
+          console.log('[ALFA-SMS] ⚠️ Ошибка при попытке нажать кнопку повторного запроса:', clickError.message);
+        }
+      }
+    }
   }
 
   /**
@@ -1426,7 +1488,7 @@ export class AlfaAutomation {
       this.pendingInputData = {
         message: 'Ожидание SMS-кода для подтверждения перевода'
       };
-      await this.waitForAlfaSMSCode(120000);
+      await this.waitForAlfaSMSCode(120000, 3); // 2 minutes timeout per attempt, max 3 retries
 
       console.log('[ALFA→TBANK] Этап 10/11: Ввод SMS-кода');
       console.log(`[ALFA→TBANK] 📝 SMS-код для ввода: "${this.alfaSmsCode}" (длина: ${this.alfaSmsCode ? this.alfaSmsCode.length : 0})`);
