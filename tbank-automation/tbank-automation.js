@@ -551,9 +551,7 @@ export class TBankAutomation {
     try {
       const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
       console.log(`[TBANK] 📸 [${context}] Screenshot captured (base64 length: ${screenshot.length})`);
-      console.log(`[TBANK] 📸 === SCREENSHOT BASE64 START [${context}] ===`);
-      console.log(screenshot);
-      console.log(`[TBANK] 📸 === SCREENSHOT BASE64 END [${context}] ===`);
+      // Note: Base64 screenshot data NOT logged to avoid JSON parse errors in monitoring systems
       return screenshot;
     } catch (e) {
       console.log(`[TBANK] ⚠️ [${context}] Could not capture screenshot:`, e.message);

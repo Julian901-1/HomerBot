@@ -108,9 +108,7 @@ export class AlfaAutomation {
     try {
       const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
       console.log(`[ALFA] 📸 [${context}] Screenshot captured (base64 length: ${screenshot.length})`);
-      console.log(`[ALFA] 📸 === SCREENSHOT BASE64 START [${context}] ===`);
-      console.log(screenshot);
-      console.log(`[ALFA] 📸 === SCREENSHOT BASE64 END [${context}] ===`);
+      // Note: Base64 screenshot data NOT logged to avoid JSON parse errors in monitoring systems
       return screenshot;
     } catch (e) {
       console.log(`[ALFA] ⚠️ [${context}] Could not capture screenshot:`, e.message);
@@ -1471,10 +1469,6 @@ export class AlfaAutomation {
 
       console.log('[ALFA→TBANK] ✅ SMS-код введён, ожидание обработки...');
       await this.sleep(3000);
-
-      // Take screenshot after code entry
-      console.log('[ALFA→TBANK] 📸 Создание скриншота после ввода SMS-кода...');
-      await this.takeScreenshot('alfa-to-tbank-after-sms-code');
 
       console.log('[ALFA→TBANK] Этап 11/11: Проверка успешности перевода');
 
