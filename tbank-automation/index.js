@@ -1252,6 +1252,13 @@ app.post('/api/morning-transfer', async (req, res) => {
     }
     console.log('[API] ✅ T-Bank steps 19-21 completed');
 
+    // Log screenshot base64 if available
+    if (tbankPostResult.screenshotBase64) {
+      console.log('[API] 📸 === SCREENSHOT BASE64 START [morning-post-transfer-after] ===');
+      console.log(tbankPostResult.screenshotBase64);
+      console.log('[API] 📸 === SCREENSHOT BASE64 END [morning-post-transfer-after] ===');
+    }
+
     if (tbankSmsQueueChecker) {
       clearInterval(tbankSmsQueueChecker);
       tbankSmsQueueChecker = null;
@@ -1458,6 +1465,13 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
       throw new Error(`T-Bank post-transfer steps failed: ${tbankPostResult.error}`);
     }
     console.log('[API] ✅ T-Bank steps 19-21 completed');
+
+    // Log screenshot base64 if available
+    if (tbankPostResult.screenshotBase64) {
+      console.log('[API] 📸 === SCREENSHOT BASE64 START [morning-post-transfer-after] ===');
+      console.log(tbankPostResult.screenshotBase64);
+      console.log('[API] 📸 === SCREENSHOT BASE64 END [morning-post-transfer-after] ===');
+    }
 
     // Cleanup T-Bank (doesn't close browser since it was reused)
     if (tbankSmsQueueChecker) {

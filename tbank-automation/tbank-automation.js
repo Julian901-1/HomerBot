@@ -2107,13 +2107,24 @@ export class TBankAutomation {
         throw new Error('Не удалось нажать кнопку "Перевести"');
       }
 
-      await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {});
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      console.log('[TBANK🌅] ⏳ Ожидание завершения операции перевода...');
 
-      await this.takeScreenshot('morning-post-transfer-after');
+      // Wait for navigation after clicking "Перевести"
+      await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 }).catch(() => {
+        console.log('[TBANK🌅] ⚠️ Навигация не произошла или таймаут, продолжаем...');
+      });
+
+      // Additional wait to ensure the operation completes
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Take screenshot and get base64
+      const screenshotBase64 = await this.takeScreenshot('morning-post-transfer-after');
       console.log('[TBANK🌅] ✅ Шаги 19-21 выполнены успешно');
 
-      return { success: true };
+      return {
+        success: true,
+        screenshotBase64
+      };
     } catch (error) {
       console.error('[TBANK🌅] ❌ Ошибка при выполнении шагов 19-21:', error.message);
       await this.takeScreenshot('morning-post-transfer-error');
