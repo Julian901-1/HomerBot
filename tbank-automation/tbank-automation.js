@@ -2005,15 +2005,16 @@ export class TBankAutomation {
 
       console.log('[TBANK🌅] ▶️ Запуск шагов 19-23 для утреннего перевода...');
 
-      // Убедиться, что находимся на главной
-      if (!this.page.url().includes('/mybank/')) {
-        console.log('[TBANK🌅] ℹ️ Не на /mybank/, выполняем переход...');
-        await this.page.goto('https://www.tbank.ru/mybank/', {
-          waitUntil: 'networkidle2',
-          timeout: 30000
-        });
-        await this.page.waitForTimeout(3000);
-      }
+      // Шаг 1: Переход на страницу перевода между счетами
+      console.log('[TBANK🌅] Переход на страницу перевода между счетами...');
+      const transferPageUrl = 'https://www.tbank.ru/mybank/payments/transfer-between-accounts/?predefined=%7B%22account%22%3A%225212783608%22%2C%22moneyAmount%22%3A%22%3AmoneyAmount%22%7D&requiredParams=%5B%22accountId%22%5D&internal_source=quick_transfers';
+
+      await this.page.goto(transferPageUrl, {
+        waitUntil: 'networkidle2',
+        timeout: 30000
+      });
+      console.log('[TBANK🌅] ✅ Переход выполнен, ожидание загрузки страницы...');
+      await this.page.waitForTimeout(3000);
 
       await this.takeScreenshot('morning-post-transfer-before');
 
