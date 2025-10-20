@@ -77,25 +77,10 @@ export class AlfaAutomation {
   async initBrowser() {
     console.log('[ALFA-BROWSER] Инициализация браузера...');
 
-    // Kill any stray Chrome/Chromium processes before launching
-    try {
-      console.log(`[ALFA-BROWSER] Checking for existing browser processes...`);
-      const { exec } = await import('child_process');
-      const { promisify } = await import('util');
-      const execAsync = promisify(exec);
-
-      if (process.platform === 'win32') {
-        await execAsync('taskkill /F /IM chrome.exe /T 2>nul || exit 0').catch(() => {});
-        await execAsync('taskkill /F /IM chromium.exe /T 2>nul || exit 0').catch(() => {});
-      } else {
-        // Linux/macOS - kill all Chrome processes
-        await execAsync('pkill -9 chrome || true').catch(() => {});
-        await execAsync('pkill -9 chromium || true').catch(() => {});
-      }
-      console.log(`[ALFA-BROWSER] Cleaned up any existing browser processes`);
-    } catch (err) {
-      console.log(`[ALFA-BROWSER] No existing processes to clean up`);
-    }
+    // NOTE: Removed force kill commands before launching browser as they can:
+    // 1. Kill ALL Chrome processes on the server (including other sessions/users)
+    // 2. Cause server restart on platforms like Render
+    // 3. Not needed - each Puppeteer instance manages its own isolated browser process
 
     this.browser = await puppeteer.launch({
       headless: true,
@@ -765,9 +750,6 @@ export class AlfaAutomation {
 
       console.log('[ALFA→SAVING] ✅ Перевод успешно завершён');
 
-      // Take confirmation screenshot
-      await this.takeScreenshot('alfa-to-saving-success');
-
       return { success: true, amount };
 
     } catch (error) {
@@ -930,8 +912,6 @@ export class AlfaAutomation {
 
       console.log('[SAVING→ALFA] Этап 6/6: Проверка успешности перевода');
       console.log('[SAVING→ALFA] ✅ Перевод успешно завершён');
-
-      await this.takeScreenshot('saving-to-alfa-success');
 
       return { success: true, amount };
 
@@ -1112,8 +1092,6 @@ export class AlfaAutomation {
 
       console.log('[ALFA→TBANK] ✅ Перевод успешно завершён');
 
-      await this.takeScreenshot('alfa-to-tbank-success');
-
       return { success: true, amount: transferAmount };
 
     } catch (error) {
@@ -1168,23 +1146,11 @@ export class AlfaAutomation {
         console.log('[ALFA-BROWSER] ✅ Браузер закрыт');
       }
 
-      // Force kill any remaining browser processes
-      try {
-        const { exec } = await import('child_process');
-        const { promisify } = await import('util');
-        const execAsync = promisify(exec);
+      // NOTE: Removed force kill commands (pkill -9, taskkill /F) as they can:
+      // 1. Kill ALL Chrome processes on the server (including other sessions)
+      // 2. Cause server restart on platforms like Render
+      // 3. Puppeteer already handles process cleanup correctly via browser.close()
 
-        if (process.platform === 'win32') {
-          await execAsync('taskkill /F /IM chrome.exe /T 2>nul || exit 0').catch(() => {});
-          await execAsync('taskkill /F /IM chromium.exe /T 2>nul || exit 0').catch(() => {});
-        } else {
-          await execAsync('pkill -9 chrome || true').catch(() => {});
-          await execAsync('pkill -9 chromium || true').catch(() => {});
-        }
-        console.log('[ALFA-BROWSER] Force killed any remaining browser processes');
-      } catch (err) {
-        // Ignore errors
-      }
     } catch (error) {
       console.error('[ALFA-BROWSER] Ошибка закрытия браузера:', error.message);
     }
