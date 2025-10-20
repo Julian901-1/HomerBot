@@ -1992,18 +1992,18 @@ export class TBankAutomation {
   }
 
   /**
-   * Execute instruction steps 19-23 after SBP перевод в Т-Банк
-   * @param {object} options
-   * @param {string} [options.sourceAccountMask='7167'] - часть текста, по которой ищем счёт
-   * @param {number} [options.waitAfterSourceMs=5000] - пауза перед выбором счёта (мс)
+   * Execute instruction steps 19-21 (инструкция шаги 21-23) after SBP перевод в Т-Банк
+   * Шаг 19: Получить сумму на счёте (инструкция шаг 21)
+   * Шаг 20: Ввести сумму в поле (инструкция шаг 22)
+   * Шаг 21: Нажать "Перевести" (инструкция шаг 23)
    */
-  async runMorningPostTransferFlow({ sourceAccountMask = '7167', waitAfterSourceMs = 5000 } = {}) {
+  async runMorningPostTransferFlow() {
     try {
       if (!this.sessionActive) {
         throw new Error('Not logged in');
       }
 
-      console.log('[TBANK🌅] ▶️ Запуск шагов 19-23 для утреннего перевода...');
+      console.log('[TBANK🌅] ▶️ Запуск шагов 19-21 для утреннего перевода...');
 
       // Шаг 1: Переход на страницу перевода между счетами
       console.log('[TBANK🌅] Переход на страницу перевода между счетами...');
@@ -2023,110 +2023,80 @@ export class TBankAutomation {
 
       await this.takeScreenshot('morning-post-transfer-before');
 
-      // Шаг 19: кнопка "Пополнить"
-      console.log('[TBANK🌅] 19/23: нажимаем "Пополнить"...');
+      // Шаг 19: Получить сумму на счёте (шаг 21 инструкции)
+      console.log('[TBANK🌅] 19/21: получаем сумму на счёте...');
 
-      // Try multiple selectors for the "Пополнить" button
-      let topUpClicked = false;
+      const accountAmount = await this.page.evaluate(() => {
+        // Ищем элемент с суммой на счёте по data-qa-type="uikit/money"
+        const moneyElement = document.querySelector('[data-qa-type="uikit/money"]');
+        if (!moneyElement) return null;
 
-      // Wait for button to appear with retry
-      try {
-        await this.waitForSelectorWithRetry('button[data-schema-path="replenishmentButton"]', {
-          timeout: 10000,
-          retries: 3
-        });
-
-        // Try by data-schema-path attribute
-        topUpClicked = await this.page.evaluate(() => {
-          const button = document.querySelector('button[data-schema-path="replenishmentButton"]');
-          if (button) {
-            button.scrollIntoView({ behavior: 'instant', block: 'center' });
-            button.click();
-            return true;
-          }
-          return false;
-        });
-      } catch (e) {
-        console.log('[TBANK🌅] ⚠️ Селектор data-schema-path не найден после retry, пробуем по тексту...');
-      }
-
-      if (!topUpClicked) {
-        console.log('[TBANK🌅] ⚠️ Попытка через data-schema-path не удалась, пробуем по тексту...');
-        topUpClicked = await this.clickElementByText('button, [role="button"]', 'Пополнить', { timeout: 10000 });
-      }
-
-      if (!topUpClicked) {
-        throw new Error('Не удалось нажать кнопку "Пополнить"');
-      }
-
-      console.log('[TBANK🌅] ✅ Кнопка "Пополнить" нажата');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Шаг 20: баннер "Со счёта Альфа-Банка"
-      console.log('[TBANK🌅] 20/23: выбираем "Со счёта в Альфа-Банке"...');
-      const alfaSourceClicked = await this.clickElementByText('button, [role="button"], div[data-test-id="banner-wrapper"]', 'Со счёта', { timeout: 10000 });
-      if (!alfaSourceClicked) {
-        throw new Error('Не удалось выбрать пункт "Со счёта в Альфа-Банке"');
-      }
-
-      await new Promise(resolve => setTimeout(resolve, waitAfterSourceMs));
-
-      // Шаг 21: выбор счёта по маске
-      console.log(`[TBANK🌅] 21/23: ищем счёт с маской ${sourceAccountMask}...`);
-      await this.waitForSelectorWithRetry('div[data-test-id="src-account-option"]', {
-        timeout: 15000,
-        retries: 3
+        const text = moneyElement.textContent || '';
+        // Убираем все пробелы и валюту, оставляем только цифры
+        const cleanText = text.replace(/\s/g, '').replace(/₽/g, '').trim();
+        return cleanText;
       });
-      const accountSelected = await this.page.evaluate((mask) => {
-        const options = Array.from(document.querySelectorAll('div[data-test-id="src-account-option"]'));
-        for (const option of options) {
-          const text = (option.textContent || '')
-            .replace(/\u00A0/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-          if (!text.includes(mask)) continue;
 
-          option.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
-          option.click();
-          return true;
-        }
-        return false;
-      }, sourceAccountMask);
-
-      if (!accountSelected) {
-        throw new Error(`Не удалось выбрать счёт с маской ${sourceAccountMask}`);
+      if (!accountAmount) {
+        throw new Error('Не удалось получить сумму на счёте');
       }
+
+      console.log(`[TBANK🌅] ✅ Сумма на счёте: ${accountAmount} ₽`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Шаг 20: Ввести сумму в поле (шаг 22 инструкции)
+      console.log(`[TBANK🌅] 20/21: вводим сумму ${accountAmount} в поле...`);
+
+      const amountEntered = await this.page.evaluate((amount) => {
+        // Ищем поле ввода суммы
+        const input = document.querySelector('[data-qa-type="amount-from.input"]');
+        if (!input) return false;
+
+        input.scrollIntoView({ behavior: 'instant', block: 'center' });
+        input.focus();
+        input.value = amount;
+
+        // Триггерим события изменения
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+
+        return true;
+      }, accountAmount);
+
+      if (!amountEntered) {
+        throw new Error('Не удалось ввести сумму в поле');
+      }
+
+      console.log('[TBANK🌅] ✅ Сумма введена');
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Шаг 22: кнопка "Всё"
-      console.log('[TBANK🌅] 22/23: нажимаем "Всё"...');
-      const allClicked = await this.clickElementByText('button, [role="button"]', 'Всё', { timeout: 8000 });
-      if (!allClicked) {
-        throw new Error('Не удалось нажать кнопку "Всё"');
-      }
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      // Шаг 23: кнопка "Перевести"
-      console.log('[TBANK🌅] 23/23: подтверждаем перевод...');
+      // Шаг 21: Нажать "Перевести" (шаг 23 инструкции)
+      console.log('[TBANK🌅] 21/21: подтверждаем перевод...');
 
       let submitClicked = false;
 
-      // Wait for button with retry
+      // Wait for submit button with retry
       try {
-        await this.waitForSelectorWithRetry('button[data-test-id="payment-button"]', {
+        await this.waitForSelectorWithRetry('[data-qa-type="submit-button.content"]', {
           timeout: 10000,
           retries: 3
         });
 
         submitClicked = await this.page.evaluate(() => {
-          const button = document.querySelector('button[data-test-id="payment-button"]');
+          // Ищем кнопку по data-qa-type="submit-button.content"
+          const buttonContent = document.querySelector('[data-qa-type="submit-button.content"]');
+          if (!buttonContent) return false;
+
+          // Находим родительскую кнопку
+          const button = buttonContent.closest('button, [role="button"]');
           if (!button) return false;
+
           button.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
           button.click();
           return true;
         });
       } catch (e) {
-        console.log('[TBANK🌅] ⚠️ Селектор payment-button не найден после retry, пробуем по тексту...');
+        console.log('[TBANK🌅] ⚠️ Селектор submit-button.content не найден после retry, пробуем по тексту...');
       }
 
       if (!submitClicked) {
@@ -2141,11 +2111,11 @@ export class TBankAutomation {
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       await this.takeScreenshot('morning-post-transfer-after');
-      console.log('[TBANK🌅] ✅ Шаги 19-23 выполнены успешно');
+      console.log('[TBANK🌅] ✅ Шаги 19-21 выполнены успешно');
 
       return { success: true };
     } catch (error) {
-      console.error('[TBANK🌅] ❌ Ошибка при выполнении шагов 19-23:', error.message);
+      console.error('[TBANK🌅] ❌ Ошибка при выполнении шагов 19-21:', error.message);
       await this.takeScreenshot('morning-post-transfer-error');
       return {
         success: false,

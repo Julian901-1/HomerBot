@@ -1213,12 +1213,8 @@ app.post('/api/morning-transfer', async (req, res) => {
     await new Promise(resolve => setTimeout(resolve, 10000));
     console.log('[API] ✅ Cleanup wait completed');
 
-    // === STAGE 3: TBANK post-transfer steps (19-23) ===
-    console.log('[API] === STAGE 3: TBANK post-transfer steps 19-23 ===');
-
-    const tbankSourceMask = process.env.TBANK_POST_TRANSFER_ACCOUNT_MASK || '7167';
-    const rawTbankWaitMs = parseInt(process.env.TBANK_POST_TRANSFER_WAIT_MS || '', 10);
-    const waitAfterSourceMs = Number.isNaN(rawTbankWaitMs) ? 5000 : rawTbankWaitMs;
+    // === STAGE 3: TBANK post-transfer steps (19-21) ===
+    console.log('[API] === STAGE 3: TBANK post-transfer steps 19-21 ===');
 
     tbankAutomation = new TBankAutomation({
       username,
@@ -1249,15 +1245,12 @@ app.post('/api/morning-transfer', async (req, res) => {
     }
     console.log('[API] ✅ T-Bank login successful for Stage 3');
 
-    const tbankPostResult = await tbankAutomation.runMorningPostTransferFlow({
-      sourceAccountMask: tbankSourceMask,
-      waitAfterSourceMs
-    });
+    const tbankPostResult = await tbankAutomation.runMorningPostTransferFlow();
 
     if (!tbankPostResult.success) {
       throw new Error(`T-Bank post-transfer steps failed: ${tbankPostResult.error}`);
     }
-    console.log('[API] ✅ T-Bank steps 19-23 completed');
+    console.log('[API] ✅ T-Bank steps 19-21 completed');
 
     if (tbankSmsQueueChecker) {
       clearInterval(tbankSmsQueueChecker);
@@ -1420,13 +1413,9 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
       console.log('[API] ✅ Alfa SMS checker cleared');
     }
 
-    // === STAGE 3: TBANK post-transfer steps (19-23) ===
-    console.log('[API] === STAGE 3: TBANK post-transfer steps 19-23 ===');
+    // === STAGE 3: TBANK post-transfer steps (19-21) ===
+    console.log('[API] === STAGE 3: TBANK post-transfer steps 19-21 ===');
     console.log('[API] Reusing browser, navigating to T-Bank...');
-
-    const tbankSourceMask = process.env.TBANK_POST_TRANSFER_ACCOUNT_MASK || '7167';
-    const rawTbankWaitMs = parseInt(process.env.TBANK_POST_TRANSFER_WAIT_MS || '', 10);
-    const waitAfterSourceMs = Number.isNaN(rawTbankWaitMs) ? 5000 : rawTbankWaitMs;
 
     // Reuse Alfa browser and page for T-Bank
     const reusedBrowser = alfaAutomation.browser;
@@ -1463,15 +1452,12 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
     }
     console.log('[API] ✅ T-Bank login successful for Stage 3');
 
-    const tbankPostResult = await tbankAutomation.runMorningPostTransferFlow({
-      sourceAccountMask: tbankSourceMask,
-      waitAfterSourceMs
-    });
+    const tbankPostResult = await tbankAutomation.runMorningPostTransferFlow();
 
     if (!tbankPostResult.success) {
       throw new Error(`T-Bank post-transfer steps failed: ${tbankPostResult.error}`);
     }
-    console.log('[API] ✅ T-Bank steps 19-23 completed');
+    console.log('[API] ✅ T-Bank steps 19-21 completed');
 
     // Cleanup T-Bank (doesn't close browser since it was reused)
     if (tbankSmsQueueChecker) {
