@@ -1229,19 +1229,29 @@ export class AlfaAutomation {
       await waitBetweenSteps();
 
       console.log('[ALFA→TBANK] Этап 3/11: Выбор шаблона "Себе в другой банк"');
-      await this.page.waitForSelector('button[data-test-id="phone-list-item"]', { timeout: 15000 });
-      const selfTransferClicked = await this.page.evaluate(() => {
-        const items = Array.from(document.querySelectorAll('button[data-test-id="phone-list-item"]'));
-        const selfTransfer = items.find(item => item.textContent.includes('Себе в другой банк'));
-        if (selfTransfer) {
-          selfTransfer.click();
-          return true;
-        }
-        return false;
-      });
 
-      if (!selfTransferClicked) {
-        throw new Error('Не удалось найти и нажать "Себе в другой банк"');
+      // Try to find and click the template, but continue if not found (not critical)
+      let selfTransferClicked = false;
+      try {
+        await this.page.waitForSelector('button[data-test-id="phone-list-item"]', { timeout: 15000 });
+        selfTransferClicked = await this.page.evaluate(() => {
+          const items = Array.from(document.querySelectorAll('button[data-test-id="phone-list-item"]'));
+          const selfTransfer = items.find(item => item.textContent.includes('Себе в другой банк'));
+          if (selfTransfer) {
+            selfTransfer.click();
+            return true;
+          }
+          return false;
+        });
+
+        if (selfTransferClicked) {
+          console.log('[ALFA→TBANK] ✅ Шаблон "Себе в другой банк" найден и выбран');
+        } else {
+          console.log('[ALFA→TBANK] ⚠️ Шаблон "Себе в другой банк" не найден, пропускаем этот шаг (не критично)');
+        }
+      } catch (templateError) {
+        console.log('[ALFA→TBANK] ⚠️ Не удалось найти шаблон "Себе в другой банк", продолжаем без него:', templateError.message);
+        // Continue execution - this is not critical
       }
 
       console.log('[ALFA→TBANK] Ожидание загрузки списка банков...');
