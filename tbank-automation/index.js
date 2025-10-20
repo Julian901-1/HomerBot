@@ -1089,30 +1089,71 @@ app.post('/api/morning-transfer', async (req, res) => {
     console.log('[API] ✅ Alfa saving -> debit transfer successful');
     console.log('[API] ✅ STAGE 1/2 completed: SAVING→ALFA');
 
+    // Log memory usage before cleanup
+    const memBefore = process.memoryUsage();
+    console.log('[API] 📊 Memory usage BEFORE cleanup:');
+    console.log(`[API]    RSS: ${(memBefore.rss / 1024 / 1024).toFixed(2)} MB (Resident Set Size - total memory)`);
+    console.log(`[API]    Heap Used: ${(memBefore.heapUsed / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`[API]    Heap Total: ${(memBefore.heapTotal / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`[API]    External: ${(memBefore.external / 1024 / 1024).toFixed(2)} MB`);
+
     // === CLEAN UP SESSION BEFORE STAGE 2 (memory optimization for Render 512MB limit) ===
     console.log('[API] 🧹 Closing Alfa session and clearing cache before STAGE 2...');
 
-    // CRITICAL: Stop SMS queue checker BEFORE closing alfaAutomation to prevent race condition crash
-    if (alfaSmsQueueChecker) {
-      clearInterval(alfaSmsQueueChecker);
-      alfaSmsQueueChecker = null;
-      console.log('[API] ✅ SMS queue checker stopped');
+    try {
+      // CRITICAL: Stop SMS queue checker BEFORE closing alfaAutomation to prevent race condition crash
+      if (alfaSmsQueueChecker) {
+        clearInterval(alfaSmsQueueChecker);
+        alfaSmsQueueChecker = null;
+        console.log('[API] ✅ SMS queue checker stopped');
+      }
+
+      if (alfaAutomation) {
+        await alfaAutomation.close();
+        alfaAutomation = null; // Release reference
+        console.log('[API] ✅ Alfa session closed, cache cleared');
+      }
+
+      // Force garbage collection if available
+      if (global.gc) {
+        console.log('[API] 🧹 Running garbage collection...');
+        global.gc();
+        console.log('[API] ✅ Garbage collection complete');
+      }
+
+      // Add delay to ensure cleanup is complete
+      console.log('[API] ⏳ Waiting 5 seconds for cleanup to complete...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      console.log('[API] ✅ Cleanup completed successfully');
+
+      // Log memory usage after cleanup
+      const memAfter = process.memoryUsage();
+      console.log('[API] 📊 Memory usage AFTER cleanup:');
+      console.log(`[API]    RSS: ${(memAfter.rss / 1024 / 1024).toFixed(2)} MB (Resident Set Size - total memory)`);
+      console.log(`[API]    Heap Used: ${(memAfter.heapUsed / 1024 / 1024).toFixed(2)} MB`);
+      console.log(`[API]    Heap Total: ${(memAfter.heapTotal / 1024 / 1024).toFixed(2)} MB`);
+      console.log(`[API]    External: ${(memAfter.external / 1024 / 1024).toFixed(2)} MB`);
+
+      // Calculate memory freed
+      const memFreed = {
+        rss: memBefore.rss - memAfter.rss,
+        heapUsed: memBefore.heapUsed - memAfter.heapUsed,
+        heapTotal: memBefore.heapTotal - memAfter.heapTotal,
+        external: memBefore.external - memAfter.external
+      };
+      console.log('[API] 🔽 Memory freed:');
+      console.log(`[API]    RSS: ${(memFreed.rss / 1024 / 1024).toFixed(2)} MB`);
+      console.log(`[API]    Heap Used: ${(memFreed.heapUsed / 1024 / 1024).toFixed(2)} MB`);
+      console.log(`[API]    Heap Total: ${(memFreed.heapTotal / 1024 / 1024).toFixed(2)} MB`);
+      console.log(`[API]    External: ${(memFreed.external / 1024 / 1024).toFixed(2)} MB`);
+
+    } catch (cleanupError) {
+      console.error('[API] ⚠️ Cleanup error (non-fatal):', cleanupError.message);
+      console.error('[API] ⚠️ Stack trace:', cleanupError.stack);
+      // Continue anyway - cleanup errors shouldn't block Stage 2
+      alfaAutomation = null; // Force nullify even if close() failed
     }
-
-    await alfaAutomation.close();
-    alfaAutomation = null; // Release reference
-    console.log('[API] ✅ Alfa session closed, cache cleared');
-
-    // Force garbage collection if available
-    if (global.gc) {
-      console.log('[API] 🧹 Running garbage collection...');
-      global.gc();
-      console.log('[API] ✅ Garbage collection complete');
-    }
-
-    // Add delay to ensure cleanup is complete
-    console.log('[API] ⏳ Waiting 5 seconds for cleanup to complete...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
 
     // === STAGE 2: ALFA→TBANK ===
     console.log('[API] === STAGE 2/2: ALFA→TBANK ===');

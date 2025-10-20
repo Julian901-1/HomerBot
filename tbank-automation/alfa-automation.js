@@ -1191,10 +1191,26 @@ export class AlfaAutomation {
   async close() {
     try {
       if (this.browser) {
-        await this.browser.close();
+        try {
+          // Try graceful close first
+          await this.browser.close();
+          console.log('[ALFA-BROWSER] ✅ Браузер закрыт (graceful)');
+        } catch (browserCloseError) {
+          console.log('[ALFA-BROWSER] ⚠️ Graceful close failed, attempting force disconnect:', browserCloseError.message);
+
+          // If graceful close fails, try to disconnect
+          try {
+            if (this.browser && typeof this.browser.disconnect === 'function') {
+              this.browser.disconnect();
+              console.log('[ALFA-BROWSER] ✅ Браузер отключён (disconnect)');
+            }
+          } catch (disconnectError) {
+            console.log('[ALFA-BROWSER] ⚠️ Disconnect also failed:', disconnectError.message);
+          }
+        }
+
         this.browser = null;
         this.page = null;
-        console.log('[ALFA-BROWSER] ✅ Браузер закрыт');
       }
 
       // NOTE: Removed force kill commands (pkill -9, taskkill /F) as they can:
@@ -1203,7 +1219,8 @@ export class AlfaAutomation {
       // 3. Puppeteer already handles process cleanup correctly via browser.close()
 
     } catch (error) {
-      console.error('[ALFA-BROWSER] Ошибка закрытия браузера:', error.message);
+      console.error('[ALFA-BROWSER] Ошибка в методе close():', error.message);
+      // Don't rethrow - we want cleanup to always succeed
     }
   }
 }
