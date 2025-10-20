@@ -1184,6 +1184,12 @@ app.post('/api/morning-transfer', async (req, res) => {
       alfaAutomation = null;
     }
 
+    // MEMORY OPTIMIZATION: Run GC after error cleanup
+    if (global.gc) {
+      console.log('[API] 🧹 Running garbage collection after error cleanup...');
+      global.gc();
+    }
+
     res.status(500).json({
       success: false,
       error: error.message

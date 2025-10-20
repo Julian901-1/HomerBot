@@ -72,6 +72,22 @@ export class AlfaAutomation {
   }
 
   /**
+   * MEMORY OPTIMIZATION: Clean up CDP sessions to free memory
+   */
+  async cleanupCDPSessions() {
+    if (!this.page) return;
+
+    try {
+      const client = await this.page.target().createCDPSession();
+      await client.detach();
+      console.log('[ALFA-MEMORY] ✅ CDP sessions cleaned');
+    } catch (error) {
+      // Silently fail - this is just optimization
+      console.log('[ALFA-MEMORY] ⚠️ CDP cleanup skipped:', error.message);
+    }
+  }
+
+  /**
    * Initialize browser
    */
   async initBrowser() {
@@ -106,18 +122,46 @@ export class AlfaAutomation {
         '--disable-features=TranslateUI,BlinkGenPropertyTrees',
         '--disable-ipc-flooding-protection',
         '--disable-client-side-phishing-detection',
-        '--single-process'
+        // MEMORY OPTIMIZATION: Set memory limits for V8 engine
+        '--max-old-space-size=256',
+        '--js-flags=--max-old-space-size=256'
+        // MEMORY OPTIMIZATION: Removed '--single-process' as it causes memory leaks
+        // Single-process mode forces all Chromium processes into one, causing poor memory management
       ]
     });
 
     this.page = await this.browser.newPage();
 
-    this.page.on('console', msg => {
-      const text = msg.text();
-      if (text.includes('Found box') || text.includes('matching one of selectors')) {
-        return;
+    // MEMORY OPTIMIZATION: Disabled page console logging to reduce memory usage
+    // The Alfa-Bank page generates thousands of console logs (Federation Runtime, Snowplow, etc.)
+    // which consume significant memory. Uncomment only for debugging:
+    // this.page.on('console', msg => {
+    //   const text = msg.text();
+    //   if (text.includes('Found box') || text.includes('matching one of selectors')) {
+    //     return;
+    //   }
+    //   console.log('ALFA PAGE LOG:', text);
+    // });
+
+    // MEMORY OPTIMIZATION: Block unnecessary resources to reduce memory usage
+    await this.page.setRequestInterception(true);
+    this.page.on('request', (request) => {
+      const resourceType = request.resourceType();
+      const url = request.url();
+
+      // Block images, media, fonts, and analytics to save memory
+      if (resourceType === 'image' || resourceType === 'media' || resourceType === 'font') {
+        request.abort();
       }
-      console.log('ALFA PAGE LOG:', text);
+      // Block analytics and tracking scripts (Snowplow, metrics, etc.)
+      else if (url.includes('snowplow') || url.includes('analytics') ||
+               url.includes('metrics') || url.includes('tracking') ||
+               url.includes('ga.js') || url.includes('gtm.js')) {
+        request.abort();
+      }
+      else {
+        request.continue();
+      }
     });
 
     // Set viewport
@@ -826,6 +870,9 @@ export class AlfaAutomation {
 
       console.log('[ALFA→SAVING] ✅ Перевод успешно завершён');
 
+      // MEMORY OPTIMIZATION: Clean up CDP sessions after operation
+      await this.cleanupCDPSessions();
+
       return { success: true, amount };
 
     } catch (error) {
@@ -1111,6 +1158,9 @@ export class AlfaAutomation {
       console.log('[SAVING→ALFA] Этап 6/6: Проверка успешности перевода');
       console.log('[SAVING→ALFA] ✅ Перевод успешно завершён');
 
+      // MEMORY OPTIMIZATION: Clean up CDP sessions after operation
+      await this.cleanupCDPSessions();
+
       return { success: true, amount };
 
     } catch (error) {
@@ -1290,6 +1340,9 @@ export class AlfaAutomation {
       this.pendingInputData = null;
 
       console.log('[ALFA→TBANK] ✅ Перевод успешно завершён');
+
+      // MEMORY OPTIMIZATION: Clean up CDP sessions after operation
+      await this.cleanupCDPSessions();
 
       return { success: true, amount: transferAmount };
 
