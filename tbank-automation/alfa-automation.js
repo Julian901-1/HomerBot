@@ -464,6 +464,10 @@ export class AlfaAutomation {
       this.pendingInputType = null;
       this.pendingInputData = null;
 
+      // Clear SMS code from memory after successful login
+      console.log('[ALFA-LOGIN] 🧹 Очистка SMS-кода из памяти после успешной авторизации');
+      this.alfaSmsCode = null;
+
       console.log('[ALFA-LOGIN] ✅ Логин успешен');
 
       return { success: true };
@@ -476,6 +480,11 @@ export class AlfaAutomation {
 
       this.pendingInputType = null;
       this.pendingInputData = null;
+
+      // Clear SMS code from memory on error to avoid reusing old codes
+      console.log('[ALFA-LOGIN] 🧹 Очистка SMS-кода из памяти после ошибки');
+      this.alfaSmsCode = null;
+
       throw error;
     }
   }
@@ -524,12 +533,28 @@ export class AlfaAutomation {
       throw new Error('Не найдено 4 поля для ввода SMS-кода');
     }
 
+    console.log(`[ALFA-LOGIN] 📝 Ввод SMS-кода: "${code}" (длина: ${code.length})`);
+
     for (let i = 0; i < 4 && i < code.length; i++) {
+      const digit = code[i];
+      console.log(`[ALFA-LOGIN] ⌨️  Ввод цифры ${i + 1}/4: "${digit}"`);
+
+      // Click to focus
       await inputs[i].click();
-      await this.randomDelay(100, 300);
-      await inputs[i].type(code[i]);
+      await this.randomDelay(100, 200);
+
+      // Focus explicitly
+      await inputs[i].focus();
+      await this.randomDelay(100, 200);
+
+      // Type with delay
+      await inputs[i].type(digit, { delay: 100 });
       await this.randomDelay(300, 500);
+
+      console.log(`[ALFA-LOGIN] ✅ Цифра ${i + 1}/4 введена и обработана`);
     }
+
+    console.log('[ALFA-LOGIN] ✅ SMS-код полностью введён');
   }
 
   /**
@@ -1415,14 +1440,24 @@ export class AlfaAutomation {
         console.log(`[ALFA→TBANK] 📊 Input ${i + 1}:`, JSON.stringify(inputInfo));
       }
 
-      // Enter code digit by digit
+      // Enter code digit by digit with focus
       for (let i = 0; i < 4 && i < this.alfaSmsCode.length; i++) {
-        await codeInputs[i].click();
-        await this.sleep(150);
         const digit = this.alfaSmsCode[i];
         console.log(`[ALFA→TBANK] ⌨️  Ввод цифры ${i + 1}/4: "${digit}"`);
-        await codeInputs[i].type(digit);
+
+        // Click to focus on the input field
+        await codeInputs[i].click();
+        await this.sleep(150);
+
+        // Focus explicitly
+        await codeInputs[i].focus();
+        await this.sleep(150);
+
+        // Type the digit
+        await codeInputs[i].type(digit, { delay: 100 });
         await this.sleep(350);
+
+        console.log(`[ALFA→TBANK] ✅ Цифра ${i + 1}/4 введена и обработана`);
       }
 
       console.log('[ALFA→TBANK] ✅ SMS-код введён, ожидание обработки...');
@@ -1454,6 +1489,10 @@ export class AlfaAutomation {
       this.pendingInputType = null;
       this.pendingInputData = null;
 
+      // Clear SMS code from memory after successful transfer
+      console.log('[ALFA→TBANK] 🧹 Очистка SMS-кода из памяти после успешного перевода');
+      this.alfaSmsCode = null;
+
       console.log('[ALFA→TBANK] ✅ Перевод успешно завершён');
 
       // Take final success screenshot
@@ -1471,6 +1510,11 @@ export class AlfaAutomation {
 
       this.pendingInputType = null;
       this.pendingInputData = null;
+
+      // Clear SMS code from memory on error to avoid reusing old codes
+      console.log('[ALFA→TBANK] 🧹 Очистка SMS-кода из памяти после ошибки');
+      this.alfaSmsCode = null;
+
       throw error;
     }
   }
