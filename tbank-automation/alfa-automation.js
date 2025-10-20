@@ -518,28 +518,24 @@ export class AlfaAutomation {
   submitAlfaSMSCode(code) {
     const isNewCode = this.alfaSmsCode !== code;
 
-    // Only log if this is a new code (prevent spam from 500ms interval checker)
-    if (isNewCode) {
-      console.log(`[ALFA-SMS] 📨 Получен новый SMS-код: ${code}`);
-      this.alfaSmsCode = code;
-      this.lastAlfaSmsCodeWarning = null;
+    // Skip processing if this is not a new code (prevent spam from 500ms interval checker)
+    if (!isNewCode) {
+      return false;
     }
+
+    console.log(`[ALFA-SMS] 📨 Получен новый SMS-код: ${code}`);
+    this.alfaSmsCode = code;
 
     if (this.alfaSmsCodeResolver) {
       console.log(`[ALFA-SMS] ✅ SMS-код передан в ожидающий процесс: ${code}`);
       clearTimeout(this.alfaSmsCodeTimeout);
       this.alfaSmsCodeResolver(code);
       this.alfaSmsCodeResolver = null;
-      this.lastAlfaSmsCodeWarning = null;
       return true;
-    }
-
-    if (this.lastAlfaSmsCodeWarning !== code) {
+    } else {
       console.log(`[ALFA-SMS] ⚠️ SMS-код получен, но никто его не ждёт (будет сохранён в памяти): ${code}`);
-      this.lastAlfaSmsCodeWarning = code;
+      return false;
     }
-
-    return false;
   }
 
   /**

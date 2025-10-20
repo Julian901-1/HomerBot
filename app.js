@@ -2311,7 +2311,7 @@ async function testAlfaToTBank() {
   if (btn) btn.disabled = true;
 
   try {
-    showPopup('🔄 Выполняется перевод с Альфы на Т-Банк (Stage 2)...');
+    showPopup('🔄 Выполняется STAGE 2 (ALFA→TBANK) + STAGE 3 (Т-Банк шаги 19-23)...');
 
     const response = await fetch(`${TBANK_API_URL}/api/alfa-to-tbank`, {
       method: 'POST',
@@ -2324,13 +2324,13 @@ async function testAlfaToTBank() {
     const resp = await response.json();
 
     if (resp && resp.success) {
-      showPopup('✅ Перевод ALFA→TBANK выполнен успешно!');
-      console.log('[EVENING_PERCENT] ALFA→TBANK transfer completed:', resp);
+      showPopup('✅ STAGE 2+3 выполнены успешно! Все шаги завершены.');
+      console.log('[EVENING_PERCENT] ALFA→TBANK + T-Bank steps completed:', resp);
     } else {
       showPopup('❌ Ошибка: ' + ((resp && resp.error) || 'unknown'));
     }
   } catch (e) {
-    console.error('[EVENING_PERCENT] Error in ALFA→TBANK transfer:', e);
+    console.error('[EVENING_PERCENT] Error in ALFA→TBANK + T-Bank steps:', e);
     showPopup('❌ Ошибка сети: ' + e.message);
   } finally {
     if (btn) btn.disabled = false;

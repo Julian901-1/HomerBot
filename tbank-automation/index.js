@@ -1286,13 +1286,15 @@ app.post('/api/morning-transfer', async (req, res) => {
 });
 
 /**
- * ALFA→TBANK transfer only (Stage 2)
+ * ALFA→TBANK transfer (Stage 2) + T-Bank post-transfer steps (Stage 3)
  * POST /api/alfa-to-tbank
  * Body: { username, amount (optional) }
  */
 app.post('/api/alfa-to-tbank', async (req, res) => {
   let alfaAutomation = null;
   let alfaSmsQueueChecker = null;
+  let tbankAutomation = null;
+  let tbankSmsQueueChecker = null;
 
   try {
     const { username, amount } = req.body;
@@ -1367,8 +1369,9 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
       throw new Error(`Alfa -> T-Bank SBP transfer failed: ${transferResult.error}`);
     }
     console.log(`[API] ✅ Alfa -> T-Bank SBP transfer successful (${transferResult.amount || amount} RUB)`);
+    console.log('[API] ✅ STAGE 2 completed: ALFA→TBANK');
 
-    // Cleanup
+    // Cleanup Alfa
     if (alfaSmsQueueChecker) {
       clearInterval(alfaSmsQueueChecker);
       alfaSmsQueueChecker = null;
@@ -1378,24 +1381,90 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
     alfaAutomation = null;
 
     if (global.gc) {
-      console.log('[API] 🧹 Running garbage collection...');
+      console.log('[API] 🧹 Running garbage collection after STAGE 2...');
       global.gc();
     }
 
-    console.log(`[API] 🎉 ALFA→TBANK transfer completed successfully!`);
+    // === STAGE 3: TBANK post-transfer steps (19-23) ===
+    console.log('[API] === STAGE 3: TBANK post-transfer steps 19-23 ===');
+
+    const tbankSourceMask = process.env.TBANK_POST_TRANSFER_ACCOUNT_MASK || '7167';
+    const rawTbankWaitMs = parseInt(process.env.TBANK_POST_TRANSFER_WAIT_MS || '', 10);
+    const waitAfterSourceMs = Number.isNaN(rawTbankWaitMs) ? 5000 : rawTbankWaitMs;
+
+    tbankAutomation = new TBankAutomation({
+      username,
+      phone: FIXED_TBANK_PHONE,
+      password: null,
+      encryptionService: null,
+      onAuthenticated: null
+    });
+
+    tbankSmsQueueChecker = setInterval(() => {
+      if (!tbankAutomation) return;
+      const pendingType = tbankAutomation.getPendingInputType();
+      if (pendingType === 'sms') {
+        const queuedSMS = smsCodeQueue.get(username);
+        if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
+          const submitted = tbankAutomation.submitUserInput(queuedSMS.code);
+          if (submitted) {
+            smsCodeQueue.delete(username);
+          }
+        }
+      }
+    }, 500);
+
+    console.log('[API] Step 4: Logging in to T-Bank for Stage 3...');
+    const tbankLoginResult = await tbankAutomation.login();
+    if (!tbankLoginResult.success) {
+      throw new Error(`T-Bank login failed during Stage 3: ${tbankLoginResult.error}`);
+    }
+    console.log('[API] ✅ T-Bank login successful for Stage 3');
+
+    const tbankPostResult = await tbankAutomation.runMorningPostTransferFlow({
+      sourceAccountMask: tbankSourceMask,
+      waitAfterSourceMs
+    });
+
+    if (!tbankPostResult.success) {
+      throw new Error(`T-Bank post-transfer steps failed: ${tbankPostResult.error}`);
+    }
+    console.log('[API] ✅ T-Bank steps 19-23 completed');
+
+    // Cleanup T-Bank
+    if (tbankSmsQueueChecker) {
+      clearInterval(tbankSmsQueueChecker);
+      tbankSmsQueueChecker = null;
+    }
+
+    await tbankAutomation.close();
+    tbankAutomation = null;
+
+    if (global.gc) {
+      console.log('[API] 🧹 Running garbage collection after STAGE 3...');
+      global.gc();
+    }
+
+    console.log(`[API] 🎉 Complete ALFA→TBANK flow with T-Bank steps completed successfully!`);
 
     res.json({
       success: true,
-      message: 'ALFA→TBANK transfer completed',
-      amount: transferResult.amount || amount
+      message: 'ALFA→TBANK transfer with T-Bank steps completed',
+      amount: transferResult.amount || amount,
+      tbankPostTransfer: tbankPostResult
     });
 
   } catch (error) {
-    console.error('[API] ❌ ALFA→TBANK transfer error:', error);
+    console.error('[API] ❌ ALFA→TBANK with T-Bank steps error:', error);
 
     if (alfaSmsQueueChecker) {
       clearInterval(alfaSmsQueueChecker);
       alfaSmsQueueChecker = null;
+    }
+
+    if (tbankSmsQueueChecker) {
+      clearInterval(tbankSmsQueueChecker);
+      tbankSmsQueueChecker = null;
     }
 
     if (alfaAutomation) {
@@ -1405,6 +1474,15 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
         console.error('[API] Error closing Alfa browser:', e);
       }
       alfaAutomation = null;
+    }
+
+    if (tbankAutomation) {
+      try {
+        await tbankAutomation.close();
+      } catch (e) {
+        console.error('[API] Error closing T-Bank browser:', e);
+      }
+      tbankAutomation = null;
     }
 
     if (global.gc) {
