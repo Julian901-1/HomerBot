@@ -446,11 +446,12 @@ export class AlfaAutomation {
                 let resendButton = document.querySelector('button.code-input__resend_SLXa8');
 
                 if (!resendButton) {
-                  // Try finding by text
+                  // Try finding by text - search for all variants
                   const buttons = Array.from(document.querySelectorAll('button'));
                   resendButton = buttons.find(btn =>
                     btn.textContent.includes('Запросить код повторно') ||
-                    btn.textContent.includes('Отправить код повторно')
+                    btn.textContent.includes('Отправить код повторно') ||
+                    btn.textContent.includes('Запросить код')
                   );
                 }
 
@@ -734,26 +735,78 @@ export class AlfaAutomation {
 
         if (attempt >= maxRetries) {
           console.log('[ALFA-SMS] ❌ Превышено максимальное количество попыток');
+
+          // Try to find and click resend button before throwing final error
+          console.log('[ALFA-SMS] 🔄 Последняя попытка запросить код перед ошибкой...');
+
+          try {
+            const resendClicked = await this.page.evaluate(() => {
+              // Try specific selector first (from HTML example)
+              let resendButton = document.querySelector('button.confirmation__getCodeButton_o4w4f');
+
+              // Fallback to finding by text - search for all variants
+              if (!resendButton) {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                resendButton = buttons.find(btn =>
+                  btn.textContent.includes('Запросить код повторно') ||
+                  btn.textContent.includes('Отправить код повторно') ||
+                  btn.textContent.includes('Запросить код')
+                );
+              }
+
+              if (resendButton) {
+                resendButton.scrollIntoView({ behavior: 'instant', block: 'center' });
+                resendButton.click();
+                return true;
+              }
+              return false;
+            });
+
+            if (resendClicked) {
+              console.log('[ALFA-SMS] ✅ Кнопка запроса кода нажата перед финальной ошибкой');
+              await new Promise(resolve => setTimeout(resolve, 3000));
+
+              // Give one more chance to receive the code
+              console.log('[ALFA-SMS] ⏳ Даём ещё одну попытку получить код после нажатия кнопки...');
+              try {
+                await new Promise((resolve, reject) => {
+                  this.alfaSmsCodeResolver = resolve;
+                  const timeoutId = setTimeout(() => {
+                    this.alfaSmsCodeResolver = null;
+                    reject(new Error('Final SMS code timeout'));
+                  }, 120000); // 2 minutes
+                  this.alfaSmsCodeTimeout = timeoutId;
+                });
+                console.log('[ALFA-SMS] ✅ SMS-код получен после финального запроса!');
+                return; // Successfully received code, exit function
+              } catch (finalError) {
+                console.log('[ALFA-SMS] ❌ SMS-код не получен даже после финального запроса');
+              }
+            } else {
+              console.log('[ALFA-SMS] ⚠️ Кнопка запроса кода не найдена перед финальной ошибкой');
+            }
+          } catch (clickError) {
+            console.log('[ALFA-SMS] ⚠️ Ошибка при финальной попытке запроса кода:', clickError.message);
+          }
+
           throw new Error('Alfa SMS code timeout after all retries');
         }
 
-        // Try to find and click "Запросить код повторно" button
+        // Try to find and click resend button
         console.log('[ALFA-SMS] 🔄 Попытка запросить код повторно...');
-
-        // Take screenshot before retry
-        await this.takeScreenshot(`alfa-sms-timeout-retry-${attempt}`);
 
         try {
           const resendClicked = await this.page.evaluate(() => {
             // Try specific selector first (from HTML example)
             let resendButton = document.querySelector('button.confirmation__getCodeButton_o4w4f');
 
-            // Fallback to finding by text
+            // Fallback to finding by text - search for all variants
             if (!resendButton) {
               const buttons = Array.from(document.querySelectorAll('button'));
               resendButton = buttons.find(btn =>
                 btn.textContent.includes('Запросить код повторно') ||
-                btn.textContent.includes('Отправить код повторно')
+                btn.textContent.includes('Отправить код повторно') ||
+                btn.textContent.includes('Запросить код')
               );
             }
 
@@ -766,10 +819,10 @@ export class AlfaAutomation {
           });
 
           if (resendClicked) {
-            console.log('[ALFA-SMS] ✅ Кнопка "Запросить код повторно" нажата');
+            console.log('[ALFA-SMS] ✅ Кнопка запроса кода нажата');
             await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for request to process
           } else {
-            console.log('[ALFA-SMS] ⚠️ Кнопка "Запросить код повторно" не найдена');
+            console.log('[ALFA-SMS] ⚠️ Кнопка запроса кода не найдена');
             // Continue to next attempt anyway
           }
         } catch (clickError) {
