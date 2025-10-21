@@ -326,6 +326,15 @@ export class SessionManager {
 
         const upcomingTransfers = [];
 
+        const formatPlannedTime = (dt, tz) => {
+          if (!dt) return 'unknown';
+          try {
+            return new Date(dt).toISOString().replace('T', ' ').substring(0, 16) + 'Z';
+          } catch {
+            return 'unknown';
+          }
+        };
+
         // OLD: Check if it's time to transfer TO saving account (T-Bank vklad system)
         if (transferToVkladTime) {
           const lastTransferTo = this.lastTransferToSaving.get(username);
@@ -334,11 +343,20 @@ export class SessionManager {
           if (toSavingWindow.shouldExecute) {
             const offsetLabel = formatOffsetMinutes(toSavingWindow.offsetMinutes);
             console.log(
-              `[SCHEDULER] ⏰ Time to transfer TO saving account for ${username} (base: ${transferToVkladTime}, offset: ${offsetLabel} min)`
+              `[SCHEDULER] ⏰ ${username}: executing TO-saving transfer (base ${transferToVkladTime}, planned ${formatPlannedTime(
+                toSavingWindow.randomizedTarget,
+                userTimezone
+              )}, offset ${offsetLabel} min)`
             );
             await this.executeTransferToSaving(session);
             this.lastTransferToSaving.set(username, new Date());
           } else if (!toSavingWindow.alreadyExecutedToday) {
+            console.log(
+              `[SCHEDULER] 🕒 ${username}: TO-saving transfer planned at ${formatPlannedTime(
+                toSavingWindow.randomizedTarget,
+                userTimezone
+              )} (base ${transferToVkladTime})`
+            );
             upcomingTransfers.push(`toSaving ${transferToVkladTime}`);
           }
         }
@@ -351,11 +369,20 @@ export class SessionManager {
           if (fromSavingWindow.shouldExecute) {
             const offsetLabel = formatOffsetMinutes(fromSavingWindow.offsetMinutes);
             console.log(
-              `[SCHEDULER] ⏰ Time to transfer FROM saving account for ${username} (base: ${transferFromVkladTime}, offset: ${offsetLabel} min)`
+              `[SCHEDULER] ⏰ ${username}: executing FROM-saving transfer (base ${transferFromVkladTime}, planned ${formatPlannedTime(
+                fromSavingWindow.randomizedTarget,
+                userTimezone
+              )}, offset ${offsetLabel} min)`
             );
             await this.executeTransferFromSaving(session);
             this.lastTransferFromSaving.set(username, new Date());
           } else if (!fromSavingWindow.alreadyExecutedToday) {
+            console.log(
+              `[SCHEDULER] 🕒 ${username}: FROM-saving transfer planned at ${formatPlannedTime(
+                fromSavingWindow.randomizedTarget,
+                userTimezone
+              )} (base ${transferFromVkladTime})`
+            );
             upcomingTransfers.push(`fromSaving ${transferFromVkladTime}`);
           }
         }
@@ -373,11 +400,20 @@ export class SessionManager {
             if (eveningWindow.shouldExecute) {
               const offsetLabel = formatOffsetMinutes(eveningWindow.offsetMinutes);
               console.log(
-                `[SCHEDULER] 🌆 Time for EVENING transfer for ${username} (base: ${eveningTransferTime}, offset: ${offsetLabel} min)`
+                `[SCHEDULER] 🌆 ${username}: executing EVENING transfer (base ${eveningTransferTime}, planned ${formatPlannedTime(
+                  eveningWindow.randomizedTarget,
+                  userTimezone
+                )}, offset ${offsetLabel} min)`
               );
               await this.executeEveningTransfer(session);
               this.lastEveningTransfer.set(username, new Date());
             } else if (!eveningWindow.alreadyExecutedToday) {
+              console.log(
+                `[SCHEDULER] 🕒 ${username}: EVENING transfer planned at ${formatPlannedTime(
+                  eveningWindow.randomizedTarget,
+                  userTimezone
+                )} (base ${eveningTransferTime}, ±20m)`
+              );
               upcomingTransfers.push(`evening ${eveningTransferTime} (±20m)`);
             }
           }
@@ -396,11 +432,20 @@ export class SessionManager {
             if (morningWindow.shouldExecute) {
               const offsetLabel = formatOffsetMinutes(morningWindow.offsetMinutes);
               console.log(
-                `[SCHEDULER] 🌅 Time for MORNING transfer for ${username} (base: ${morningTransferTime}, offset: ${offsetLabel} min)`
+                `[SCHEDULER] 🌅 ${username}: executing MORNING transfer (base ${morningTransferTime}, planned ${formatPlannedTime(
+                  morningWindow.randomizedTarget,
+                  userTimezone
+                )}, offset ${offsetLabel} min)`
               );
               await this.executeMorningTransfer(session);
               this.lastMorningTransfer.set(username, new Date());
             } else if (!morningWindow.alreadyExecutedToday) {
+              console.log(
+                `[SCHEDULER] 🕒 ${username}: MORNING transfer planned at ${formatPlannedTime(
+                  morningWindow.randomizedTarget,
+                  userTimezone
+                )} (base ${morningTransferTime}, ±20m)`
+              );
               upcomingTransfers.push(`morning ${morningTransferTime} (±20m)`);
             }
           }
