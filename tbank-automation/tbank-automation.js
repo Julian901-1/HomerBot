@@ -7,6 +7,36 @@ dotenv.config();
 // Use stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
 
+const ACCOUNT_REQUIRED_PARAMS = encodeURIComponent(JSON.stringify(['accountId']));
+
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Environment variable ${name} is required for T-Bank automation`);
+  }
+  return value;
+}
+
+function buildTransferBetweenAccountsUrl(accountId) {
+  const predefined = encodeURIComponent(JSON.stringify({
+    account: accountId,
+    moneyAmount: ':moneyAmount'
+  }));
+
+  return `https://www.tbank.ru/mybank/payments/transfer-between-accounts/?predefined=${predefined}&requiredParams=${ACCOUNT_REQUIRED_PARAMS}&internal_source=quick_transfers`;
+}
+
+function buildSbpTransferUrl(accountId, phone) {
+  const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
+  const predefined = encodeURIComponent(JSON.stringify({
+    accountId,
+    moneyAmount: ':moneyAmount',
+    phone: normalizedPhone
+  }));
+
+  return `https://www.tbank.ru/mybank/payments/persons/phone/?predefined=${predefined}&requiredParams=${ACCOUNT_REQUIRED_PARAMS}`;
+}
+
 /**
  * T-Bank automation using Puppeteer with anti-detection
  */
@@ -1071,7 +1101,7 @@ export class TBankAutomation {
 
       // Step 1: Open direct transfer page
       console.log('[TBANK] 1️⃣ Opening transfer page for between-account transfer...');
-      const transferUrl = 'https://www.tbank.ru/mybank/payments/transfer-between-accounts/?predefined=%7B%22account%22%3A%225212783608%22%2C%22moneyAmount%22%3A%22%3AmoneyAmount%22%7D&requiredParams=%5B%22accountId%22%5D&internal_source=quick_transfers';
+      const transferUrl = buildTransferBetweenAccountsUrl(requireEnv('TBANK_SOURCE_ACCOUNT_ID'));
       await this.page.goto(transferUrl, {
         waitUntil: 'networkidle2',
         timeout: 30000
@@ -1473,7 +1503,7 @@ export class TBankAutomation {
   /**
    * Transfer money via SBP (Faster Payment System) to another bank (e.g., Alfa-Bank)
    * Implements steps 2-8 from evening transfer instruction
-   * @param {string} recipientPhone - Phone number of recipient (e.g., '79166435494')
+   * @param {string} recipientPhone - Phone number of recipient (e.g., '+79990000000')
    * @param {number} amount - Amount to transfer in RUB
    */
   async transferViaSBP(recipientPhone, amount) {
@@ -1497,7 +1527,12 @@ export class TBankAutomation {
       // Step 2-4: Direct navigation to pre-filled transfer form
       console.log('[TBANK→SBP] Шаг 2-4/7: Переход по прямой ссылке на форму перевода...');
 
-      const transferUrl = `https://www.tbank.ru/mybank/payments/persons/phone/?predefined=%7B%22accountId%22%3A%225564362781%22%2C%22moneyAmount%22%3A%22%3AmoneyAmount%22%2C%22phone%22%3A%22%2B79166435494%22%7D&requiredParams=%5B%22accountId%22%5D`;
+      const sbpAccountId = requireEnv('TBANK_SBP_ACCOUNT_ID');
+      const phoneForPrefill = recipientPhone || process.env.FIXED_ALFA_PHONE;
+      if (!phoneForPrefill) {
+        throw new Error('Recipient phone is required for SBP transfer (provide parameter or FIXED_ALFA_PHONE env)');
+      }
+      const transferUrl = buildSbpTransferUrl(sbpAccountId, phoneForPrefill);
 
       await this.page.goto(transferUrl, {
         waitUntil: 'networkidle2',
@@ -1735,7 +1770,7 @@ export class TBankAutomation {
 
       // Шаг 1: Переход на страницу перевода между счетами
       console.log('[TBANK🌅] Переход на страницу перевода между счетами...');
-      const transferPageUrl = 'https://www.tbank.ru/mybank/payments/transfer-between-accounts/?predefined=%7B%22account%22%3A%225212783608%22%2C%22moneyAmount%22%3A%22%3AmoneyAmount%22%7D&requiredParams=%5B%22accountId%22%5D&internal_source=quick_transfers';
+      const transferPageUrl = buildTransferBetweenAccountsUrl(requireEnv('TBANK_SOURCE_ACCOUNT_ID'));
 
       try {
         await this.page.goto(transferPageUrl, {

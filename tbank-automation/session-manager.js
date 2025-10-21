@@ -920,7 +920,10 @@ export class SessionManager {
       console.log(`[SCHEDULER] 🌅 Step 11-20: Transferring ${eveningTransferAmount} RUB from Alfa to T-Bank via SBP...`);
 
       // Get T-Bank phone number from automation metadata (should be stored during login)
-      const tbankPhone = automation.userPhone || '+79999999999'; // Fallback to default
+      const tbankPhone = automation.userPhone || process.env.FIXED_TBANK_PHONE;
+      if (!tbankPhone) {
+        throw new Error('Missing T-Bank phone number (set FIXED_TBANK_PHONE or provide during automation)');
+      }
 
       const sbpTransferResult = await alfaAutomation.transferToTBankSBP(
         alfaSavingAccountId,

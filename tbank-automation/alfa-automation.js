@@ -9,6 +9,14 @@ const __dirname = path.dirname(__filename);
 // Use stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
 
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Environment variable ${name} is required for Alfa automation`);
+  }
+  return value;
+}
+
 /**
  * Alfa-Bank Automation Class
  * Handles login, transfers, and interactions with Alfa-Bank web interface
@@ -1112,7 +1120,7 @@ export class AlfaAutomation {
       console.log(`[ALFA→SAVING] Источник средств: счёт ${savingAccountId}`);
 
       console.log('[ALFA→SAVING] Этап 1/5: Переход на страницу перевода между счетами');
-      const requiredSavingAccountId = '40817810506220141175';
+      const requiredSavingAccountId = requireEnv('ALFA_REQUIRED_SAVING_ACCOUNT_ID');
       if (savingAccountId && savingAccountId !== requiredSavingAccountId) {
         console.log(`[ALFA→SAVING] ⚠️ Используем предписанный счёт ${requiredSavingAccountId} вместо переданного ${savingAccountId}`);
       }
