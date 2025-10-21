@@ -1209,25 +1209,26 @@ app.post('/api/morning-transfer', async (req, res) => {
       alfaSmsQueueChecker = null;
     }
 
-    // Close Alfa browser before switching to T-Bank
-    await alfaAutomation.close();
-    alfaAutomation = null;
-
-    // CRITICAL: Wait for browser cleanup to complete before starting new browser
-    // This prevents crashes from puppeteer-extra plugins (rimraf cleanup, etc.)
-    console.log('[API] ⏳ Waiting 10 seconds for browser cleanup and memory to free...');
-    await new Promise(resolve => setTimeout(resolve, 10000));
-    console.log('[API] ✅ Cleanup wait completed');
+    if (global.gc) {
+      console.log('[API] Running garbage collection before T-Bank login...');
+      global.gc();
+    }
 
     // === STAGE 3: TBANK post-transfer steps (19-21) ===
     console.log('[API] === STAGE 3: TBANK post-transfer steps 19-21 ===');
+    console.log('[API] Reusing browser, navigating to T-Bank...');
+
+    const reusedBrowser = alfaAutomation.browser;
+    const reusedPage = alfaAutomation.page;
 
     tbankAutomation = new TBankAutomation({
       username,
       phone: FIXED_TBANK_PHONE,
       password: null,
       encryptionService: null,
-      onAuthenticated: null
+      onAuthenticated: null,
+      existingBrowser: reusedBrowser,
+      existingPage: reusedPage
     });
 
     tbankSmsQueueChecker = setInterval(() => {
@@ -1272,6 +1273,12 @@ app.post('/api/morning-transfer', async (req, res) => {
 
     await tbankAutomation.close();
     tbankAutomation = null;
+
+    if (alfaAutomation) {
+      console.log('[API] Closing shared browser...');
+      await alfaAutomation.close();
+      alfaAutomation = null;
+    }
 
     if (global.gc) {
       console.log('[API] 🌅 Running garbage collection after morning transfer...');
@@ -1613,3 +1620,4 @@ process.on('SIGTERM', async () => {
   await sessionManager.closeAllSessions();
   process.exit(0);
 });
+
