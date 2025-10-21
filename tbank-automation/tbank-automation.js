@@ -24,7 +24,6 @@ export class TBankAutomation {
     this.reusingBrowser = !!(existingBrowser && existingPage);
 
     this.sessionActive = false;
-    this.sessionStartTime = null;
 
     // Pending input system - now fully dynamic
     this.pendingInputResolve = null;
@@ -160,9 +159,6 @@ export class TBankAutomation {
     try {
       await this.init();
 
-      // Session restore disabled - always login fresh
-      console.log(`[TBANK] 🔄 Session persistence disabled - starting fresh login`);
-
       // If encryptionService is null, use phone directly (for test endpoints)
       const phone = this.encryptionService
         ? this.encryptionService.decrypt(this.encryptedPhone)
@@ -273,9 +269,6 @@ export class TBankAutomation {
             console.log(`[TBANK] ✅ Called onAuthenticated callback`);
           }
 
-          // Track login start for runtime metrics
-          this.recordLoginSuccess();
-
           console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
           return {
@@ -303,9 +296,6 @@ export class TBankAutomation {
               this.onAuthenticated();
               console.log(`[TBANK] ✅ Called onAuthenticated callback`);
             }
-
-            // Track login start for runtime metrics
-            this.recordLoginSuccess();
 
             console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
@@ -434,8 +424,6 @@ export class TBankAutomation {
         }
 
         // Track login start for runtime metrics
-        this.recordLoginSuccess();
-
         console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
         return {
@@ -458,8 +446,6 @@ export class TBankAutomation {
         }
 
         // Track login start for runtime metrics
-        this.recordLoginSuccess();
-
         console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
         return {
@@ -729,26 +715,6 @@ export class TBankAutomation {
   }
 
 
-  /**
-   * Record the timestamp of a successful login for lifetime tracking
-   */
-  recordLoginSuccess() {
-    if (!this.sessionStartTime) {
-      this.sessionStartTime = Date.now();
-      console.log('[TBANK] 🕒 Session start timestamp recorded');
-    }
-  }
-
-  /**
-   * Get session lifetime in minutes since successful login
-   * @returns {number} Lifetime in whole minutes
-   */
-  getSessionLifetimeMinutes() {
-    if (!this.sessionStartTime) {
-      return 0;
-    }
-    return Math.floor((Date.now() - this.sessionStartTime) / 60000);
-  }
 
   /**
    * Get all accounts with balances (only debit accounts, excluding credit/investments)
@@ -1984,10 +1950,6 @@ export class TBankAutomation {
 
     this.sessionActive = false;
 
-    // Delete saved session if requested (compatibility log - no files kept)
-    if (deleteSession) {
-      console.log('[TBANK] 🔄 Session persistence disabled - nothing to delete');
-    }
 
     // Clear pending input resolvers to prevent memory leaks
     if (this.pendingInputResolve) {
@@ -2045,8 +2007,7 @@ export class TBankAutomation {
    */
   getSessionStats() {
     return {
-      sessionActive: this.sessionActive,
-      sessionLifetimeMinutes: this.getSessionLifetimeMinutes()
+      sessionActive: this.sessionActive
     };
   }
 }

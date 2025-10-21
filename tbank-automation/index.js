@@ -1174,51 +1174,17 @@ app.post('/api/morning-transfer', async (req, res) => {
     console.log('[API] ✅ Alfa saving -> debit transfer successful');
     console.log('[API] ✅ STAGE 1/2 completed: SAVING→ALFA');
 
-    // Log memory usage after Stage 1
-    const memAfterStage1 = process.memoryUsage();
-    console.log('[API] 📊 Memory usage after STAGE 1:');
-    console.log(`[API]    RSS: ${(memAfterStage1.rss / 1024 / 1024).toFixed(2)} MB (Resident Set Size - total memory)`);
-    console.log(`[API]    Heap Used: ${(memAfterStage1.heapUsed / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`[API]    Heap Total: ${(memAfterStage1.heapTotal / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`[API]    External: ${(memAfterStage1.external / 1024 / 1024).toFixed(2)} MB`);
-
     // === STAGE 2: ALFA→TBANK ===
     console.log('[API] === STAGE 2/2: ALFA→TBANK ===');
 
-    // IMPORTANT: Close browser after Stage 1 and re-login for Stage 2
-    // This ensures clean state and prevents errors in transfer flow
-    console.log('[API] Step 3: Closing Stage 1 browser...');
-    await alfaAutomation.close();
-    alfaAutomation = null;
-
-    // Run garbage collection after closing browser
+    // Keep browser open, just run GC and reuse for Stage 2
+    console.log('[API] Running garbage collection (browser stays open)...');
     if (global.gc) {
-      console.log('[API] 🧹 Running garbage collection after Stage 1...');
       global.gc();
     }
 
-    // Log memory after Stage 1 cleanup
-    const memAfterStage1Cleanup = process.memoryUsage();
-    console.log('[API] 📊 Memory after Stage 1 cleanup:');
-    console.log(`[API]    RSS: ${(memAfterStage1Cleanup.rss / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`[API]    Heap Used: ${(memAfterStage1Cleanup.heapUsed / 1024 / 1024).toFixed(2)} MB`);
-
-    // Re-create Alfa automation instance for Stage 2
-    console.log(`[API] Step 4: Creating new Alfa-Bank automation instance for Stage 2...`);
-    alfaAutomation = new AlfaAutomation({
-      username,
-      phone: FIXED_ALFA_PHONE,
-      cardNumber: FIXED_ALFA_CARD,
-      encryptionService: null
-    });
-
-    // Re-login to Alfa-Bank
-    console.log(`[API] Step 5: Logging in to Alfa-Bank for Stage 2...`);
-    const alfaLoginResult2 = await alfaAutomation.loginAlfa();
-    if (!alfaLoginResult2.success) {
-      throw new Error(`Alfa-Bank Stage 2 login failed: ${alfaLoginResult2.error}`);
-    }
-    console.log(`[API] ✅ Alfa-Bank Stage 2 login successful`);
+    // Reuse Alfa automation for Stage 2 (browser already open)
+    console.log(`[API] Step 4: Reusing Alfa-Bank browser for Stage 2 (no re-login needed)...`);
 
     const sbpAmount = transferAmount != null ? transferAmount : null;
     const sbpAmountLabel = sbpAmount != null ? `${sbpAmount}` : 'full balance';
