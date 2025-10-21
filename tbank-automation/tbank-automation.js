@@ -182,41 +182,6 @@ export class TBankAutomation {
 
       console.log(`[TBANK] 📍 Final URL after stabilization: ${this.page.url()}`);
 
-      // Get page info
-      try {
-        const title = await this.page.title();
-        console.log('[TBANK] 📄 Page title:', title);
-      } catch (e) {
-        console.log('[TBANK] ⚠️ Could not get page title:', e.message);
-      }
-
-      // Log page HTML for debugging (with error handling)
-      try {
-        const html = await this.page.content();
-        console.log('[TBANK] 📄 Page HTML length:', html.length, 'characters');
-        console.log('[TBANK] 📄 HTML preview (first 2000 chars):');
-        console.log(html.substring(0, 2000));
-      } catch (e) {
-        console.log('[TBANK] ⚠️ Could not get page HTML:', e.message);
-      }
-
-      // Check what input fields are available (with error handling)
-      try {
-        const inputFields = await this.page.evaluate(() => {
-          const inputs = Array.from(document.querySelectorAll('input'));
-          return inputs.map(input => ({
-            type: input.type,
-            name: input.name,
-            id: input.id,
-            automationId: input.getAttribute('automation-id'),
-            placeholder: input.placeholder,
-            className: input.className
-          }));
-        });
-        console.log('[TBANK] 📋 Found input fields:', JSON.stringify(inputFields, null, 2));
-      } catch (e) {
-        console.log('[TBANK] ⚠️ Could not get input fields:', e.message);
-      }
 
       // Step 1: Enter phone number
       console.log('[TBANK] Step 1: Waiting for phone input field...');
