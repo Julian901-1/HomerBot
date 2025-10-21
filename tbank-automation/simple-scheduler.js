@@ -9,6 +9,44 @@ function getRandomIntInclusive(min, max) {
   return Math.floor(Math.random() * (maxInt - minInt + 1)) + minInt;
 }
 
+function normalizeTimeString(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number' && isFinite(value)) {
+    // Google Sheets can return time as a fraction of a day (e.g., 0.75 for 18:00)
+    if (value >= 0 && value < 1) {
+      const totalMinutes = Math.round(value * 24 * 60);
+      const hour = Math.floor(totalMinutes / 60) % 24;
+      const minute = totalMinutes % 60;
+      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    }
+
+    // If it's >= 1 assume it's an hour in 24h format
+    if (value >= 1 && value < 24) {
+      const hour = Math.floor(value) % 24;
+      const minute = Math.round((value - hour) * 60);
+      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    }
+  }
+
+  const str = String(value).trim();
+  if (!str) {
+    return null;
+  }
+
+  const match = str.match(/^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?$/);
+  if (!match) {
+    return null;
+  }
+
+  const hour = Math.min(Math.max(parseInt(match[1], 10), 0), 23);
+  const minute = Math.min(Math.max(parseInt(match[2] || '0', 10), 0), 59);
+
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
 export class SimpleScheduler {
   constructor({
     username,
@@ -112,10 +150,23 @@ export class SimpleScheduler {
       timezoneData = await timezoneResp.json();
     }
 
+    const eveningTransferTime = normalizeTimeString(scheduleData?.eveningTransferTime);
+    const morningTransferTime = normalizeTimeString(scheduleData?.morningTransferTime);
+
+    let timezone = typeof timezoneData?.timezone === 'string' ? timezoneData.timezone.trim() : DEFAULT_TIMEZONE;
+    if (!timezone || !moment.tz.zone(timezone)) {
+      if (timezone && !moment.tz.zone(timezone)) {
+        console.warn(
+          `[SIMPLE-SCHEDULER] Unknown timezone "${timezone}" received from schedule, falling back to ${DEFAULT_TIMEZONE}`
+        );
+      }
+      timezone = DEFAULT_TIMEZONE;
+    }
+
     return {
-      eveningTransferTime: scheduleData?.eveningTransferTime || null,
-      morningTransferTime: scheduleData?.morningTransferTime || null,
-      timezone: timezoneData?.timezone || DEFAULT_TIMEZONE
+      eveningTransferTime,
+      morningTransferTime,
+      timezone
     };
   }
 
