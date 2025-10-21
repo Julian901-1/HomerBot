@@ -1623,8 +1623,7 @@ app.listen(PORT, () => {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('
-Shutting down gracefully...');
+  console.log('\nShutting down gracefully...');
   if (simpleScheduler) {
     simpleScheduler.stop();
   }
@@ -1634,8 +1633,7 @@ Shutting down gracefully...');
 });
 
 process.on('SIGTERM', async () => {
-  console.log('
-Shutting down gracefully...');
+  console.log('\nShutting down gracefully...');
   if (simpleScheduler) {
     simpleScheduler.stop();
   }
