@@ -62,6 +62,10 @@ export function calculateNextExecutionTime(targetTime, minOffsetMinutes = 1, max
     throw new Error('Invalid time format. Expected HH:MM');
   }
 
+  if (minOffsetMinutes > maxOffsetMinutes) {
+    throw new Error('minOffsetMinutes cannot be greater than maxOffsetMinutes');
+  }
+
   const [hours, minutes] = targetTime.split(':').map(Number);
 
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
@@ -80,7 +84,7 @@ export function calculateNextExecutionTime(targetTime, minOffsetMinutes = 1, max
   }
 
   // Add random offset (1-20 minutes by default)
-  const randomOffset = Math.floor(Math.random() * (maxOffsetMinutes - minOffsetMinutes + 1)) + minOffsetMinutes;
+  const randomOffset = getRandomIntInclusive(minOffsetMinutes, maxOffsetMinutes);
   targetMoment.add(randomOffset, 'minutes');
 
   // Return as JavaScript Date object (in UTC)
@@ -97,6 +101,14 @@ export function calculateNextExecutionTime(targetTime, minOffsetMinutes = 1, max
  * @returns {boolean} True if it's time to execute
  */
 export function shouldExecuteNow(targetTime, lastExecution = null, minOffsetMinutes = 1, maxOffsetMinutes = 20, userTimezone = 'Europe/Moscow') {
+  if (!targetTime || !/^\d{1,2}:\d{2}$/.test(targetTime)) {
+    throw new Error('Invalid time format. Expected HH:MM');
+  }
+
+  if (minOffsetMinutes > maxOffsetMinutes) {
+    throw new Error('minOffsetMinutes cannot be greater than maxOffsetMinutes');
+  }
+
   // Get current time in user's timezone
   const nowInUserTz = moment.tz(userTimezone);
 
@@ -107,27 +119,22 @@ export function shouldExecuteNow(targetTime, lastExecution = null, minOffsetMinu
   const targetToday = moment.tz(userTimezone).set({ hour: hours, minute: minutes, second: 0, millisecond: 0 });
 
   // Add random offset to target time
-  const randomOffset = Math.floor(Math.random() * (maxOffsetMinutes - minOffsetMinutes + 1)) + minOffsetMinutes;
-  targetToday.add(randomOffset, 'minutes');
+  const offsetMinutes = getRandomIntInclusive(minOffsetMinutes, maxOffsetMinutes);
+  const randomizedTarget = targetToday.add(offsetMinutes, 'minutes');
 
-  // If never executed, check if we're past the target time today
-  if (!lastExecution) {
-    return nowInUserTz.isSameOrAfter(targetToday);
-  }
+  // Convert last execution to user's timezone (if exists)
+  const lastExecInUserTz = lastExecution ? moment(lastExecution).tz(userTimezone) : null;
+  const alreadyExecutedToday = lastExecInUserTz ? lastExecInUserTz.isSame(nowInUserTz, 'day') : false;
 
-  // Convert last execution to user's timezone
-  const lastExecInUserTz = moment(lastExecution).tz(userTimezone);
+  const shouldExecute = !alreadyExecutedToday && nowInUserTz.isSameOrAfter(randomizedTarget);
 
-  // Check if last execution was on the same day (in user's timezone!)
-  const isSameDay = lastExecInUserTz.format('YYYY-MM-DD') === nowInUserTz.format('YYYY-MM-DD');
-
-  // If already executed today, don't execute again
-  if (isSameDay) {
-    return false;
-  }
-
-  // If last execution was yesterday or earlier, check if we're past target time today
-  return nowInUserTz.isSameOrAfter(targetToday);
+  return {
+    shouldExecute,
+    offsetMinutes,
+    randomizedTarget: randomizedTarget.toDate(),
+    alreadyExecutedToday,
+    baseTime: targetTime
+  };
 }
 
 /**
@@ -188,4 +195,16 @@ export function isTimeInRange(startTime, endTime) {
   }
 
   return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+}
+
+/**
+ * Generate random integer between min and max (inclusive)
+ * @param {number} min
+ * @param {number} max
+ * @returns {number}
+ */
+function getRandomIntInclusive(min, max) {
+  const minInt = Math.ceil(min);
+  const maxInt = Math.floor(max);
+  return Math.floor(Math.random() * (maxInt - minInt + 1)) + minInt;
 }

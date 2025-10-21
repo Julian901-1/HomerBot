@@ -1,5 +1,11 @@
 import crypto from 'crypto';
-import { shouldExecuteNow, formatTime, calculateNextExecutionTime } from './time-utils.js';
+import { shouldExecuteNow } from './time-utils.js';
+import { AlfaAutomation } from './alfa-automation.js';
+
+function formatOffsetMinutes(offsetMinutes) {
+  const sign = offsetMinutes > 0 ? '+' : '';
+  return `${sign}${offsetMinutes}`;
+}
 
 /**
  * Manages user sessions and active browser instances
@@ -301,37 +307,33 @@ export class SessionManager {
           tbankVkladName,
           eveningTransferTime,
           morningTransferTime,
-          alfaPhone,
-          alfaCardNumber,
-          alfaSavingAccountId,
-          alfaSavingAccountName,
           userTimezone
         } = scheduleResp;
 
         // Update session metadata with fresh data from Google Sheets
         this.updateSessionMetadata(sessionId, {
-          // OLD T-Bank vklad system
           transferToVkladTime,
           transferFromVkladTime,
           tbankVkladId,
           tbankVkladName,
-          // NEW: Evening/morning transfer times
           eveningTransferTime,
           morningTransferTime,
-          // NEW: Alfa-Bank credentials
-          alfaPhone,
-          alfaCardNumber,
-          alfaSavingAccountId,
-          alfaSavingAccountName,
-          // NEW: User timezone
           userTimezone
         });
+
+        const alfaEnvConfigured =
+          Boolean(process.env.FIXED_ALFA_PHONE && process.env.FIXED_ALFA_CARD && process.env.FIXED_ALFA_SAVING_ACCOUNT_ID);
 
         // OLD: Check if it's time to transfer TO saving account (T-Bank vklad system)
         if (transferToVkladTime) {
           const lastTransferTo = this.lastTransferToSaving.get(username);
-          if (shouldExecuteNow(transferToVkladTime, lastTransferTo, 1, 20, userTimezone)) {
-            console.log(`[SCHEDULER] ⏰ Time to transfer TO saving account for ${username} (scheduled: ${transferToVkladTime})`);
+          const toSavingWindow = shouldExecuteNow(transferToVkladTime, lastTransferTo, 1, 20, userTimezone);
+
+          if (toSavingWindow.shouldExecute) {
+            const offsetLabel = formatOffsetMinutes(toSavingWindow.offsetMinutes);
+            console.log(
+              `[SCHEDULER] ⏰ Time to transfer TO saving account for ${username} (base: ${transferToVkladTime}, offset: ${offsetLabel} min)`
+            );
             await this.executeTransferToSaving(session);
             this.lastTransferToSaving.set(username, new Date());
           }
@@ -340,30 +342,57 @@ export class SessionManager {
         // OLD: Check if it's time to transfer FROM saving account (T-Bank vklad system)
         if (transferFromVkladTime) {
           const lastTransferFrom = this.lastTransferFromSaving.get(username);
-          if (shouldExecuteNow(transferFromVkladTime, lastTransferFrom, 1, 20, userTimezone)) {
-            console.log(`[SCHEDULER] ⏰ Time to transfer FROM saving account for ${username} (scheduled: ${transferFromVkladTime})`);
+          const fromSavingWindow = shouldExecuteNow(transferFromVkladTime, lastTransferFrom, 1, 20, userTimezone);
+
+          if (fromSavingWindow.shouldExecute) {
+            const offsetLabel = formatOffsetMinutes(fromSavingWindow.offsetMinutes);
+            console.log(
+              `[SCHEDULER] ⏰ Time to transfer FROM saving account for ${username} (base: ${transferFromVkladTime}, offset: ${offsetLabel} min)`
+            );
             await this.executeTransferFromSaving(session);
             this.lastTransferFromSaving.set(username, new Date());
           }
         }
 
         // NEW: Check if it's time for EVENING transfer (T-Bank -> Alfa saving)
-        if (eveningTransferTime && alfaSavingAccountId) {
-          const lastEvening = this.lastEveningTransfer.get(username);
-          if (shouldExecuteNow(eveningTransferTime, lastEvening, 1, 20, userTimezone)) {
-            console.log(`[SCHEDULER] 🌆 Time for EVENING transfer for ${username} (T-Bank -> Alfa-Bank, scheduled: ${eveningTransferTime})`);
-            await this.executeEveningTransfer(session);
-            this.lastEveningTransfer.set(username, new Date());
+        if (eveningTransferTime) {
+          if (!alfaEnvConfigured) {
+            console.warn(
+              `[SCHEDULER] 🌆 Skipping evening transfer for ${username}: FIXED_ALFA_* environment variables are not fully configured`
+            );
+          } else {
+            const lastEvening = this.lastEveningTransfer.get(username);
+            const eveningWindow = shouldExecuteNow(eveningTransferTime, lastEvening, -20, 20, userTimezone);
+
+            if (eveningWindow.shouldExecute) {
+              const offsetLabel = formatOffsetMinutes(eveningWindow.offsetMinutes);
+              console.log(
+                `[SCHEDULER] 🌆 Time for EVENING transfer for ${username} (base: ${eveningTransferTime}, offset: ${offsetLabel} min)`
+              );
+              await this.executeEveningTransfer(session);
+              this.lastEveningTransfer.set(username, new Date());
+            }
           }
         }
 
         // NEW: Check if it's time for MORNING transfer (Alfa saving -> T-Bank debit)
-        if (morningTransferTime && alfaSavingAccountId) {
-          const lastMorning = this.lastMorningTransfer.get(username);
-          if (shouldExecuteNow(morningTransferTime, lastMorning, 1, 20, userTimezone)) {
-            console.log(`[SCHEDULER] 🌅 Time for MORNING transfer for ${username} (Alfa-Bank -> T-Bank, scheduled: ${morningTransferTime})`);
-            await this.executeMorningTransfer(session);
-            this.lastMorningTransfer.set(username, new Date());
+        if (morningTransferTime) {
+          if (!alfaEnvConfigured) {
+            console.warn(
+              `[SCHEDULER] 🌅 Skipping morning transfer for ${username}: FIXED_ALFA_* environment variables are not fully configured`
+            );
+          } else {
+            const lastMorning = this.lastMorningTransfer.get(username);
+            const morningWindow = shouldExecuteNow(morningTransferTime, lastMorning, -20, 20, userTimezone);
+
+            if (morningWindow.shouldExecute) {
+              const offsetLabel = formatOffsetMinutes(morningWindow.offsetMinutes);
+              console.log(
+                `[SCHEDULER] 🌅 Time for MORNING transfer for ${username} (base: ${morningTransferTime}, offset: ${offsetLabel} min)`
+              );
+              await this.executeMorningTransfer(session);
+              this.lastMorningTransfer.set(username, new Date());
+            }
           }
         }
 
@@ -371,6 +400,49 @@ export class SessionManager {
         console.error(`[SCHEDULER] Error processing transfers for session ${sessionId}:`, error);
       }
     }
+  }
+
+  /**
+   * Ensure Alfa-Bank automation instance exists and is ready for the session
+   * @param {Object} session - Session object
+   * @returns {Promise<AlfaAutomation|null>} Alfa automation instance or null if unavailable
+   */
+  async ensureAlfaAutomation(session) {
+    const alfaPhone = process.env.FIXED_ALFA_PHONE;
+    const alfaCardNumber = process.env.FIXED_ALFA_CARD;
+
+    if (!alfaPhone || !alfaCardNumber) {
+      console.error(
+        `[SCHEDULER] Alfa automation cannot be created for ${session.username}: FIXED_ALFA_PHONE or FIXED_ALFA_CARD not configured`
+      );
+      return null;
+    }
+
+    const currentAutomation = session.alfaAutomation || null;
+    const credentialsChanged =
+      currentAutomation &&
+      (currentAutomation.phone !== alfaPhone || currentAutomation.cardNumber !== alfaCardNumber);
+
+    if (!currentAutomation || credentialsChanged) {
+      if (currentAutomation) {
+        try {
+          await currentAutomation.close();
+        } catch (error) {
+          console.error(`[SCHEDULER] Error closing previous Alfa automation for ${session.username}:`, error);
+        }
+      }
+
+      session.alfaAutomation = new AlfaAutomation({
+        username: session.username,
+        phone: alfaPhone,
+        cardNumber: alfaCardNumber,
+        encryptionService: null
+      });
+
+      console.log(`[SCHEDULER] Attached Alfa automation instance for ${session.username} using environment credentials`);
+    }
+
+    return session.alfaAutomation;
   }
 
   /**
@@ -396,31 +468,22 @@ export class SessionManager {
       const vkladResp = await fetch(vkladUrl);
       const vkladData = await vkladResp.json();
 
-      // NEW: Fetch Alfa-Bank credentials and timezone
-      const alfaUrl = `${GOOGLE_SHEETS_URL}?action=alfaGetCredentials&username=${encodeURIComponent(username)}`;
-      const alfaResp = await fetch(alfaUrl);
-      const alfaData = await alfaResp.json();
-
+      // Fetch timezone preference (optional)
       const timezoneUrl = `${GOOGLE_SHEETS_URL}?action=getUserTimezone&username=${encodeURIComponent(username)}`;
       const timezoneResp = await fetch(timezoneUrl);
       const timezoneData = await timezoneResp.json();
 
+      const eveningTransferTime = data.eveningTransferTime || data.transferToTime || null;
+      const morningTransferTime = data.morningTransferTime || data.transferFromTime || null;
+
       return {
         success: true,
-        // OLD T-Bank vklad system
-        transferToVkladTime: data.transferToTime,
-        transferFromVkladTime: data.transferFromTime,
+        transferToVkladTime: data.transferToTime || null,
+        transferFromVkladTime: data.transferFromTime || null,
         tbankVkladId: vkladData.vkladId,
         tbankVkladName: vkladData.vkladName,
-        // NEW: Evening/morning transfers (T-Bank <-> Alfa-Bank)
-        eveningTransferTime: data.eveningTransferTime, // Time for T-Bank -> Alfa saving
-        morningTransferTime: data.morningTransferTime, // Time for Alfa saving -> T-Bank debit
-        // NEW: Alfa-Bank credentials
-        alfaPhone: alfaData.phone,
-        alfaCardNumber: alfaData.cardNumber,
-        alfaSavingAccountId: alfaData.savingAccountId,
-        alfaSavingAccountName: alfaData.savingAccountName,
-        // NEW: User timezone
+        eveningTransferTime,
+        morningTransferTime,
         userTimezone: timezoneData.timezone || 'Europe/Moscow'
       };
     } catch (error) {
@@ -581,15 +644,18 @@ export class SessionManager {
    * @param {Object} session - Session object
    */
   async executeEveningTransfer(session) {
-    const { automation, alfaAutomation, metadata } = session;
-    const { alfaPhone, alfaSavingAccountId, alfaSavingAccountName } = metadata || {};
+    const { automation } = session;
+    const alfaAutomation = await this.ensureAlfaAutomation(session);
+    const alfaPhone = process.env.FIXED_ALFA_PHONE;
+    const alfaSavingAccountId = process.env.FIXED_ALFA_SAVING_ACCOUNT_ID;
+    session.metadata = session.metadata || {};
 
     if (!alfaAutomation) {
       console.error('[SCHEDULER] 🌆❌ No Alfa-Bank automation instance, skipping evening transfer');
       return;
     }
 
-    if (!alfaPhone || !alfaSavingAccountId) {
+    if (!alfaSavingAccountId) {
       console.error('[SCHEDULER] 🌆❌ Alfa-Bank credentials not configured, skipping evening transfer');
       return;
     }
@@ -682,15 +748,19 @@ export class SessionManager {
    * @param {Object} session - Session object
    */
   async executeMorningTransfer(session) {
-    const { automation, alfaAutomation, metadata } = session;
-    const { alfaPhone, alfaSavingAccountId, alfaSavingAccountName, eveningTransferAmount } = metadata || {};
+    const { automation } = session;
+    const alfaAutomation = await this.ensureAlfaAutomation(session);
+    const alfaSavingAccountId = process.env.FIXED_ALFA_SAVING_ACCOUNT_ID;
+
+    session.metadata = session.metadata || {};
+    const { eveningTransferAmount } = session.metadata;
 
     if (!alfaAutomation) {
       console.error('[SCHEDULER] 🌅❌ No Alfa-Bank automation instance, skipping morning transfer');
       return;
     }
 
-    if (!alfaPhone || !alfaSavingAccountId) {
+    if (!alfaSavingAccountId) {
       console.error('[SCHEDULER] 🌅❌ Alfa-Bank credentials not configured, skipping morning transfer');
       return;
     }
