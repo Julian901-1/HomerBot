@@ -288,6 +288,10 @@ export class AlfaAutomation {
       console.log('[ALFA-LOGIN] Этап 7/9: Ввод SMS-кода');
       console.log(`[ALFA-LOGIN] 📝 SMS-код для ввода: "${this.alfaSmsCode}" (длина: ${this.alfaSmsCode ? this.alfaSmsCode.length : 0})`);
       await this.waitForSelectorWithRetry('input.code-input__input_71x65', { timeout: 30000, retries: 3 });
+
+      const urlBeforeSmsEntry = this.page.url();
+      console.log(`[ALFA-LOGIN] 📍 URL перед вводом SMS-кода: ${urlBeforeSmsEntry}`);
+
       await this.enterAlfaSMSCode(this.alfaSmsCode);
       await this.randomDelay(2000, 4000);
 
@@ -363,7 +367,141 @@ export class AlfaAutomation {
       }
 
       if (!dashboardReached && !trustPromptVisible) {
-        throw new Error('Не удалось подтвердить успешную авторизацию: ни дашборд, ни диалог доверия не появились в течение 60 секунд');
+        const urlAfterTimeout = this.page.url();
+        console.log(`[ALFA-LOGIN] 📍 URL до ввода SMS: ${urlBeforeSmsEntry}`);
+        console.log(`[ALFA-LOGIN] 📍 URL после таймаута: ${urlAfterTimeout}`);
+
+        // If URL hasn't changed, try to request code again
+        if (urlBeforeSmsEntry === urlAfterTimeout) {
+          console.log('[ALFA-LOGIN] ⚠️ URL не изменился - пробуем запросить код повторно (до 3 попыток)');
+
+          let resendSuccess = false;
+          for (let resendAttempt = 1; resendAttempt <= 3; resendAttempt++) {
+            console.log(`[ALFA-LOGIN] 🔄 Попытка запроса кода ${resendAttempt}/3...`);
+
+            try {
+              const resendClicked = await this.page.evaluate(() => {
+                // Try specific selector first
+                let resendButton = document.querySelector('button.code-input__resend_SLXa8');
+
+                if (!resendButton) {
+                  // Try finding by text
+                  const buttons = Array.from(document.querySelectorAll('button'));
+                  resendButton = buttons.find(btn =>
+                    btn.textContent.includes('Запросить код повторно') ||
+                    btn.textContent.includes('Отправить код повторно')
+                  );
+                }
+
+                if (resendButton) {
+                  resendButton.scrollIntoView({ behavior: 'instant', block: 'center' });
+                  resendButton.click();
+                  return true;
+                }
+
+                return false;
+              });
+
+              if (resendClicked) {
+                console.log('[ALFA-LOGIN] ✅ Кнопка "Запросить код повторно" нажата');
+                resendSuccess = true;
+
+                // Wait for new SMS code
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // Clear pending input to request new code
+                this.alfaSmsCode = null;
+                this.pendingInputType = 'alfa_sms';
+                this.pendingInputData = {
+                  message: 'Ожидание нового SMS-кода от Альфа-Банка'
+                };
+
+                console.log('[ALFA-LOGIN] ⏳ Ожидание нового SMS-кода...');
+                await this.waitForAlfaSMSCode(120000, 1); // 2 minutes timeout, single attempt
+
+                console.log('[ALFA-LOGIN] 📝 Очистка старых значений в полях ввода...');
+                // Clear existing input fields
+                const inputs = await this.page.$$('input.code-input__input_71x65');
+                for (let i = 0; i < inputs.length; i++) {
+                  await inputs[i].click();
+                  await this.randomDelay(50, 100);
+                  await inputs[i].focus();
+                  await this.randomDelay(50, 100);
+                  // Select all and delete
+                  await this.page.keyboard.down('Control');
+                  await this.page.keyboard.press('KeyA');
+                  await this.page.keyboard.up('Control');
+                  await this.page.keyboard.press('Backspace');
+                  await this.randomDelay(100, 200);
+                }
+
+                console.log('[ALFA-LOGIN] 📝 Ввод нового SMS-кода: ' + this.alfaSmsCode);
+                await this.enterAlfaSMSCode(this.alfaSmsCode);
+                await this.randomDelay(2000, 4000);
+
+                // Re-check authorization
+                console.log('[ALFA-LOGIN] 🔄 Повторная проверка авторизации...');
+                const recheckStart = Date.now();
+                const recheckTimeout = 60000;
+
+                while (Date.now() - recheckStart < recheckTimeout) {
+                  const currentUrl = this.page.url();
+                  if (currentUrl.includes('web.alfabank.ru/dashboard')) {
+                    dashboardReached = true;
+                    console.log('[ALFA-LOGIN] ✅ Авторизация успешна после повторного ввода кода');
+                    break;
+                  }
+
+                  const hasTrustPrompt = await this.page.evaluate(() => {
+                    const targetText = 'Доверять этому устройству?';
+                    if (!document.body) return false;
+                    const elements = Array.from(document.querySelectorAll('body *'));
+                    return elements.some(element => {
+                      if (!element.textContent) return false;
+                      const normalizedText = element.textContent.replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim();
+                      if (!normalizedText.includes(targetText)) return false;
+                      const style = window.getComputedStyle(element);
+                      if (!style) return false;
+                      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+                      const rect = element.getBoundingClientRect();
+                      return rect.width > 0 && rect.height > 0;
+                    });
+                  }).catch(() => false);
+
+                  if (hasTrustPrompt) {
+                    trustPromptVisible = true;
+                    console.log('[ALFA-LOGIN] ✅ Диалог доверия появился после повторного ввода кода');
+                    break;
+                  }
+
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+
+                if (dashboardReached || trustPromptVisible) {
+                  break; // Exit resend loop
+                }
+
+              } else {
+                console.log(`[ALFA-LOGIN] ⚠️ Попытка ${resendAttempt}/3: Кнопка "Запросить код повторно" не найдена`);
+                if (resendAttempt < 3) {
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+              }
+
+            } catch (resendError) {
+              console.log(`[ALFA-LOGIN] ⚠️ Ошибка при попытке ${resendAttempt}/3:`, resendError.message);
+              if (resendAttempt < 3) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              }
+            }
+          }
+
+          if (!resendSuccess || (!dashboardReached && !trustPromptVisible)) {
+            throw new Error('Не удалось подтвердить успешную авторизацию: ни дашборд, ни диалог доверия не появились в течение 60 секунд (после 3 попыток повторного запроса кода)');
+          }
+        } else {
+          throw new Error('Не удалось подтвердить успешную авторизацию: ни дашборд, ни диалог доверия не появились в течение 60 секунд');
+        }
       }
 
       console.log('[ALFA-LOGIN] Этап 9/9: Проверка диалога "Доверять устройству?" (ожидание до 60 секунд)');
