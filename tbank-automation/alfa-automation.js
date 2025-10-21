@@ -629,8 +629,9 @@ export class AlfaAutomation {
           trustDialogFound = true;
           console.log('[ALFA-LOGIN] Найден диалог "Доверять этому устройству?", нажимаем "Не доверять"');
 
-          const trustCancelButton = await this.page.waitForSelector('button[data-test-id="trust-device-page-cancel-btn"]', {
-            timeout: 5000
+          const trustCancelButton = await this.waitForSelectorWithRetry('button[data-test-id="trust-device-page-cancel-btn"]', {
+            timeout: 5000,
+            retries: 3
           }).catch(() => null);
 
           if (trustCancelButton) {
@@ -1282,7 +1283,7 @@ export class AlfaAutomation {
       await waitBetweenSteps();
 
       console.log('[ALFA→SAVING] Этап 4/5: Нажатие "Перевести"');
-      await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
+      await this.waitForSelectorWithRetry('button[data-test-id="payment-button"]', { timeout: 15000, retries: 3 });
       await this.page.click('button[data-test-id="payment-button"]');
 
       await waitBetweenSteps();
@@ -1437,7 +1438,7 @@ export class AlfaAutomation {
       };
 
       await ensureDestinationDropdownOpen();
-      await this.page.waitForSelector(`${destListSelector}, ${destOptionSelector}`, { timeout: 60000 });
+      await this.waitForSelectorWithRetry(`${destListSelector}, ${destOptionSelector}`, { timeout: 20000, retries: 3 });
       await ensureDestinationDropdownOpen();
 
       const destinationDigits = (toAccountName || '').replace(/\D/g, '').slice(-4);
@@ -1520,7 +1521,7 @@ export class AlfaAutomation {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         console.log(`[SAVING→ALFA] Попытка ${attempt}/${maxRetries}: Нажатие "Перевести"`);
 
-        await this.page.waitForSelector('button[data-test-id="payment-button"]', { timeout: 15000 });
+        await this.waitForSelectorWithRetry('button[data-test-id="payment-button"]', { timeout: 15000, retries: 3 });
         await this.page.click('button[data-test-id="payment-button"]');
 
         // Wait 15 seconds and check for error message
@@ -1570,7 +1571,7 @@ export class AlfaAutomation {
       }
 
       console.log('[SAVING→ALFA] Этап 5/6: Нажатие "Готово"');
-      await this.page.waitForSelector('button[data-test-id="ready-button"]', { timeout: 15000 });
+      await this.waitForSelectorWithRetry('button[data-test-id="ready-button"]', { timeout: 15000, retries: 3 });
       await this.page.click('button[data-test-id="ready-button"]');
       await this.sleep(10000);
 
@@ -1639,7 +1640,7 @@ export class AlfaAutomation {
       // Try to find and click the template, but continue if not found (not critical)
       let selfTransferClicked = false;
       try {
-        await this.page.waitForSelector('button[data-test-id="phone-list-item"]', { timeout: 15000 });
+        await this.waitForSelectorWithRetry('button[data-test-id="phone-list-item"]', { timeout: 15000, retries: 3 });
         selfTransferClicked = await this.page.evaluate(() => {
           const items = Array.from(document.querySelectorAll('button[data-test-id="phone-list-item"]'));
           const selfTransfer = items.find(item => item.textContent.includes('Себе в другой банк'));
