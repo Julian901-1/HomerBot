@@ -1009,7 +1009,7 @@ export class AlfaAutomation {
       await this.page.goto(transferUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await waitBetweenSteps();
 
-      console.log('[ALFA→SAVING] Этап 2/5: Выбор счёта списания "Расчётный счёт ··7167"');
+      console.log('[ALFA→SAVING] Этап 2/5: Выбор счёта списания "Текущий счёт ··7167"');
       const accountOptionSelector = 'div[data-test-id="src-account-option"]';
       const optionsListSelector = 'div[data-test-id="src-account-options-list"]';
 
@@ -1093,64 +1093,124 @@ export class AlfaAutomation {
         }
       };
 
-      await ensureAccountDropdownOpen();
-      await this.page.waitForSelector(`${optionsListSelector}, ${accountOptionSelector}`, { timeout: 60000 });
-      await ensureAccountDropdownOpen();
-      await this.page.waitForSelector(accountOptionSelector, { timeout: 60000 });
+      // Use retry logic for dropdown opening
+      let dropdownOpened = false;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          console.log(`[ALFA→SAVING] Попытка ${attempt}/3: Открытие выпадающего списка счетов`);
+          await ensureAccountDropdownOpen();
+          await this.waitForSelectorWithRetry(`${optionsListSelector}, ${accountOptionSelector}`, { timeout: 15000, retries: 1 });
+          await ensureAccountDropdownOpen();
+          await this.waitForSelectorWithRetry(accountOptionSelector, { timeout: 15000, retries: 1 });
+          dropdownOpened = true;
+          break;
+        } catch (error) {
+          console.log(`[ALFA→SAVING] ⚠️ Попытка ${attempt}/3 не удалась: ${error.message}`);
+          if (attempt < 3) {
+            await this.sleep(2000);
+          }
+        }
+      }
 
-      const sourceAccountName = 'Расчётный счёт ··7167';
-      const sourceAccountDigits = sourceAccountName.replace(/\D/g, '').slice(-4);
-      const sourceAccountSelected = await this.page.evaluate(selectionData => {
-        const normalize = text =>
-          (text || '')
-            .replace(/\u00A0/g, ' ')
-            .replace(/[·•]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .toLowerCase();
+      if (!dropdownOpened) {
+        throw new Error('Не удалось открыть выпадающий список счетов после 3 попыток');
+      }
 
-        const options = Array.from(document.querySelectorAll('div[data-test-id="src-account-option"]'));
-        const normalizedTargetName = normalize(selectionData.accountName);
+      // Support both "Расчётный" and "Текущий счёт" naming
+      const sourceAccountName = 'Текущий счёт ··7167';
+      const sourceAccountDigits = '7167';
 
-        const targetOption = options.find(opt => {
-          const optionText = normalize(opt.textContent);
-          if (normalizedTargetName && optionText.includes(normalizedTargetName)) {
+      let sourceAccountSelected = false;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        console.log(`[ALFA→SAVING] Попытка ${attempt}/3: Выбор счёта "${sourceAccountName}"`);
+
+        sourceAccountSelected = await this.page.evaluate(selectionData => {
+          const normalize = text =>
+            (text || '')
+              .replace(/\u00A0/g, ' ')
+              .replace(/[·•]/g, ' ')
+              .replace(/ё/g, 'е')
+              .replace(/Ё/g, 'Е')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .toLowerCase();
+
+          const options = Array.from(document.querySelectorAll('div[data-test-id="src-account-option"]'));
+          console.log(`Found ${options.length} account options`);
+
+          const targetOption = options.find(opt => {
+            const optionText = normalize(opt.textContent);
+            console.log(`Checking option: "${optionText}"`);
+
+            // Try matching by digits first (most reliable)
+            if (selectionData.accountDigits) {
+              const digits = (opt.textContent || '').replace(/\D/g, '');
+              if (digits.includes(selectionData.accountDigits)) {
+                console.log(`Matched by digits: ${selectionData.accountDigits}`);
+                return true;
+              }
+            }
+
+            // Try matching by name (with normalization)
+            const normalizedTargetName = normalize(selectionData.accountName);
+            if (normalizedTargetName && optionText.includes(normalizedTargetName)) {
+              console.log(`Matched by name: ${normalizedTargetName}`);
+              return true;
+            }
+
+            // Try alternative names
+            if (optionText.includes('текущий') && optionText.includes('7167')) {
+              console.log('Matched by "текущий" + digits');
+              return true;
+            }
+            if (optionText.includes('расчетный') && optionText.includes('7167')) {
+              console.log('Matched by "расчетный" + digits');
+              return true;
+            }
+
+            return false;
+          });
+
+          if (!targetOption || !(targetOption instanceof HTMLElement)) {
+            console.log('No matching option found');
+            return false;
+          }
+
+          console.log('Target option found, scrolling into view');
+          targetOption.scrollIntoView({ block: 'center' });
+
+          const clickable = targetOption.querySelector('section[tabindex], button, [role="option"]');
+          if (clickable instanceof HTMLElement) {
+            console.log('Clicking on nested clickable element');
+            clickable.click();
             return true;
           }
 
-          if (selectionData.accountDigits) {
-            const digits = (opt.textContent || '').replace(/\D/g, '');
-            if (digits.endsWith(selectionData.accountDigits)) {
-              return true;
-            }
+          if (typeof targetOption.click === 'function') {
+            console.log('Clicking on option element');
+            targetOption.click();
+            return true;
           }
 
-          return false;
-        });
-
-        if (!targetOption || !(targetOption instanceof HTMLElement)) {
-          return false;
-        }
-
-        targetOption.scrollIntoView({ block: 'center' });
-
-        const clickable = targetOption.querySelector('section[tabindex], button, [role="option"]');
-        if (clickable instanceof HTMLElement) {
-          clickable.click();
+          console.log('Dispatching click event');
+          targetOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
           return true;
+        }, { accountName: sourceAccountName, accountDigits: sourceAccountDigits });
+
+        if (sourceAccountSelected) {
+          console.log(`[ALFA→SAVING] ✅ Счёт выбран на попытке ${attempt}/3`);
+          break;
         }
 
-        if (typeof targetOption.click === 'function') {
-          targetOption.click();
-          return true;
+        if (attempt < 3) {
+          console.log(`[ALFA→SAVING] ⚠️ Попытка ${attempt}/3 не удалась, повтор...`);
+          await this.sleep(2000);
+          await ensureAccountDropdownOpen();
         }
-
-        targetOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        return true;
-      }, { accountName: sourceAccountName, accountDigits: sourceAccountDigits });
+      }
 
       if (!sourceAccountSelected) {
-        throw new Error(`Не удалось выбрать счёт списания "${sourceAccountName}"`);
+        throw new Error(`Не удалось выбрать счёт списания "${sourceAccountName}" после 3 попыток`);
       }
 
       await waitBetweenSteps();
