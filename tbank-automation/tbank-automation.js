@@ -1935,9 +1935,6 @@ export class TBankAutomation {
         await new Promise(resolve => setTimeout(resolve, remainingWait));
       }
 
-      // Take final confirmation screenshot
-      await this.takeScreenshot('sbp-transfer-final');
-
       return {
         success: true,
         amount

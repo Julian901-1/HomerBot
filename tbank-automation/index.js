@@ -588,6 +588,13 @@ app.post('/api/auth/auto-sms-alfa', async (req, res) => {
     const code = codeMatch[1];
     console.log(`[AUTO-SMS-ALFA] Extracted code: ${code}`);
 
+    // Determine SMS type based on message content
+    const isLoginCode = message.includes('Код для входа в Альфа-Онлайн');
+    const isTransferCode = message.includes('Подтвердите перевод');
+
+    const smsType = isLoginCode ? 'login' : (isTransferCode ? 'transfer' : 'unknown');
+    console.log(`[AUTO-SMS-ALFA] SMS type detected: ${smsType} (login: ${isLoginCode}, transfer: ${isTransferCode})`);
+
     // Find active session waiting for Alfa SMS
     let targetSession = null;
 
@@ -613,7 +620,7 @@ app.post('/api/auth/auto-sms-alfa', async (req, res) => {
 
       // Store code in queue with 5-minute TTL (only if not already there)
       if (username) {
-        const queueKey = `alfa_${username}`;
+        const queueKey = `alfa_${smsType}_${username}`;
         const existingCode = smsCodeQueue.get(queueKey);
 
         if (existingCode && existingCode.code === code) {
@@ -629,10 +636,11 @@ app.post('/api/auth/auto-sms-alfa', async (req, res) => {
 
         smsCodeQueue.set(queueKey, {
           code,
+          smsType,
           timestamp: Date.now(),
           expiresAt: Date.now() + 5 * 60 * 1000 // 5 minutes
         });
-        console.log(`[AUTO-SMS-ALFA] Code ${code} queued for user ${username}, will expire in 5 minutes`);
+        console.log(`[AUTO-SMS-ALFA] Code ${code} (type: ${smsType}) queued for user ${username}, will expire in 5 minutes`);
 
         return res.json({
           success: true,
@@ -657,8 +665,9 @@ app.post('/api/auth/auto-sms-alfa', async (req, res) => {
 
     // Clear from queue if it was there
     if (username) {
-      const queueKey = `alfa_${username}`;
+      const queueKey = `alfa_${smsType}_${username}`;
       smsCodeQueue.delete(queueKey);
+      console.log(`[AUTO-SMS-ALFA] Cleared code from queue: ${queueKey}`);
     }
 
     res.json({
@@ -892,11 +901,25 @@ async function executeEveningTransferStep2(username, amount) {
       if (!alfaAutomation) return;
       const pendingType = alfaAutomation.getPendingInputType();
       if (pendingType === 'alfa_sms') {
-        const queueKey = `alfa_${username}`;
-        const queuedSMS = smsCodeQueue.get(queueKey);
+        // Try both login and transfer codes
+        const loginKey = `alfa_login_${username}`;
+        const transferKey = `alfa_transfer_${username}`;
+
+        let queuedSMS = smsCodeQueue.get(loginKey);
+        let usedKey = loginKey;
+
+        if (!queuedSMS) {
+          queuedSMS = smsCodeQueue.get(transferKey);
+          usedKey = transferKey;
+        }
+
         if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
+          console.log(`[ALFA-SMS] 📨 Получен новый SMS-код: ${queuedSMS.code} (type: ${queuedSMS.smsType})`);
           const submitted = alfaAutomation.submitAlfaSMSCode(queuedSMS.code);
-          if (submitted) smsCodeQueue.delete(queueKey);
+          if (submitted) {
+            smsCodeQueue.delete(usedKey);
+            console.log(`[ALFA-SMS] ✅ SMS-код передан в ожидающий процесс: ${queuedSMS.code}`);
+          }
         }
       }
     }, 500);
@@ -1098,12 +1121,24 @@ app.post('/api/morning-transfer', async (req, res) => {
       if (!alfaAutomation) return;
       const pendingType = alfaAutomation.getPendingInputType();
       if (pendingType === 'alfa_sms') {
-        const queueKey = `alfa_${username}`;
-        const queuedSMS = smsCodeQueue.get(queueKey);
+        // Try both login and transfer codes
+        const loginKey = `alfa_login_${username}`;
+        const transferKey = `alfa_transfer_${username}`;
+
+        let queuedSMS = smsCodeQueue.get(loginKey);
+        let usedKey = loginKey;
+
+        if (!queuedSMS) {
+          queuedSMS = smsCodeQueue.get(transferKey);
+          usedKey = transferKey;
+        }
+
         if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
+          console.log(`[ALFA-SMS] 📨 Получен новый SMS-код: ${queuedSMS.code} (type: ${queuedSMS.smsType})`);
           const submitted = alfaAutomation.submitAlfaSMSCode(queuedSMS.code);
           if (submitted) {
-            smsCodeQueue.delete(queueKey);
+            smsCodeQueue.delete(usedKey);
+            console.log(`[ALFA-SMS] ✅ SMS-код передан в ожидающий процесс: ${queuedSMS.code}`);
           }
         }
       }
@@ -1376,12 +1411,24 @@ app.post('/api/alfa-to-tbank', async (req, res) => {
       if (!alfaAutomation) return;
       const pendingType = alfaAutomation.getPendingInputType();
       if (pendingType === 'alfa_sms') {
-        const queueKey = `alfa_${username}`;
-        const queuedSMS = smsCodeQueue.get(queueKey);
+        // Try both login and transfer codes
+        const loginKey = `alfa_login_${username}`;
+        const transferKey = `alfa_transfer_${username}`;
+
+        let queuedSMS = smsCodeQueue.get(loginKey);
+        let usedKey = loginKey;
+
+        if (!queuedSMS) {
+          queuedSMS = smsCodeQueue.get(transferKey);
+          usedKey = transferKey;
+        }
+
         if (queuedSMS && Date.now() < queuedSMS.expiresAt) {
+          console.log(`[ALFA-SMS] 📨 Получен новый SMS-код: ${queuedSMS.code} (type: ${queuedSMS.smsType})`);
           const submitted = alfaAutomation.submitAlfaSMSCode(queuedSMS.code);
           if (submitted) {
-            smsCodeQueue.delete(queueKey);
+            smsCodeQueue.delete(usedKey);
+            console.log(`[ALFA-SMS] ✅ SMS-код передан в ожидающий процесс: ${queuedSMS.code}`);
           }
         }
       }
