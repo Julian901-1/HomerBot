@@ -279,13 +279,13 @@ export class SessionManager {
   }
 
   /**
-   * Check and execute scheduled transfers for all authenticated sessions
+   * Check and execute scheduled transfers for all available sessions
    */
   async checkScheduledTransfers() {
     console.log('[SCHEDULER] Checking scheduled transfers...');
 
     for (const [sessionId, session] of this.sessions.entries()) {
-      if (!session.authenticated || !session.automation) {
+      if (!session.automation) {
         continue;
       }
 
@@ -324,6 +324,8 @@ export class SessionManager {
         const alfaEnvConfigured =
           Boolean(process.env.FIXED_ALFA_PHONE && process.env.FIXED_ALFA_CARD && process.env.FIXED_ALFA_SAVING_ACCOUNT_ID);
 
+        const upcomingTransfers = [];
+
         // OLD: Check if it's time to transfer TO saving account (T-Bank vklad system)
         if (transferToVkladTime) {
           const lastTransferTo = this.lastTransferToSaving.get(username);
@@ -336,6 +338,8 @@ export class SessionManager {
             );
             await this.executeTransferToSaving(session);
             this.lastTransferToSaving.set(username, new Date());
+          } else if (!toSavingWindow.alreadyExecutedToday) {
+            upcomingTransfers.push(`toSaving ${transferToVkladTime}`);
           }
         }
 
@@ -351,6 +355,8 @@ export class SessionManager {
             );
             await this.executeTransferFromSaving(session);
             this.lastTransferFromSaving.set(username, new Date());
+          } else if (!fromSavingWindow.alreadyExecutedToday) {
+            upcomingTransfers.push(`fromSaving ${transferFromVkladTime}`);
           }
         }
 
@@ -371,6 +377,8 @@ export class SessionManager {
               );
               await this.executeEveningTransfer(session);
               this.lastEveningTransfer.set(username, new Date());
+            } else if (!eveningWindow.alreadyExecutedToday) {
+              upcomingTransfers.push(`evening ${eveningTransferTime} (±20m)`);
             }
           }
         }
@@ -392,8 +400,16 @@ export class SessionManager {
               );
               await this.executeMorningTransfer(session);
               this.lastMorningTransfer.set(username, new Date());
+            } else if (!morningWindow.alreadyExecutedToday) {
+              upcomingTransfers.push(`morning ${morningTransferTime} (±20m)`);
             }
           }
+        }
+
+        if (upcomingTransfers.length > 0) {
+          console.log(
+            `[SCHEDULER] 📋 Upcoming transfers for ${username}: ${upcomingTransfers.join('; ')} (timezone ${userTimezone})`
+          );
         }
 
       } catch (error) {
