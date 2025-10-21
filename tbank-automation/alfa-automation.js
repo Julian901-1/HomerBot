@@ -257,10 +257,67 @@ export class AlfaAutomation {
       const cardNumber = this.encryptionService ? this.encryptionService.decrypt(this.cardNumber) : this.cardNumber;
 
       console.log('[ALFA-LOGIN] Этап 1/9: Переход на web.alfabank.ru');
-      await this.page.goto('https://web.alfabank.ru/', {
-        waitUntil: 'networkidle2',
-        timeout: 60000
-      });
+
+      // First navigation attempt with timeout handling
+      let navigationSuccessful = false;
+      try {
+        await this.page.goto('https://web.alfabank.ru/', {
+          waitUntil: 'networkidle2',
+          timeout: 60000
+        });
+        navigationSuccessful = true;
+      } catch (navError) {
+        if (navError.message.includes('timeout')) {
+          console.log('[ALFA-LOGIN] ⚠️ Navigation timeout - проверяем наличие логотипа загрузки');
+
+          // Check if loading logo is present (large logo with viewBox="0 0 48 48" and width/height > 60)
+          // Loading logo: viewBox="0 0 48 48", width="88", height="100"
+          // Corner logo: viewBox="0 0 24 24", width="48", height="48"
+          const loadingLogoPresent = await this.page.evaluate(() => {
+            const svgs = Array.from(document.querySelectorAll('svg'));
+            return svgs.some(svg => {
+              const viewBox = svg.getAttribute('viewBox');
+              const width = svg.getAttribute('width');
+              const height = svg.getAttribute('height');
+
+              // Check for large viewBox (loading logo is "0 0 48 48")
+              if (viewBox === '0 0 48 48') {
+                const w = parseInt(width) || 0;
+                const h = parseInt(height) || 0;
+                // Loading logo is typically 88x100, corner logo would be smaller
+                if (w > 60 || h > 60) {
+                  return true;
+                }
+              }
+
+              return false;
+            });
+          }).catch(() => false);
+
+          if (loadingLogoPresent) {
+            console.log('[ALFA-LOGIN] ✅ Логотип загрузки найден - страница загружается, ждём ещё 60 секунд');
+            await this.sleep(60000);
+
+            // Check if page is now ready
+            const phoneInputPresent = await this.page.$('input[data-test-id="phoneInput"]').catch(() => null);
+            if (phoneInputPresent) {
+              console.log('[ALFA-LOGIN] ✅ Поле ввода телефона появилось');
+              navigationSuccessful = true;
+            } else {
+              throw new Error('Страница не загрузилась даже после дополнительных 60 секунд ожидания');
+            }
+          } else {
+            throw navError;
+          }
+        } else {
+          throw navError;
+        }
+      }
+
+      if (navigationSuccessful) {
+        console.log('[ALFA-LOGIN] ✅ Страница успешно загружена');
+      }
+
       await this.randomDelay(2000, 4000);
 
       console.log('[ALFA-LOGIN] Этап 2/9: Ввод номера телефона');
