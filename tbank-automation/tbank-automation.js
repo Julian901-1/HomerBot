@@ -103,13 +103,14 @@ export class TBankAutomation {
     this.browser = await puppeteer.launch(launchOptions);
     this.page = await this.browser.newPage();
 
-    this.page.on('console', msg => {
-      const text = msg.text();
-      if (text.includes('Found box') || text.includes('matching one of selectors')) {
-        return;
-      }
-      console.log('PAGE LOG:', text);
-    });
+    // MEMORY OPTIMIZATION: Disabled page console logging to reduce memory usage
+    // this.page.on('console', msg => {
+    //   const text = msg.text();
+    //   if (text.includes('Found box') || text.includes('matching one of selectors')) {
+    //     return;
+    //   }
+    //   console.log('PAGE LOG:', text);
+    // });
 
     // Block images, fonts to save memory
     await this.page.setRequestInterception(true);
