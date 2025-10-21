@@ -7,6 +7,7 @@ import { TBankAutomation } from './tbank-automation.js';
 import { AlfaAutomation } from './alfa-automation.js';
 import { EncryptionService } from './encryption.js';
 import { SessionManager } from './session-manager.js';
+import { SimpleScheduler } from './simple-scheduler.js';
 
 dotenv.config();
 
@@ -56,6 +57,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Services
 const encryptionService = new EncryptionService(process.env.ENCRYPTION_SECRET_KEY || process.env.ENCRYPTION_KEY);
 const sessionManager = new SessionManager();
+let simpleScheduler = null;
 
 // SMS code queue - stores codes that arrived before session was ready
 const smsCodeQueue = new Map(); // username -> { code, timestamp }
@@ -1601,21 +1603,42 @@ app.listen(PORT, () => {
     }
   });
 
-  // Start the transfer scheduler
-  console.log('[SERVER] Starting transfer scheduler...');
-  sessionManager.startScheduler();
+  const schedulerUsername = process.env.SCHEDULER_USERNAME;
+  if (schedulerUsername && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+    const schedulerBaseUrl = process.env.SCHEDULER_BASE_URL || `http://127.0.0.1:${PORT}`;
+    console.log(`[SIMPLE-SCHEDULER] Starting for user ${schedulerUsername} (base ${schedulerBaseUrl})`);
+    simpleScheduler = new SimpleScheduler({
+      username: schedulerUsername,
+      baseUrl: schedulerBaseUrl,
+      googleSheetsUrl: process.env.GOOGLE_SHEETS_SCRIPT_URL
+    });
+
+    simpleScheduler.start().catch(err => {
+      console.error('[SIMPLE-SCHEDULER] Failed to start:', err);
+    });
+  } else {
+    console.log('[SIMPLE-SCHEDULER] Not started: missing SCHEDULER_USERNAME or GOOGLE_SHEETS_SCRIPT_URL');
+  }
 });
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('\n🛑 Shutting down gracefully...');
+  console.log('
+🛑 Shutting down gracefully...');
+  if (simpleScheduler) {
+    simpleScheduler.stop();
+  }
   sessionManager.stopScheduler();
   await sessionManager.closeAllSessions();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n🛑 Shutting down gracefully...');
+  console.log('
+🛑 Shutting down gracefully...');
+  if (simpleScheduler) {
+    simpleScheduler.stop();
+  }
   sessionManager.stopScheduler();
   await sessionManager.closeAllSessions();
   process.exit(0);

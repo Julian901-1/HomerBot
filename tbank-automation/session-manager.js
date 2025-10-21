@@ -285,9 +285,7 @@ export class SessionManager {
     console.log('[SCHEDULER] Checking scheduled transfers...');
 
     for (const [sessionId, session] of this.sessions.entries()) {
-      if (!session.automation) {
-        continue;
-      }
+      const hasAutomation = !!session.automation;
 
       try {
         const username = session.username;
@@ -341,15 +339,21 @@ export class SessionManager {
           const toSavingWindow = shouldExecuteNow(transferToVkladTime, lastTransferTo, 1, 20, userTimezone);
 
           if (toSavingWindow.shouldExecute) {
-            const offsetLabel = formatOffsetMinutes(toSavingWindow.offsetMinutes);
-            console.log(
-              `[SCHEDULER] ⏰ ${username}: executing TO-saving transfer (base ${transferToVkladTime}, planned ${formatPlannedTime(
-                toSavingWindow.randomizedTarget,
-                userTimezone
-              )}, offset ${offsetLabel} min)`
-            );
-            await this.executeTransferToSaving(session);
-            this.lastTransferToSaving.set(username, new Date());
+            if (!hasAutomation) {
+              console.warn(
+                `[SCHEDULER] ⏰ ${username}: TO-saving transfer should run now but no active automation session`
+              );
+            } else {
+              const offsetLabel = formatOffsetMinutes(toSavingWindow.offsetMinutes);
+              console.log(
+                `[SCHEDULER] ⏰ ${username}: executing TO-saving transfer (base ${transferToVkladTime}, planned ${formatPlannedTime(
+                  toSavingWindow.randomizedTarget,
+                  userTimezone
+                )}, offset ${offsetLabel} min)`
+              );
+              await this.executeTransferToSaving(session);
+              this.lastTransferToSaving.set(username, new Date());
+            }
           } else if (!toSavingWindow.alreadyExecutedToday) {
             console.log(
               `[SCHEDULER] 🕒 ${username}: TO-saving transfer planned at ${formatPlannedTime(
@@ -367,15 +371,21 @@ export class SessionManager {
           const fromSavingWindow = shouldExecuteNow(transferFromVkladTime, lastTransferFrom, 1, 20, userTimezone);
 
           if (fromSavingWindow.shouldExecute) {
-            const offsetLabel = formatOffsetMinutes(fromSavingWindow.offsetMinutes);
-            console.log(
-              `[SCHEDULER] ⏰ ${username}: executing FROM-saving transfer (base ${transferFromVkladTime}, planned ${formatPlannedTime(
-                fromSavingWindow.randomizedTarget,
-                userTimezone
-              )}, offset ${offsetLabel} min)`
-            );
-            await this.executeTransferFromSaving(session);
-            this.lastTransferFromSaving.set(username, new Date());
+            if (!hasAutomation) {
+              console.warn(
+                `[SCHEDULER] ⏰ ${username}: FROM-saving transfer should run now but no active automation session`
+              );
+            } else {
+              const offsetLabel = formatOffsetMinutes(fromSavingWindow.offsetMinutes);
+              console.log(
+                `[SCHEDULER] ⏰ ${username}: executing FROM-saving transfer (base ${transferFromVkladTime}, planned ${formatPlannedTime(
+                  fromSavingWindow.randomizedTarget,
+                  userTimezone
+                )}, offset ${offsetLabel} min)`
+              );
+              await this.executeTransferFromSaving(session);
+              this.lastTransferFromSaving.set(username, new Date());
+            }
           } else if (!fromSavingWindow.alreadyExecutedToday) {
             console.log(
               `[SCHEDULER] 🕒 ${username}: FROM-saving transfer planned at ${formatPlannedTime(
@@ -398,15 +408,21 @@ export class SessionManager {
             const eveningWindow = shouldExecuteNow(eveningTransferTime, lastEvening, -20, 20, userTimezone);
 
             if (eveningWindow.shouldExecute) {
-              const offsetLabel = formatOffsetMinutes(eveningWindow.offsetMinutes);
-              console.log(
-                `[SCHEDULER] 🌆 ${username}: executing EVENING transfer (base ${eveningTransferTime}, planned ${formatPlannedTime(
-                  eveningWindow.randomizedTarget,
-                  userTimezone
-                )}, offset ${offsetLabel} min)`
-              );
-              await this.executeEveningTransfer(session);
-              this.lastEveningTransfer.set(username, new Date());
+              if (!hasAutomation) {
+                console.warn(
+                  `[SCHEDULER] 🌆 ${username}: EVENING transfer ready but no active automation session`
+                );
+              } else {
+                const offsetLabel = formatOffsetMinutes(eveningWindow.offsetMinutes);
+                console.log(
+                  `[SCHEDULER] 🌆 ${username}: executing EVENING transfer (base ${eveningTransferTime}, planned ${formatPlannedTime(
+                    eveningWindow.randomizedTarget,
+                    userTimezone
+                  )}, offset ${offsetLabel} min)`
+                );
+                await this.executeEveningTransfer(session);
+                this.lastEveningTransfer.set(username, new Date());
+              }
             } else if (!eveningWindow.alreadyExecutedToday) {
               console.log(
                 `[SCHEDULER] 🕒 ${username}: EVENING transfer planned at ${formatPlannedTime(
@@ -430,15 +446,21 @@ export class SessionManager {
             const morningWindow = shouldExecuteNow(morningTransferTime, lastMorning, -20, 20, userTimezone);
 
             if (morningWindow.shouldExecute) {
-              const offsetLabel = formatOffsetMinutes(morningWindow.offsetMinutes);
-              console.log(
-                `[SCHEDULER] 🌅 ${username}: executing MORNING transfer (base ${morningTransferTime}, planned ${formatPlannedTime(
-                  morningWindow.randomizedTarget,
-                  userTimezone
-                )}, offset ${offsetLabel} min)`
-              );
-              await this.executeMorningTransfer(session);
-              this.lastMorningTransfer.set(username, new Date());
+              if (!hasAutomation) {
+                console.warn(
+                  `[SCHEDULER] 🌅 ${username}: MORNING transfer ready but no active automation session`
+                );
+              } else {
+                const offsetLabel = formatOffsetMinutes(morningWindow.offsetMinutes);
+                console.log(
+                  `[SCHEDULER] 🌅 ${username}: executing MORNING transfer (base ${morningTransferTime}, planned ${formatPlannedTime(
+                    morningWindow.randomizedTarget,
+                    userTimezone
+                  )}, offset ${offsetLabel} min)`
+                );
+                await this.executeMorningTransfer(session);
+                this.lastMorningTransfer.set(username, new Date());
+              }
             } else if (!morningWindow.alreadyExecutedToday) {
               console.log(
                 `[SCHEDULER] 🕒 ${username}: MORNING transfer planned at ${formatPlannedTime(
