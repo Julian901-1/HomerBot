@@ -23,7 +23,6 @@ export class TBankAutomation {
     this.page = existingPage;
     this.reusingBrowser = !!(existingBrowser && existingPage);
 
-    this.keepAliveInterval = null;
     this.sessionActive = false;
     this.sessionStartTime = null;
 
@@ -277,8 +276,6 @@ export class TBankAutomation {
           // Track login start for runtime metrics
           this.recordLoginSuccess();
 
-          this.startKeepAlive();
-
           console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
           return {
@@ -309,8 +306,6 @@ export class TBankAutomation {
 
             // Track login start for runtime metrics
             this.recordLoginSuccess();
-
-            this.startKeepAlive();
 
             console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
@@ -441,8 +436,6 @@ export class TBankAutomation {
         // Track login start for runtime metrics
         this.recordLoginSuccess();
 
-        this.startKeepAlive();
-
         console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
         return {
@@ -466,8 +459,6 @@ export class TBankAutomation {
 
         // Track login start for runtime metrics
         this.recordLoginSuccess();
-
-        this.startKeepAlive();
 
         console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
@@ -737,198 +728,6 @@ export class TBankAutomation {
     return false;
   }
 
-  /**
-   * Start keep-alive mechanism to prevent session timeout
-   */
-  startKeepAlive() {
-    if (this.keepAliveInterval) {
-      clearInterval(this.keepAliveInterval);
-    }
-
-    const interval = parseInt(process.env.KEEP_ALIVE_INTERVAL) || 300000; // 5 minutes
-
-    console.log(`[TBANK] Starting keep-alive (interval: ${interval}ms)`);
-    console.log(`[TBANK] 🕐 First keep-alive cycle will run in ${interval / 1000} seconds`);
-
-    let keepAliveCount = 0;
-
-    // Log initial state
-    console.log(`[TBANK] 📊 Initial keep-alive state: sessionActive=${this.sessionActive}, URL=${this.page ? this.page.url() : 'no page'}`);
-
-    this.keepAliveInterval = setInterval(async () => {
-      if (!this.sessionActive || !this.page) {
-        clearInterval(this.keepAliveInterval);
-        return;
-      }
-
-      try {
-        keepAliveCount++;
-        const lifetime = this.getSessionLifetimeMinutes();
-        console.log(`[TBANK] Keep-alive #${keepAliveCount}: simulating user activity (session lifetime: ${lifetime} min)`);
-
-        // Get viewport dimensions
-        const viewport = this.page.viewport();
-        const maxX = viewport.width;
-        const maxY = viewport.height;
-
-        // Enhanced random actions to keep session alive and appear more human-like
-        const actions = [
-          // Realistic mouse movement with random scroll
-          async () => {
-            const currentPos = await this.page.evaluate(() => ({
-              x: window.innerWidth / 2,
-              y: window.innerHeight / 2
-            }));
-
-            const targetX = 100 + Math.random() * (maxX - 200);
-            const targetY = 100 + Math.random() * (maxY - 200);
-
-            await this.simulateRealisticMouseMovement(
-              currentPos.x,
-              currentPos.y,
-              targetX,
-              targetY
-            );
-
-            // Random scroll after mouse movement
-            await this.page.evaluate(() => {
-              window.scrollBy({
-                top: (Math.random() - 0.5) * 300,
-                behavior: 'smooth'
-              });
-            });
-          },
-          // Hover over account widgets (simulate checking balances)
-          async () => {
-            const widgets = await this.page.$$('[data-qa-type^="atomPanel widget"]');
-            if (widgets.length > 0) {
-              const randomWidget = widgets[Math.floor(Math.random() * widgets.length)];
-              const box = await randomWidget.boundingBox();
-              if (box) {
-                await this.simulateRealisticMouseMovement(
-                  Math.random() * maxX,
-                  Math.random() * maxY,
-                  box.x + box.width / 2,
-                  box.y + box.height / 2
-                );
-                // Pause as if reading the balance
-                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-              }
-            }
-          },
-          // Subtle scroll simulation (reading page)
-          async () => {
-            const scrollSteps = 3 + Math.floor(Math.random() * 3);
-            for (let i = 0; i < scrollSteps; i++) {
-              await this.page.evaluate(() => {
-                window.scrollBy({
-                  top: 50 + Math.random() * 100,
-                  behavior: 'smooth'
-                });
-              });
-              await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
-            }
-          },
-          // Simulate hovering over navigation menu
-          async () => {
-            const navLinks = await this.page.$$('[data-qa-type="desktop-ib-navigation-menu-link"]');
-            if (navLinks.length > 0) {
-              const randomLink = navLinks[Math.floor(Math.random() * navLinks.length)];
-              const box = await randomLink.boundingBox();
-              if (box) {
-                await this.simulateRealisticMouseMovement(
-                  Math.random() * maxX,
-                  Math.random() * maxY,
-                  box.x + box.width / 2,
-                  box.y + box.height / 2
-                );
-                await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-              }
-            }
-          },
-          // Random page reload (very occasional)
-          async () => {
-            // Only 10% chance of reload to not be too aggressive
-            if (Math.random() < 0.1) {
-              console.log('[TBANK] Keep-alive: performing soft page reload');
-              await this.page.evaluate(() => {
-                // Soft reload - just navigate to current URL
-                window.location.href = window.location.href;
-              });
-              await new Promise(resolve => setTimeout(resolve, 3000));
-            }
-          },
-          // Simulate clicking on balance visibility toggle (if present)
-          async () => {
-            const visibilityToggle = await this.page.$('[data-qa-type*="visibility"]');
-            if (visibilityToggle) {
-              await visibilityToggle.click();
-              await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 500));
-              // Click again to toggle back
-              await visibilityToggle.click();
-              await new Promise(resolve => setTimeout(resolve, 200));
-            }
-          },
-          // Make API requests to mimic real user activity
-          async () => {
-            try {
-              console.log('[TBANK] Keep-alive: making API request to check accounts');
-              // Navigate to a banking page or refresh data
-              const response = await this.page.evaluate(() => {
-                // Trigger any XHR/fetch that would normally happen
-                return fetch(window.location.href, {
-                  method: 'GET',
-                  credentials: 'include'
-                }).then(r => r.status);
-              });
-              console.log(`[TBANK] Keep-alive: API request completed with status ${response}`);
-            } catch (e) {
-              console.log('[TBANK] Keep-alive: API request failed (non-critical):', e.message);
-            }
-          },
-          // Click on different sections to trigger real navigation
-          async () => {
-            try {
-              const sections = await this.page.$$('a[href*="/mybank/"]');
-              if (sections.length > 0) {
-                const randomSection = sections[Math.floor(Math.random() * Math.min(sections.length, 5))];
-                const href = await randomSection.evaluate(el => el.getAttribute('href'));
-                if (href && !href.includes('logout')) {
-                  console.log(`[TBANK] Keep-alive: navigating to ${href}`);
-                  await randomSection.click();
-                  await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
-                }
-              }
-            } catch (e) {
-              console.log('[TBANK] Keep-alive: navigation failed (non-critical):', e.message);
-            }
-          }
-        ];
-
-        // Execute random action
-        const randomAction = actions[Math.floor(Math.random() * actions.length)];
-        await randomAction();
-
-        console.log('[TBANK] Keep-alive action completed');
-
-        // Keep-alive cycle
-        console.log(`[TBANK] ⏰ Keep-alive cycle #${keepAliveCount}`);
-
-        // Check if we're still logged in by verifying URL
-        const currentUrl = this.page.url();
-        if (!currentUrl.includes('/mybank/') && !currentUrl.includes('/accounts') && !currentUrl.includes('/main')) {
-          console.error(`[TBANK] ⚠️ Session appears to be logged out! Current URL: ${currentUrl}`);
-          console.error(`[TBANK] ⚠️ Keep-alive #${keepAliveCount} detected logout - session may be expired`);
-        } else {
-          console.log(`[TBANK] ✅ Session still active (URL check passed)`);
-        }
-
-      } catch (error) {
-        console.error('[TBANK] Keep-alive error:', error);
-        // Error occurred during keep-alive
-      }
-    }, interval);
-  }
 
   /**
    * Record the timestamp of a successful login for lifetime tracking
@@ -2185,11 +1984,6 @@ export class TBankAutomation {
 
     this.sessionActive = false;
 
-    if (this.keepAliveInterval) {
-      clearInterval(this.keepAliveInterval);
-      this.keepAliveInterval = null;
-    }
-
     // Delete saved session if requested (compatibility log - no files kept)
     if (deleteSession) {
       console.log('[TBANK] 🔄 Session persistence disabled - nothing to delete');
@@ -2252,8 +2046,7 @@ export class TBankAutomation {
   getSessionStats() {
     return {
       sessionActive: this.sessionActive,
-      sessionLifetimeMinutes: this.getSessionLifetimeMinutes(),
-      keepAliveActive: Boolean(this.keepAliveInterval)
+      sessionLifetimeMinutes: this.getSessionLifetimeMinutes()
     };
   }
 }
