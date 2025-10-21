@@ -1604,20 +1604,26 @@ app.listen(PORT, () => {
   });
 
   const schedulerUsername = process.env.SCHEDULER_USERNAME;
-  if (schedulerUsername && process.env.GOOGLE_SHEETS_SCRIPT_URL) {
+  const eveningHour = process.env.SCHEDULER_EVENING_HOUR;
+  const morningHour = process.env.SCHEDULER_MORNING_HOUR;
+
+  if (schedulerUsername && (eveningHour !== undefined || morningHour !== undefined)) {
     const schedulerBaseUrl = process.env.SCHEDULER_BASE_URL || `http://127.0.0.1:${PORT}`;
-    console.log(`[SIMPLE-SCHEDULER] Starting for user ${schedulerUsername} (base ${schedulerBaseUrl})`);
+    const schedulerTimezone = process.env.SCHEDULER_TIMEZONE;
+
     simpleScheduler = new SimpleScheduler({
       username: schedulerUsername,
       baseUrl: schedulerBaseUrl,
-      googleSheetsUrl: process.env.GOOGLE_SHEETS_SCRIPT_URL
+      eveningHour,
+      morningHour,
+      timezone: schedulerTimezone
     });
 
     simpleScheduler.start().catch(err => {
       console.error('[SIMPLE-SCHEDULER] Failed to start:', err);
     });
   } else {
-    console.log('[SIMPLE-SCHEDULER] Not started: missing SCHEDULER_USERNAME or GOOGLE_SHEETS_SCRIPT_URL');
+    console.log('[SIMPLE-SCHEDULER] Not started: set SCHEDULER_USERNAME and at least one of SCHEDULER_EVENING_HOUR or SCHEDULER_MORNING_HOUR');
   }
 });
 
