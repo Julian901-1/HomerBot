@@ -850,19 +850,9 @@ async function executeEveningTransferStep1(username) {
 
     const amount = transferResult.amount;
     clearInterval(smsQueueChecker);
-    await tbankAutomation.close();
 
-    // Clear reference to help garbage collection
-    tbankAutomation = null;
-
-    // Force garbage collection if available
-    if (global.gc) {
-      console.log('[STEP1] 🗑️ Running garbage collection...');
-      global.gc();
-    }
-
-    console.log(`[STEP1] ✅ Completed: ${amount} RUB transferred`);
-    return { success: true, amount };
+    console.log(`[STEP1] ✅ Completed: ${amount} RUB transferred (browser kept open for STEP2)`);
+    return { success: true, amount, browser: tbankAutomation.browser, page: tbankAutomation.page };
 
   } catch (error) {
     if (smsQueueChecker) clearInterval(smsQueueChecker);
@@ -872,7 +862,7 @@ async function executeEveningTransferStep1(username) {
 }
 
 // Helper function: Execute evening transfer step 2
-async function executeEveningTransferStep2(username, amount) {
+async function executeEveningTransferStep2(username, amount, browser = null, page = null) {
   let alfaAutomation = null;
   let alfaSmsQueueChecker = null;
 
@@ -887,15 +877,34 @@ async function executeEveningTransferStep2(username, amount) {
       throw new Error('Missing required Alfa environment variables');
     }
 
-    console.log(`[STEP2] Waiting 45 seconds for funds to arrive and memory to free...`);
+    console.log(`[STEP2] ⏳ Waiting 45 seconds for funds to arrive...`);
     await new Promise(resolve => setTimeout(resolve, 45000));
 
-    alfaAutomation = new AlfaAutomation({
-      username,
-      phone: FIXED_ALFA_PHONE,
-      cardNumber: FIXED_ALFA_CARD,
-      encryptionService: null
-    });
+    // Force garbage collection after waiting
+    if (global.gc) {
+      console.log('[STEP2] 🗑️ Running garbage collection...');
+      global.gc();
+    }
+
+    if (browser && page) {
+      console.log('[STEP2] 🔄 Reusing existing browser from STEP1');
+      alfaAutomation = new AlfaAutomation({
+        username,
+        phone: FIXED_ALFA_PHONE,
+        cardNumber: FIXED_ALFA_CARD,
+        encryptionService: null,
+        browser,
+        page
+      });
+    } else {
+      console.log('[STEP2] 🆕 Creating new Alfa-Bank automation instance');
+      alfaAutomation = new AlfaAutomation({
+        username,
+        phone: FIXED_ALFA_PHONE,
+        cardNumber: FIXED_ALFA_CARD,
+        encryptionService: null
+      });
+    }
 
     alfaSmsQueueChecker = setInterval(() => {
       if (!alfaAutomation) return;
@@ -967,18 +976,14 @@ app.post('/api/evening-transfer', async (req, res) => {
 
     console.log(`[API-WRAPPER] 🌆 Evening transfer requested for ${username}`);
 
-    // Execute step 1
+    // Execute step 1 (keeps browser open)
     const step1Result = await executeEveningTransferStep1(username);
     const transferredAmount = step1Result.amount;
+    const browser = step1Result.browser;
+    const page = step1Result.page;
 
-    // Force garbage collection between steps
-    if (global.gc) {
-      console.log('[API-WRAPPER] 🗑️ Running garbage collection between steps...');
-      global.gc();
-    }
-
-    // Execute step 2
-    await executeEveningTransferStep2(username, transferredAmount);
+    // Execute step 2 (reuses browser from step1, includes 45s wait + GC)
+    await executeEveningTransferStep2(username, transferredAmount, browser, page);
 
     console.log(`[API-WRAPPER] 🎉 Evening transfer completed successfully!`);
 

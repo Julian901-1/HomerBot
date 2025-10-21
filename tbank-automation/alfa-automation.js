@@ -14,15 +14,16 @@ puppeteer.use(StealthPlugin());
  * Handles login, transfers, and interactions with Alfa-Bank web interface
  */
 export class AlfaAutomation {
-  constructor({ username, phone, cardNumber, encryptionService }) {
+  constructor({ username, phone, cardNumber, encryptionService, browser = null, page = null }) {
     this.username = username;
     this.phone = phone; // Encrypted
     this.cardNumber = cardNumber; // Encrypted
     this.encryptionService = encryptionService;
 
-    this.browser = null;
-    this.page = null;
+    this.browser = browser;
+    this.page = page;
     this.authenticated = false;
+    this.reusingBrowser = !!(browser && page);
 
     // SMS code handling
     this.pendingInputType = null;
@@ -245,7 +246,10 @@ export class AlfaAutomation {
       console.log('[ALFA-LOGIN] Начало входа в Альфа-Банк');
 
       if (!this.browser) {
+        console.log('[ALFA-LOGIN] 🆕 Creating new browser');
         await this.initBrowser();
+      } else if (this.reusingBrowser) {
+        console.log('[ALFA-LOGIN] 🔄 Reusing existing browser from previous step');
       }
 
       // Decrypt credentials (if encryptionService is available, otherwise use as-is)
