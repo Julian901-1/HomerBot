@@ -129,6 +129,7 @@ export class AlfaAutomation {
     const startTime = Date.now();
     const maxInterval = Math.max(100, pollInterval);
     let lastError = null;
+    let framesLogged = false;
 
     while (true) {
       const elapsed = Date.now() - startTime;
@@ -151,6 +152,18 @@ export class AlfaAutomation {
       if (activeFrames.length === 0) {
         await this.sleep(Math.min(maxInterval, remaining));
         continue;
+      }
+
+      if (!framesLogged) {
+        const frameUrls = activeFrames.map(frame => {
+          try {
+            return frame.url();
+          } catch (frameError) {
+            return '[unknown-url]';
+          }
+        }).slice(0, 5);
+        console.log(`[ALFA-FRAME] scanning "${selector}" across ${activeFrames.length} frame(s); samples: ${frameUrls.join(', ')}`);
+        framesLogged = true;
       }
 
       const waitTimeout = Math.max(100, Math.min(remaining, maxInterval));
@@ -189,11 +202,49 @@ export class AlfaAutomation {
   }
 
   /**
-   * Wait for selector with retry logic
-   * @param {string} selector - CSS selector to wait for
-   * @param {Object} options - Options object with timeout, retries, etc.
-   * @returns {Promise<ElementHandle>}
+   * Ожидание появления фрейма, удовлетворяющего predicate
+   * @param {(frame: import('puppeteer').Frame) => boolean} predicate
+   * @param {Object} options
    */
+  async waitForFrame(predicate, options = {}) {
+    if (!this.page) {
+      throw new Error('Browser page is not initialized');
+    }
+
+    const {
+      timeout = 30000,
+      pollInterval = 500,
+      description = 'target frame'
+    } = options;
+
+    const startTime = Date.now();
+
+    while (Date.now() - startTime <= timeout) {
+      const frames = this.page.frames();
+      for (const frame of frames) {
+        if (!frame || frame.isDetached()) {
+          continue;
+        }
+
+        let matches = false;
+        try {
+          matches = Boolean(predicate(frame));
+        } catch (predicateError) {
+          console.log('[ALFA-FRAME] Predicate error while iterating frames:', predicateError.message);
+        }
+
+        if (matches) {
+          console.log(`[ALFA-FRAME] Matched frame for ${description}: ${frame.url()}`);
+          return frame;
+        }
+      }
+
+      await this.sleep(Math.min(pollInterval, Math.max(100, timeout / 10)));
+    }
+
+    throw new Error(`Не удалось найти iframe (${description}) за ${timeout} мс`);
+  }
+
   async waitForSelectorWithRetry(selector, options = {}) {
     const {
       timeout = 30000,
@@ -1831,20 +1882,47 @@ export class AlfaAutomation {
         await this.sleep(15000);
       };
 
-      console.log('[ALFA→TBANK] Этап 1/11: Переход на страницу перевода по номеру телефона');
+      console.log('[ALFA→TBANK] Этап 1/11: Переходим на страницу переводов по телефону');
       await this.page.goto('https://web.alfabank.ru/transfers/phone', {
         waitUntil: 'domcontentloaded',
         timeout: 60000
       });
       await waitBetweenSteps();
 
+      console.log('[ALFA→TBANK] Ищем активный iframe формы перевода...');
+      let transferFrame = await this.waitForFrame(frame => {
+        const url = frame.url() || '';
+        return url.includes('/transfers/phone') || url.includes('host-ui') || url.includes('transfer-by-phone');
+      }, {
+        timeout: 30000,
+        description: 'transfer-by-phone iframe'
+      }).catch(() => null);
+
+
+      if (!transferFrame) {
+        console.log('[ALFA→TBANK] ⚠️ iframe with transfer form not detected yet, will scan all frames.');
+      }
+
       console.log('[ALFA→TBANK] Этап 2/11: Проверяем наличие поля телефона получателя');
-      const phoneInputHandle = await this.waitForSelectorWithRetry('input[data-test-id="phone-intl-input"]', { timeout: 15000, retries: 3 });
+      const phoneInputOptions = { timeout: 15000, retries: 3 };
+      if (transferFrame) {
+        phoneInputOptions.targetFrame = transferFrame;
+      }
+      const phoneInputHandle = await this.waitForSelectorWithRetry('input[data-test-id="phone-intl-input"]', phoneInputOptions);
       const trimmedPhone = typeof recipientPhone === 'string' ? recipientPhone.trim() : '';
       const normalizedPhone = trimmedPhone
         ? (trimmedPhone.startsWith('+') ? trimmedPhone : `+${trimmedPhone}`)
         : '';
-      const transferFrame = phoneInputHandle.executionContext().frame();
+      const handleFrame = phoneInputHandle.executionContext().frame();
+      if (handleFrame && transferFrame && handleFrame !== transferFrame) {
+        console.log(`[ALFA→TBANK] ⚠️ Обнаружен новый iframe формы: ${handleFrame.url()}`);
+      }
+      if (handleFrame) {
+        transferFrame = handleFrame;
+      }
+      if (!transferFrame) {
+        throw new Error('Failed to determine transfer form iframe (host-ui).');
+      }
       await phoneInputHandle.evaluate((input, phone) => {
         input.focus();
         const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
