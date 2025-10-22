@@ -333,7 +333,7 @@ export class AlfaAutomation {
         try {
           console.log(`[ALFA-RETRY] Attempt ${attempt}/${retries}: waiting for "${selector}"`);
 
-          const { element } = await this.waitForSelectorAcrossFrames(selector, {
+          const { element, frame: elementFrame } = await this.waitForSelectorAcrossFrames(selector, {
             timeout,
             visible,
             hidden,
@@ -341,6 +341,19 @@ export class AlfaAutomation {
             alternativeSelectors,
             textVariants
           });
+
+          if (element && elementFrame && typeof element === 'object') {
+            try {
+              Object.defineProperty(element, '__alfaFrame', {
+                value: elementFrame,
+                writable: false,
+                configurable: true,
+                enumerable: false
+              });
+            } catch {
+              element.__alfaFrame = elementFrame;
+            }
+          }
 
           console.log(`[ALFA-RETRY] Success: "${selector}" found on attempt ${attempt}`);
           return element;
