@@ -62,6 +62,52 @@ export class AlfaAutomation {
   }
 
   /**
+   * Detect whether the Alfa logo is still displayed away from the corner (loading state)
+   * @returns {Promise<boolean>}
+   */
+  async isAlfaLogoOutsideCorner() {
+    if (!this.page) {
+      return false;
+    }
+
+    try {
+      return await this.page.evaluate(() => {
+        const LOGO_PRIMARY_PATH = 'M23.9607 7.88513';
+        const LOGO_BASE_PATH = '39 46H9V40H39V46Z';
+        const CORNER_TOP_THRESHOLD = 120;
+        const CORNER_LEFT_THRESHOLD = 200;
+
+        const alphaLogos = Array.from(document.querySelectorAll('svg')).filter(svg => {
+          const path = svg.querySelector('path');
+          if (!path) {
+            return false;
+          }
+
+          const d = path.getAttribute('d') || '';
+          return d.includes(LOGO_PRIMARY_PATH) && d.includes(LOGO_BASE_PATH);
+        });
+
+        if (!alphaLogos.length) {
+          return false;
+        }
+
+        return alphaLogos.some(svg => {
+          const rect = svg.getBoundingClientRect();
+          if (!rect || (rect.width === 0 && rect.height === 0)) {
+            return false;
+          }
+
+          const isCornerLogo = rect.top <= CORNER_TOP_THRESHOLD && rect.left <= CORNER_LEFT_THRESHOLD;
+          return !isCornerLogo;
+        });
+      });
+    } catch (error) {
+      console.log('[ALFA-LOGO] WARN: Unable to determine logo position:', error.message);
+      return false;
+    }
+  }
+
+  /**
    * Wait for selector with retry logic
    * @param {string} selector - CSS selector to wait for
    * @param {Object} options - Options object with timeout, retries, etc.
@@ -73,37 +119,69 @@ export class AlfaAutomation {
       retries = 3,
       retryDelay = 5000, // Increased to 5 seconds for slow page loads
       visible = false,
-      hidden = false
+      hidden = false,
+      waitForLoadingLogo = true,
+      logoRetryDelay = 10000,
+      maxLogoCycles = null,
+      overallTimeout = null
     } = options;
 
     let lastError;
+    let logoCycles = 0;
+    const overallStart = Date.now();
 
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        console.log(`[ALFA-RETRY] Попытка ${attempt}/${retries}: Ожидание элемента "${selector}"...`);
+    while (true) {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          console.log(`[ALFA-RETRY] Attempt ${attempt}/${retries}: waiting for "${selector}"`);
 
-        const element = await this.page.waitForSelector(selector, {
-          timeout,
-          visible,
-          hidden
-        });
+          const element = await this.page.waitForSelector(selector, {
+            timeout,
+            visible,
+            hidden
+          });
 
-        console.log(`[ALFA-RETRY] ✅ Элемент "${selector}" найден на попытке ${attempt}`);
-        return element;
+          console.log(`[ALFA-RETRY] Success: "${selector}" found on attempt ${attempt}`);
+          return element;
 
-      } catch (error) {
-        lastError = error;
-        console.log(`[ALFA-RETRY] ⚠️ Попытка ${attempt}/${retries} неудачна для "${selector}": ${error.message}`);
+        } catch (error) {
+          lastError = error;
+          console.log(`[ALFA-RETRY] Warning: attempt ${attempt}/${retries} failed for "${selector}": ${error.message}`);
 
-        if (attempt < retries) {
-          console.log(`[ALFA-RETRY] Ожидание ${retryDelay}ms перед следующей попыткой...`);
-          await this.sleep(retryDelay);
+          if (attempt < retries) {
+            console.log(`[ALFA-RETRY] Waiting ${retryDelay}ms before next attempt...`);
+            await this.sleep(retryDelay);
+          }
         }
       }
+
+      if (!waitForLoadingLogo) {
+        break;
+      }
+
+      if (overallTimeout && Date.now() - overallStart > overallTimeout) {
+        console.log('[ALFA-RETRY] Stop: overall timeout exceeded while waiting for selector.');
+        break;
+      }
+
+      const logoBlocking = await this.isAlfaLogoOutsideCorner();
+      if (!logoBlocking) {
+        console.log('[ALFA-RETRY] Loader logo not detected away from corner; giving up on selector wait.');
+        break;
+      }
+
+      logoCycles += 1;
+      if (maxLogoCycles && logoCycles > maxLogoCycles) {
+        console.log(`[ALFA-RETRY] Stop: reached max logo wait cycles (${maxLogoCycles}).`);
+        break;
+      }
+
+      console.log('[ALFA-RETRY] Loader logo still visible away from corner. Waiting before retrying attempts...');
+      await this.sleep(logoRetryDelay);
     }
 
     // All retries failed
-    console.log(`[ALFA-RETRY] ❌ Все ${retries} попытки исчерпаны для "${selector}"`);
+    console.log(`[ALFA-RETRY] Failed: all attempts exhausted for "${selector}"`);
     throw lastError;
   }
 
@@ -202,6 +280,17 @@ export class AlfaAutomation {
     this.browser = await puppeteer.launch(launchOptions);
 
     this.page = await this.browser.newPage();
+    await this.page.setCacheEnabled(true);
+
+    try {
+      const networkClient = await this.page.target().createCDPSession();
+      await networkClient.send('Network.enable');
+      await networkClient.send('Network.setBypassServiceWorker', { bypass: true });
+      await networkClient.send('Network.setCacheDisabled', { cacheDisabled: false });
+      await networkClient.detach();
+    } catch (networkError) {
+      console.log('[ALFA-BROWSER] WARN: Unable to adjust network settings:', networkError.message);
+    }
 
     // MEMORY OPTIMIZATION: Disabled page console logging to reduce memory usage
     // The Alfa-Bank page generates thousands of console logs (Federation Runtime, Snowplow, etc.)
@@ -219,15 +308,27 @@ export class AlfaAutomation {
     this.page.on('request', (request) => {
       const resourceType = request.resourceType();
       const url = request.url();
+      const urlLower = url.toLowerCase();
+
+      const blockedUrlFragments = [
+        'mc.yandex.ru',
+        'google-analytics.com',
+        'googletagmanager.com',
+        'doubleclick.net',
+        'connect.facebook.net',
+        'vk.com/rtrg',
+        'snowplow',
+        'metrics',
+        'tracking'
+      ];
 
       // Block images, media, fonts, and analytics to save memory
       if (resourceType === 'image' || resourceType === 'media' || resourceType === 'font') {
         request.abort();
       }
       // Block analytics and tracking scripts (Snowplow, metrics, etc.)
-      else if (url.includes('snowplow') || url.includes('analytics') ||
-               url.includes('metrics') || url.includes('tracking') ||
-               url.includes('ga.js') || url.includes('gtm.js')) {
+      else if (blockedUrlFragments.some(fragment => urlLower.includes(fragment)) ||
+               urlLower.includes('ga.js') || urlLower.includes('gtm.js')) {
         request.abort();
       }
       else {
@@ -278,32 +379,10 @@ export class AlfaAutomation {
         if (navError.message.includes('timeout')) {
           console.log('[ALFA-LOGIN] ⚠️ Navigation timeout - проверяем наличие логотипа загрузки');
 
-          // Check if loading logo is present (large logo with viewBox="0 0 48 48" and width/height > 60)
-          // Loading logo: viewBox="0 0 48 48", width="88", height="100"
-          // Corner logo: viewBox="0 0 24 24", width="48", height="48"
-          const loadingLogoPresent = await this.page.evaluate(() => {
-            const svgs = Array.from(document.querySelectorAll('svg'));
-            return svgs.some(svg => {
-              const viewBox = svg.getAttribute('viewBox');
-              const width = svg.getAttribute('width');
-              const height = svg.getAttribute('height');
+          const logoOutsideCornerPresent = await this.isAlfaLogoOutsideCorner();
 
-              // Check for large viewBox (loading logo is "0 0 48 48")
-              if (viewBox === '0 0 48 48') {
-                const w = parseInt(width) || 0;
-                const h = parseInt(height) || 0;
-                // Loading logo is typically 88x100, corner logo would be smaller
-                if (w > 60 || h > 60) {
-                  return true;
-                }
-              }
-
-              return false;
-            });
-          }).catch(() => false);
-
-          if (loadingLogoPresent) {
-            console.log('[ALFA-LOGIN] ✅ Логотип загрузки найден - страница загружается, ждём ещё 60 секунд');
+          if (logoOutsideCornerPresent) {
+            console.log('[ALFA-LOGIN] WAIT: Alfa logo still away from corner; waiting 60s before retry.');
             await this.sleep(60000);
 
             // Check if page is now ready
