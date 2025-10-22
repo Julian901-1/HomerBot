@@ -1,31 +1,59 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import dotenv from 'dotenv';
-import { SessionPersistence } from './session-persistence.js';
 
 dotenv.config();
 
 // Use stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
 
+const ACCOUNT_REQUIRED_PARAMS = encodeURIComponent(JSON.stringify(['accountId']));
+
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Environment variable ${name} is required for T-Bank automation`);
+  }
+  return value;
+}
+
+function buildTransferBetweenAccountsUrl(accountId) {
+  const predefined = encodeURIComponent(JSON.stringify({
+    account: accountId,
+    moneyAmount: ':moneyAmount'
+  }));
+
+  return `https://www.tbank.ru/mybank/payments/transfer-between-accounts/?predefined=${predefined}&requiredParams=${ACCOUNT_REQUIRED_PARAMS}&internal_source=quick_transfers`;
+}
+
+function buildSbpTransferUrl(accountId, phone) {
+  const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`;
+  const predefined = encodeURIComponent(JSON.stringify({
+    accountId,
+    moneyAmount: ':moneyAmount',
+    phone: normalizedPhone
+  }));
+
+  return `https://www.tbank.ru/mybank/payments/persons/phone/?predefined=${predefined}&requiredParams=${ACCOUNT_REQUIRED_PARAMS}`;
+}
+
 /**
  * T-Bank automation using Puppeteer with anti-detection
  */
 export class TBankAutomation {
-  constructor({ username, phone, password, encryptionService, onAuthenticated }) {
+  constructor({ username, phone, password, encryptionService, onAuthenticated, existingBrowser = null, existingPage = null }) {
     this.username = username;
     this.encryptedPhone = phone;
     this.encryptedPassword = password;
     this.encryptionService = encryptionService;
     this.onAuthenticated = onAuthenticated; // Callback to mark session as authenticated
 
-    this.browser = null;
-    this.page = null;
-    this.keepAliveInterval = null;
-    this.sessionActive = false;
+    // Allow reusing existing browser/page from Alfa automation
+    this.browser = existingBrowser;
+    this.page = existingPage;
+    this.reusingBrowser = !!(existingBrowser && existingPage);
 
-    // Session persistence manager
-    this.sessionPersistence = new SessionPersistence(username, encryptionService);
+    this.sessionActive = false;
 
     // Pending input system - now fully dynamic
     this.pendingInputResolve = null;
@@ -37,12 +65,17 @@ export class TBankAutomation {
    * Initialize browser instance
    */
   async init() {
-    if (this.browser) return;
+    if (this.browser && this.page) {
+      if (this.reusingBrowser) {
+        console.log(`[TBANK] Reusing existing browser for user ${this.username}`);
+      }
+      return;
+    }
 
-    console.log(`[TBANK] Initializing browser for user ${this.username}`);
+    console.log(`[TBANK] Initializing new browser for user ${this.username}`);
 
-    // Use persistent user data directory for better session persistence
-    const userDataDir = `./user-data/${this.username}`;
+    // DISK SPACE OPTIMIZATION: Removed userDataDir to avoid creating persistent files
+    // Each browser launch is now stateless and creates no disk files
 
     const launchOptions = {
       headless: true,
@@ -69,29 +102,43 @@ export class TBankAutomation {
         '--safebrowsing-disable-auto-update',
         '--disable-default-apps',
         '--no-zygote',
-        '--single-process',
         '--window-size=1366,768',
         '--disable-webrtc',
         '--disable-webrtc-hw-encoding',
         '--disable-webrtc-hw-decoding',
         '--lang=ru-RU',
-        '--timezone=Europe/Moscow'
+        '--timezone=Europe/Moscow',
+        // MEMORY OPTIMIZATION: Set memory limits for V8 engine
+        '--max-old-space-size=256',
+        '--js-flags=--max-old-space-size=256'
+        // MEMORY OPTIMIZATION: Removed '--single-process' as it causes memory leaks
       ],
       defaultViewport: {
         width: 1366,
         height: 768
-      },
-      userDataDir: userDataDir
+      }
+      // DISK SPACE OPTIMIZATION: No userDataDir - stateless browser
     };
 
+    // IMPORTANT: puppeteer-core requires executablePath
     if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      console.log(`[TBANK] Using Chrome from: ${process.env.PUPPETEER_EXECUTABLE_PATH}`);
+    } else {
+      throw new Error('PUPPETEER_EXECUTABLE_PATH environment variable is required when using puppeteer-core');
     }
-
-    console.log(`[TBANK] Using user data directory: ${userDataDir}`);
 
     this.browser = await puppeteer.launch(launchOptions);
     this.page = await this.browser.newPage();
+
+    // MEMORY OPTIMIZATION: Disabled page console logging to reduce memory usage
+    // this.page.on('console', msg => {
+    //   const text = msg.text();
+    //   if (text.includes('Found box') || text.includes('matching one of selectors')) {
+    //     return;
+    //   }
+    //   console.log('PAGE LOG:', text);
+    // });
 
     // Block images, fonts to save memory
     await this.page.setRequestInterception(true);
@@ -142,10 +189,10 @@ export class TBankAutomation {
     try {
       await this.init();
 
-      // Session restore disabled - always login fresh
-      console.log(`[TBANK] 🔄 Session persistence disabled - starting fresh login`);
-
-      const phone = this.encryptionService.decrypt(this.encryptedPhone);
+      // If encryptionService is null, use phone directly (for test endpoints)
+      const phone = this.encryptionService
+        ? this.encryptionService.decrypt(this.encryptedPhone)
+        : this.encryptedPhone;
 
       console.log(`[TBANK] Navigating to login page...`);
       await this.page.goto(process.env.TBANK_LOGIN_URL, {
@@ -161,54 +208,6 @@ export class TBankAutomation {
 
       console.log(`[TBANK] 📍 Final URL after stabilization: ${this.page.url()}`);
 
-      // Take screenshot for debugging FIRST (before any evaluate calls)
-      try {
-        const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
-        console.log('[TBANK] 📸 Screenshot captured (base64, length:', screenshot.length, ')');
-        console.log('[TBANK] 📸 === SCREENSHOT BASE64 START ===');
-        console.log(screenshot);
-        console.log('[TBANK] 📸 === SCREENSHOT BASE64 END ===');
-        console.log('[TBANK] 💡 To view: paste the base64 string to https://base64.guru/converter/decode/image');
-        console.log('[TBANK] 💡 Or open in browser: data:image/png;base64,' + screenshot.substring(0, 100) + '...');
-      } catch (e) {
-        console.log('[TBANK] ⚠️ Could not capture screenshot:', e.message);
-      }
-
-      // Now safely get page info
-      try {
-        const title = await this.page.title();
-        console.log('[TBANK] 📄 Page title:', title);
-      } catch (e) {
-        console.log('[TBANK] ⚠️ Could not get page title:', e.message);
-      }
-
-      // Log page HTML for debugging (with error handling)
-      try {
-        const html = await this.page.content();
-        console.log('[TBANK] 📄 Page HTML length:', html.length, 'characters');
-        console.log('[TBANK] 📄 HTML preview (first 2000 chars):');
-        console.log(html.substring(0, 2000));
-      } catch (e) {
-        console.log('[TBANK] ⚠️ Could not get page HTML:', e.message);
-      }
-
-      // Check what input fields are available (with error handling)
-      try {
-        const inputFields = await this.page.evaluate(() => {
-          const inputs = Array.from(document.querySelectorAll('input'));
-          return inputs.map(input => ({
-            type: input.type,
-            name: input.name,
-            id: input.id,
-            automationId: input.getAttribute('automation-id'),
-            placeholder: input.placeholder,
-            className: input.className
-          }));
-        });
-        console.log('[TBANK] 📋 Found input fields:', JSON.stringify(inputFields, null, 2));
-      } catch (e) {
-        console.log('[TBANK] ⚠️ Could not get input fields:', e.message);
-      }
 
       // Step 1: Enter phone number
       console.log('[TBANK] Step 1: Waiting for phone input field...');
@@ -300,17 +299,6 @@ export class TBankAutomation {
             console.log(`[TBANK] ✅ Called onAuthenticated callback`);
           }
 
-          // Mark login success timestamp
-          this.sessionPersistence.markLoginSuccess();
-
-          // Save session after successful login
-          await this.sessionPersistence.saveSession(this.page);
-
-          this.startKeepAlive();
-
-          // Log session stats
-          const stats = this.sessionPersistence.getSessionStats();
-          console.log(`[TBANK] 📊 Session Stats after login:`, stats);
           console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
           return {
@@ -339,14 +327,6 @@ export class TBankAutomation {
               console.log(`[TBANK] ✅ Called onAuthenticated callback`);
             }
 
-            // Mark login success and save session
-            this.sessionPersistence.markLoginSuccess();
-            await this.sessionPersistence.saveSession(this.page);
-
-            this.startKeepAlive();
-
-            const stats = this.sessionPersistence.getSessionStats();
-            console.log(`[TBANK] 📊 Session Stats:`, stats);
             console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
             return {
@@ -403,14 +383,26 @@ export class TBankAutomation {
           console.log('[TBANK] Question:', questionText);
           console.log('[TBANK] Input field:', firstInput.automationId);
 
-          // Ask user for input
-          const userAnswer = await this.waitForUserInput('dynamic-question', {
-            question: questionText,
-            fieldType: firstInput.automationId,
-            inputType: firstInput.type
-          });
+          // Check if we can auto-answer this question
+          let userAnswer = null;
 
-          console.log('[TBANK] Received answer from user, typing into field...');
+          // Auto-answer for card number question
+          if (firstInput.automationId === 'card-input' && process.env.FIXED_TBANK_CARD_NUMBER) {
+            console.log('[TBANK] Auto-answering card number question from environment variable');
+            userAnswer = process.env.FIXED_TBANK_CARD_NUMBER;
+          }
+
+          // If no auto-answer, ask user for input
+          if (!userAnswer) {
+            userAnswer = await this.waitForUserInput('dynamic-question', {
+              question: questionText,
+              fieldType: firstInput.automationId,
+              inputType: firstInput.type
+            });
+            console.log('[TBANK] Received answer from user, typing into field...');
+          } else {
+            console.log('[TBANK] Using auto-answer, typing into field...');
+          }
 
           // Type the answer into the field with human-like delays
           const inputSelector = `[automation-id="${firstInput.automationId}"]`;
@@ -461,14 +453,7 @@ export class TBankAutomation {
           console.log(`[TBANK] ✅ Called onAuthenticated callback`);
         }
 
-        // Mark login success and save session
-        this.sessionPersistence.markLoginSuccess();
-        await this.sessionPersistence.saveSession(this.page);
-
-        this.startKeepAlive();
-
-        const stats = this.sessionPersistence.getSessionStats();
-        console.log(`[TBANK] 📊 Session Stats:`, stats);
+        // Track login start for runtime metrics
         console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
         return {
@@ -490,14 +475,7 @@ export class TBankAutomation {
           console.log(`[TBANK] ✅ Called onAuthenticated callback`);
         }
 
-        // Mark login success and save session
-        this.sessionPersistence.markLoginSuccess();
-        await this.sessionPersistence.saveSession(this.page);
-
-        this.startKeepAlive();
-
-        const stats = this.sessionPersistence.getSessionStats();
-        console.log(`[TBANK] 📊 Session Stats:`, stats);
+        // Track login start for runtime metrics
         console.log(`[TBANK] 🎉 pendingInputType set to 'completed' - frontend should detect this`);
 
         return {
@@ -525,24 +503,6 @@ export class TBankAutomation {
   }
 
 
-  /**
-   * Take and log screenshot for debugging
-   * @param {string} context - Context description (e.g., "keep-alive", "login-check")
-   */
-  async takeDebugScreenshot(context = 'unknown') {
-    if (!this.page) return;
-
-    try {
-      const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
-      const timestamp = new Date().toISOString();
-      console.log(`[TBANK] 📸 [${context}] Screenshot at ${timestamp} (length: ${screenshot.length})`);
-      console.log(`[TBANK] 📸 === SCREENSHOT BASE64 START [${context}] ===`);
-      console.log(screenshot);
-      console.log(`[TBANK] 📸 === SCREENSHOT BASE64 END [${context}] ===`);
-    } catch (e) {
-      console.log(`[TBANK] ⚠️ [${context}] Could not capture screenshot:`, e.message);
-    }
-  }
 
   /**
    * Wait for user input dynamically
@@ -560,6 +520,82 @@ export class TBankAutomation {
     return new Promise((resolve) => {
       this.pendingInputResolve = resolve;
     });
+  }
+
+  /**
+   * Take base64 screenshot for logging
+   * @param {string} context - Context description
+   */
+  async takeScreenshot(context = 'unknown') {
+    if (!this.page) return null;
+
+    try {
+      const screenshot = await this.page.screenshot({ encoding: 'base64', type: 'png' });
+      console.log(`[TBANK] 📸 [${context}] Screenshot captured (base64 length: ${screenshot.length})`);
+
+      // Log base64 only for error screenshots to help debug issues
+      if (context.includes('error')) {
+        console.log(`[TBANK] 📸 === SCREENSHOT BASE64 START [${context}] ===`);
+        console.log(screenshot);
+        console.log(`[TBANK] 📸 === SCREENSHOT BASE64 END [${context}] ===`);
+      }
+
+      return screenshot;
+    } catch (e) {
+      console.log(`[TBANK] ⚠️ [${context}] Could not capture screenshot:`, e.message);
+      return null;
+    }
+  }
+
+  /**
+   * Wait for selector with retry logic (for slow page loads)
+   * @param {string} selector - CSS selector to wait for
+   * @param {Object} options - Options object
+   * @param {number} options.timeout - Timeout for each attempt (default: 30000ms)
+   * @param {number} options.retries - Number of retry attempts (default: 3)
+   * @param {number} options.retryDelay - Delay between retries (default: 5000ms)
+   * @param {boolean} options.visible - Wait for element to be visible (default: false)
+   * @param {boolean} options.hidden - Wait for element to be hidden (default: false)
+   * @returns {Promise<ElementHandle>} - Element handle when found
+   */
+  async waitForSelectorWithRetry(selector, options = {}) {
+    const {
+      timeout = 30000,
+      retries = 3,
+      retryDelay = 5000, // 5 seconds for slow page loads
+      visible = false,
+      hidden = false
+    } = options;
+
+    let lastError;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`[TBANK-RETRY] Попытка ${attempt}/${retries}: Ожидание элемента "${selector}"...`);
+
+        const element = await this.page.waitForSelector(selector, {
+          timeout,
+          visible,
+          hidden
+        });
+
+        console.log(`[TBANK-RETRY] ✅ Элемент "${selector}" найден на попытке ${attempt}`);
+        return element;
+
+      } catch (error) {
+        lastError = error;
+        console.log(`[TBANK-RETRY] ⚠️ Попытка ${attempt}/${retries} неудачна для "${selector}": ${error.message}`);
+
+        if (attempt < retries) {
+          console.log(`[TBANK-RETRY] Ожидание ${retryDelay}ms перед следующей попыткой...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+    }
+
+    // All retries failed
+    console.log(`[TBANK-RETRY] ❌ Все ${retries} попытки исчерпаны для "${selector}"`);
+    throw lastError;
   }
 
   /**
@@ -648,205 +684,67 @@ export class TBankAutomation {
   }
 
   /**
-   * Start keep-alive mechanism to prevent session timeout
+   * Click the first visible element that matches selector and contains the provided text
+   * @param {string} selector
+   * @param {string} text
+   * @param {object} options
+   * @param {boolean} [options.exact=false]
+   * @param {number} [options.timeout=8000]
+   * @returns {Promise<boolean>}
    */
-  startKeepAlive() {
-    if (this.keepAliveInterval) {
-      clearInterval(this.keepAliveInterval);
+  async clickElementByText(selector, text, { exact = false, timeout = 8000 } = {}) {
+    const deadline = Date.now() + timeout;
+
+    while (Date.now() < deadline) {
+      const clicked = await this.page.evaluate(
+        (cssSelector, searchText, exactMatch) => {
+          const normalize = (value) => (value || '')
+            .replace(/\u00A0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          const elements = Array.from(document.querySelectorAll(cssSelector));
+
+          for (const element of elements) {
+            const textContent = normalize(element.textContent);
+            if (!textContent) continue;
+
+            const isMatch = exactMatch
+              ? textContent === searchText
+              : textContent.includes(searchText);
+
+            if (!isMatch) continue;
+
+            const style = window.getComputedStyle(element);
+            if (!style || style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity || '1') === 0) {
+              continue;
+            }
+
+            const rect = element.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) continue;
+
+            const clickable = element.closest('button, [role="button"], a, div[data-test-id="banner-wrapper"]') || element;
+            clickable.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+            clickable.click();
+            return true;
+          }
+
+          return false;
+        },
+        selector,
+        text,
+        exact
+      );
+
+      if (clicked) return true;
+
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    const interval = parseInt(process.env.KEEP_ALIVE_INTERVAL) || 300000; // 5 minutes
-
-    console.log(`[TBANK] Starting keep-alive (interval: ${interval}ms)`);
-    console.log(`[TBANK] 🕐 First keep-alive cycle will run in ${interval / 1000} seconds`);
-
-    let keepAliveCount = 0;
-
-    // Log initial state
-    console.log(`[TBANK] 📊 Initial keep-alive state: sessionActive=${this.sessionActive}, URL=${this.page ? this.page.url() : 'no page'}`);
-
-    this.keepAliveInterval = setInterval(async () => {
-      if (!this.sessionActive || !this.page) {
-        clearInterval(this.keepAliveInterval);
-        return;
-      }
-
-      try {
-        keepAliveCount++;
-        const lifetime = this.sessionPersistence.getSessionLifetime();
-        console.log(`[TBANK] Keep-alive #${keepAliveCount}: simulating user activity (session lifetime: ${lifetime} min)`);
-
-        // Get viewport dimensions
-        const viewport = this.page.viewport();
-        const maxX = viewport.width;
-        const maxY = viewport.height;
-
-        // Enhanced random actions to keep session alive and appear more human-like
-        const actions = [
-          // Realistic mouse movement with random scroll
-          async () => {
-            const currentPos = await this.page.evaluate(() => ({
-              x: window.innerWidth / 2,
-              y: window.innerHeight / 2
-            }));
-
-            const targetX = 100 + Math.random() * (maxX - 200);
-            const targetY = 100 + Math.random() * (maxY - 200);
-
-            await this.simulateRealisticMouseMovement(
-              currentPos.x,
-              currentPos.y,
-              targetX,
-              targetY
-            );
-
-            // Random scroll after mouse movement
-            await this.page.evaluate(() => {
-              window.scrollBy({
-                top: (Math.random() - 0.5) * 300,
-                behavior: 'smooth'
-              });
-            });
-          },
-          // Hover over account widgets (simulate checking balances)
-          async () => {
-            const widgets = await this.page.$$('[data-qa-type^="atomPanel widget"]');
-            if (widgets.length > 0) {
-              const randomWidget = widgets[Math.floor(Math.random() * widgets.length)];
-              const box = await randomWidget.boundingBox();
-              if (box) {
-                await this.simulateRealisticMouseMovement(
-                  Math.random() * maxX,
-                  Math.random() * maxY,
-                  box.x + box.width / 2,
-                  box.y + box.height / 2
-                );
-                // Pause as if reading the balance
-                await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-              }
-            }
-          },
-          // Subtle scroll simulation (reading page)
-          async () => {
-            const scrollSteps = 3 + Math.floor(Math.random() * 3);
-            for (let i = 0; i < scrollSteps; i++) {
-              await this.page.evaluate(() => {
-                window.scrollBy({
-                  top: 50 + Math.random() * 100,
-                  behavior: 'smooth'
-                });
-              });
-              await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
-            }
-          },
-          // Simulate hovering over navigation menu
-          async () => {
-            const navLinks = await this.page.$$('[data-qa-type="desktop-ib-navigation-menu-link"]');
-            if (navLinks.length > 0) {
-              const randomLink = navLinks[Math.floor(Math.random() * navLinks.length)];
-              const box = await randomLink.boundingBox();
-              if (box) {
-                await this.simulateRealisticMouseMovement(
-                  Math.random() * maxX,
-                  Math.random() * maxY,
-                  box.x + box.width / 2,
-                  box.y + box.height / 2
-                );
-                await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-              }
-            }
-          },
-          // Random page reload (very occasional)
-          async () => {
-            // Only 10% chance of reload to not be too aggressive
-            if (Math.random() < 0.1) {
-              console.log('[TBANK] Keep-alive: performing soft page reload');
-              await this.page.evaluate(() => {
-                // Soft reload - just navigate to current URL
-                window.location.href = window.location.href;
-              });
-              await new Promise(resolve => setTimeout(resolve, 3000));
-            }
-          },
-          // Simulate clicking on balance visibility toggle (if present)
-          async () => {
-            const visibilityToggle = await this.page.$('[data-qa-type*="visibility"]');
-            if (visibilityToggle) {
-              await visibilityToggle.click();
-              await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 500));
-              // Click again to toggle back
-              await visibilityToggle.click();
-              await new Promise(resolve => setTimeout(resolve, 200));
-            }
-          },
-          // Make API requests to mimic real user activity
-          async () => {
-            try {
-              console.log('[TBANK] Keep-alive: making API request to check accounts');
-              // Navigate to a banking page or refresh data
-              const response = await this.page.evaluate(() => {
-                // Trigger any XHR/fetch that would normally happen
-                return fetch(window.location.href, {
-                  method: 'GET',
-                  credentials: 'include'
-                }).then(r => r.status);
-              });
-              console.log(`[TBANK] Keep-alive: API request completed with status ${response}`);
-            } catch (e) {
-              console.log('[TBANK] Keep-alive: API request failed (non-critical):', e.message);
-            }
-          },
-          // Click on different sections to trigger real navigation
-          async () => {
-            try {
-              const sections = await this.page.$$('a[href*="/mybank/"]');
-              if (sections.length > 0) {
-                const randomSection = sections[Math.floor(Math.random() * Math.min(sections.length, 5))];
-                const href = await randomSection.evaluate(el => el.getAttribute('href'));
-                if (href && !href.includes('logout')) {
-                  console.log(`[TBANK] Keep-alive: navigating to ${href}`);
-                  await randomSection.click();
-                  await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
-                }
-              }
-            } catch (e) {
-              console.log('[TBANK] Keep-alive: navigation failed (non-critical):', e.message);
-            }
-          }
-        ];
-
-        // Execute random action
-        const randomAction = actions[Math.floor(Math.random() * actions.length)];
-        await randomAction();
-
-        console.log('[TBANK] Keep-alive action completed');
-
-        // Take screenshot every keep-alive cycle for monitoring
-        console.log(`[TBANK] 📸 Taking keep-alive screenshot #${keepAliveCount}`);
-        await this.takeDebugScreenshot(`keep-alive-${keepAliveCount}`);
-
-        // Check if we're still logged in by verifying URL
-        const currentUrl = this.page.url();
-        if (!currentUrl.includes('/mybank/') && !currentUrl.includes('/accounts') && !currentUrl.includes('/main')) {
-          console.error(`[TBANK] ⚠️ Session appears to be logged out! Current URL: ${currentUrl}`);
-          console.error(`[TBANK] ⚠️ Keep-alive #${keepAliveCount} detected logout - session may be expired`);
-        } else {
-          console.log(`[TBANK] ✅ Session still active (URL check passed)`);
-        }
-
-        // Save session every 3rd keep-alive cycle (every 15 minutes if interval is 5 min)
-        if (keepAliveCount % 3 === 0) {
-          console.log(`[TBANK] 💾 Periodic session save (keep-alive #${keepAliveCount})`);
-          await this.sessionPersistence.saveSession(this.page);
-        }
-
-      } catch (error) {
-        console.error('[TBANK] Keep-alive error:', error);
-        // Take screenshot on error
-        await this.takeDebugScreenshot(`keep-alive-error-${keepAliveCount}`);
-      }
-    }, interval);
+    return false;
   }
+
+
 
   /**
    * Get all accounts with balances (only debit accounts, excluding credit/investments)
@@ -1201,69 +1099,17 @@ export class TBankAutomation {
         await new Promise(resolve => setTimeout(resolve, 3000));
       }
 
-      // Step 1: Click on the debit account widget
-      console.log(`[TBANK] 1️⃣ Clicking debit account "${debitAccountName}"...`);
-
-      const debitAccountWidget = await this.page.evaluateHandle((accountName) => {
-        const widgets = Array.from(document.querySelectorAll('[data-qa-type^="atomPanel widget widget-debit"]'));
-        return widgets.find(widget => {
-          const nameEl = widget.querySelector('[data-qa-type="subtitle"] span');
-          return nameEl && nameEl.textContent.trim() === accountName;
-        });
-      }, debitAccountName);
-
-      if (!debitAccountWidget || debitAccountWidget.asElement() === null) {
-        throw new Error(`Could not find debit account with name "${debitAccountName}"`);
-      }
-
-      const debitLink = await debitAccountWidget.asElement().$('a[data-qa-type="link click-area"]');
-      if (!debitLink) {
-        throw new Error('Could not find link in debit account widget');
-      }
-
-      await debitLink.click();
-      await this.page.waitForNavigation({
+      // Step 1: Open direct transfer page
+      console.log('[TBANK] 1️⃣ Opening transfer page for between-account transfer...');
+      const transferUrl = buildTransferBetweenAccountsUrl(requireEnv('TBANK_SOURCE_ACCOUNT_ID'));
+      await this.page.goto(transferUrl, {
         waitUntil: 'networkidle2',
-        timeout: 15000
-      }).catch(e => console.log('[TBANK] Navigation timeout:', e.message));
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Step 2: Click "Перевести" button
-      console.log('[TBANK] 2️⃣ Clicking "Перевести" button...');
-
-      const transferButton = await this.page.evaluateHandle(() => {
-        const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="transferButton"]'));
-        return buttons.find(btn => btn.textContent.includes('Перевести'));
+        timeout: 30000
       });
-
-      if (!transferButton || transferButton.asElement() === null) {
-        throw new Error('Could not find "Перевести" button');
-      }
-
-      await transferButton.asElement().click();
-      await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
-
-      // Step 3: Click "Между счетами" link
-      console.log('[TBANK] 3️⃣ Clicking "Между счетами"...');
-
-      const betweenAccountsLink = await this.page.evaluateHandle(() => {
-        const links = Array.from(document.querySelectorAll('a[href*="transfer-between-accounts"]'));
-        return links.find(link => link.textContent.includes('Между счетами'));
-      });
-
-      if (!betweenAccountsLink || betweenAccountsLink.asElement() === null) {
-        throw new Error('Could not find "Между счетами" link');
-      }
-
-      await betweenAccountsLink.asElement().click();
-      await this.page.waitForNavigation({
-        waitUntil: 'networkidle2',
-        timeout: 15000
-      }).catch(e => console.log('[TBANK] Navigation timeout:', e.message));
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Step 4: Select saving account in the dropdown
-      console.log(`[TBANK] 4️⃣ Selecting saving account "${savingAccountName}"...`);
+      // Step 2: Select saving account in the dropdown
+      console.log(`[TBANK] 2️⃣ Selecting saving account "${savingAccountName}"...`);
 
       // Find the selectAccount wrapper
       const selectSuccess = await this.page.evaluate((accountName) => {
@@ -1304,8 +1150,8 @@ export class TBankAutomation {
         console.log('[TBANK] ⚠️ Could not select saving account via dropdown');
       }
 
-      // Step 5: Enter amount
-      console.log(`[TBANK] 5️⃣ Entering amount ${amount}...`);
+      // Step 3: Enter amount
+      console.log(`[TBANK] 3️⃣ Entering amount ${amount}...`);
 
       await this.page.waitForSelector('input[data-qa-type="amount-from.input"]', {
         timeout: 10000
@@ -1322,8 +1168,8 @@ export class TBankAutomation {
       await this.typeWithHumanDelay('input[data-qa-type="amount-from.input"]', amount.toString());
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Step 6: Click "Перевести" submit button
-      console.log('[TBANK] 6️⃣ Submitting transfer...');
+      // Step 4: Click "Перевести" submit button
+      console.log('[TBANK] 4️⃣ Submitting transfer...');
 
       const submitButton = await this.page.$('button[data-qa-type="submit-button"][type="submit"]');
       if (!submitButton) {
@@ -1339,7 +1185,7 @@ export class TBankAutomation {
       }).catch(e => console.log('[TBANK] Navigation timeout:', e.message));
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Step 7: Navigate back to /mybank/
+      // Step 5: Navigate back to /mybank/
       const homeLink = await this.page.$('a[data-qa-type="desktop-ib-navigation-menu-link"][href="/mybank/"]');
       if (homeLink) {
         await homeLink.click();
@@ -1576,7 +1422,6 @@ export class TBankAutomation {
       console.log('[TRANSFER] 🚀 === STARTING FORCED TRANSFER TO SAVING ===' );
 
       // Step 1: Take initial screenshot
-      await this.takeDebugScreenshot('transfer-start-mybank');
 
       // Step 2: Get all debit accounts
       console.log('[TRANSFER] 📋 Fetching all debit accounts...');
@@ -1607,7 +1452,6 @@ export class TBankAutomation {
           console.log(`[TRANSFER] 💸 Transferring ${debitAccount.balance} RUB from "${debitAccount.name}"...`);
 
           // Take screenshot before transfer
-          await this.takeDebugScreenshot(`transfer-before-${debitAccount.id}`);
 
           const result = await this.transferToSavingAccount(
             debitAccount.name,
@@ -1616,7 +1460,6 @@ export class TBankAutomation {
           );
 
           // Take screenshot after transfer
-          await this.takeDebugScreenshot(`transfer-after-${debitAccount.id}`);
 
           transfers.push({
             from: debitAccount.name,
@@ -1635,7 +1478,6 @@ export class TBankAutomation {
       }
 
       // Step 5: Take final screenshot
-      await this.takeDebugScreenshot('transfer-completed-final');
 
       console.log('[TRANSFER] 🎉 === FORCED TRANSFER COMPLETED ===');
 
@@ -1650,8 +1492,420 @@ export class TBankAutomation {
       console.error('[TRANSFER] ❌ Error executing forced transfer:', error);
 
       // Take error screenshot
-      await this.takeDebugScreenshot('transfer-error');
 
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Transfer money via SBP (Faster Payment System) to another bank (e.g., Alfa-Bank)
+   * Implements steps 2-8 from evening transfer instruction
+   * @param {string} recipientPhone - Phone number of recipient (e.g., '+79990000000')
+   * @param {number} amount - Amount to transfer in RUB
+   */
+  async transferViaSBP(recipientPhone, amount) {
+    try {
+      if (!this.sessionActive) {
+        throw new Error('Not logged in');
+      }
+
+      console.log(`[TBANK→SBP] 💸 Starting SBP transfer ${amount} RUB to phone ${recipientPhone}...`);
+
+      // Ensure we're on /mybank/ page
+      const currentUrl = this.page.url();
+      if (!currentUrl.includes('/mybank/')) {
+        await this.page.goto('https://www.tbank.ru/mybank/', {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+
+      // Step 2-4: Direct navigation to pre-filled transfer form
+      console.log('[TBANK→SBP] Шаг 2-4/7: Переход по прямой ссылке на форму перевода...');
+
+      const sbpAccountId = requireEnv('TBANK_SBP_ACCOUNT_ID');
+      const phoneForPrefill = recipientPhone || process.env.FIXED_ALFA_PHONE;
+      if (!phoneForPrefill) {
+        throw new Error('Recipient phone is required for SBP transfer (provide parameter or FIXED_ALFA_PHONE env)');
+      }
+      const transferUrl = buildSbpTransferUrl(sbpAccountId, phoneForPrefill);
+
+      await this.page.goto(transferUrl, {
+        waitUntil: 'networkidle2',
+        timeout: 40000
+      }).catch(e => console.log('[TBANK→SBP] Navigation timeout (продолжаем работу):', e.message));
+
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Step 5: Get current account balance (from the selector on the page)
+      console.log('[TBANK→SBP] Шаг 5/7: Получение баланса счёта...');
+
+      const accountBalance = await this.page.evaluate(() => {
+        const balanceElement = document.querySelector('span[data-qa-type="uikit/money"]');
+        if (balanceElement) {
+          return balanceElement.textContent;
+        }
+        return null;
+      });
+
+      if (!accountBalance) {
+        throw new Error('Could not find account balance on the page');
+      }
+
+      // Parse balance: "13 774,62 ₽" -> 13774.62
+      const normalizedBalance = accountBalance
+        .replace(/\u00A0/g, ' ')
+        .replace(/[^\d.,\s]/g, '')
+        .trim();
+
+      const balanceMatch = normalizedBalance.match(/[\d\s.,]+/);
+      if (!balanceMatch) {
+        throw new Error(`Could not parse balance: ${accountBalance}`);
+      }
+
+      const balanceCandidate = balanceMatch[0].replace(/\s/g, '');
+      const lastComma = balanceCandidate.lastIndexOf(',');
+      const lastDot = balanceCandidate.lastIndexOf('.');
+      let decimalSeparator = null;
+
+      if (lastComma !== -1 || lastDot !== -1) {
+        decimalSeparator = lastComma > lastDot ? ',' : '.';
+      }
+
+      let balanceStr;
+      if (decimalSeparator === ',') {
+        balanceStr = balanceCandidate.replace(/\./g, '').replace(',', '.');
+      } else if (decimalSeparator === '.') {
+        balanceStr = balanceCandidate.replace(/,/g, '');
+      } else {
+        balanceStr = balanceCandidate.replace(/[^\d]/g, '');
+      }
+
+      amount = parseFloat(balanceStr);
+
+      if (Number.isNaN(amount)) {
+        throw new Error(`Could not parse balance: ${accountBalance}`);
+      }
+
+      console.log(`[TBANK→SBP] Баланс счёта: ${accountBalance} -> используем сумму: ${amount} RUB`);
+
+      // Check for "Максимум запросов" error message
+      const hasMaxRequestsError = await this.page.evaluate(() => {
+        const errorDiv = document.querySelector('div[data-qa-type="molecule-desktop-whom-errorMessage"]');
+        return errorDiv && errorDiv.textContent.includes('Максимум запросов в другие банки на сегодня');
+      });
+
+      if (hasMaxRequestsError) {
+        console.log('[TBANK→SBP] ⚠️ Обнаружено сообщение "Максимум запросов в другие банки на сегодня"');
+
+        // Step 5.1: Click "Другой банк"
+        console.log('[TBANK→SBP] Шаг 5.1: Нажатие "Другой банк"...');
+
+        const otherBankButton = await this.page.$('button[data-qa-type*="bank-plate-other-bank"]');
+        if (!otherBankButton) {
+          throw new Error('Could not find "Другой банк" button');
+        }
+
+        await otherBankButton.click();
+
+        // Step 5.2: Wait 10 seconds and click "Альфа-Банк" in popup
+        console.log('[TBANK→SBP] Шаг 5.2: Ожидание 10 секунд и нажатие "Альфа-Банк" в списке...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+
+        const alfaBankInPopup = await this.page.$('div[data-qa-type="banks-popup-item-title-100000000008"]');
+        if (!alfaBankInPopup) {
+          throw new Error('Could not find "Альфа-Банк" in banks popup');
+        }
+
+        await alfaBankInPopup.click();
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+      } else {
+        // Step 6: Click "Альфа-Банк" button (standard flow)
+        console.log('[TBANK→SBP] Шаг 6/7: Нажатие "Альфа-Банк"...');
+
+        const alfaBankButton = await this.page.evaluateHandle(() => {
+          const buttons = Array.from(document.querySelectorAll('button[data-qa-type*="bank-plate"]'));
+          return buttons.find(btn => btn.textContent.includes('Альфа-Банк'));
+        });
+
+        if (!alfaBankButton || alfaBankButton.asElement() === null) {
+          throw new Error('Could not find "Альфа-Банк" button');
+        }
+
+        await alfaBankButton.asElement().click();
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
+      // Step 7: Enter amount in the "Сумма" field
+      console.log(`[TBANK→SBP] Шаг 7/7: Ввод суммы ${amount}...`);
+
+      await this.page.waitForSelector('input[data-qa-type="amount-from.input"]', {
+        timeout: 10000
+      });
+
+      const amountInput = await this.page.$('input[data-qa-type="amount-from.input"]');
+      if (!amountInput) {
+        throw new Error('Could not find amount input field');
+      }
+
+      // Clear and enter amount
+      await amountInput.click({ clickCount: 3 }); // Select all
+      await this.page.keyboard.press('Backspace');
+      await this.typeWithHumanDelay('input[data-qa-type="amount-from.input"]', amount.toString());
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Step 8: Click "Перевести" submit button
+      console.log('[TBANK→SBP] Шаг 8/7: Нажатие "Перевести" для подтверждения...');
+
+      const submitButton = await this.page.$('button[data-qa-type="transfer-button"][type="submit"]');
+      if (!submitButton) {
+        throw new Error('Could not find submit "Перевести" button');
+      }
+
+      await submitButton.click();
+      console.log('[TBANK→SBP] ⏳ Ожидание обработки перевода и проверка СМС-подтверждения...');
+
+      // Poll for SMS confirmation prompt for up to 40 seconds
+      const confirmationText = 'Мы отправили СМС с кодом на';
+      let smsConfirmationRequired = false;
+      const maxWaitTime = 40000; // 40 seconds
+      const checkInterval = 2000; // Check every 2 seconds
+      const smsStartTime = Date.now();
+
+      while (Date.now() - smsStartTime < maxWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, checkInterval));
+
+        const hasConfirmationText = await this.page.evaluate(text => {
+          if (!document.body) return false;
+
+          const elements = Array.from(document.body.querySelectorAll('*'));
+          return elements.some(element => {
+            if (!element.textContent || !element.textContent.includes(text)) {
+              return false;
+            }
+
+            const style = window.getComputedStyle(element);
+            if (!style || style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+              return false;
+            }
+
+            const rect = element.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          });
+        }, confirmationText);
+
+        if (hasConfirmationText) {
+          smsConfirmationRequired = true;
+          break;
+        }
+
+        const elapsedSeconds = Math.floor((Date.now() - smsStartTime) / 1000);
+        console.log(`[TBANK→SBP] Проверка ${elapsedSeconds}с: текст СМС-подтверждения не найден, продолжаем ожидание...`);
+      }
+
+      if (smsConfirmationRequired) {
+        console.log('[TBANK→SBP] ⚠️ Обнаружено требование СМС-подтверждения перевода');
+        console.log('[TBANK→SBP] Ожидание СМС-кода для подтверждения перевода...');
+
+        const smsCode = await this.waitForUserInput('sms');
+        console.log(`[TBANK→SBP] Получен СМС-код: ${smsCode}, вводим через клавиатуру...`);
+
+        for (const digit of smsCode) {
+          await this.page.keyboard.type(digit);
+          await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 100));
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log('[TBANK→SBP] ✅ СМС-код введён');
+      } else {
+        console.log('[TBANK→SBP] СМС-подтверждение не потребовалось (текст подтверждения не появился)');
+      }
+
+      console.log('[TBANK→SBP] ✅ SBP transfer initiated successfully');
+
+      // Additional wait to ensure completion
+      const elapsedDuringSmsCheck = Date.now() - smsStartTime;
+      const remainingWait = Math.max(0, 35000 - elapsedDuringSmsCheck);
+      if (remainingWait > 0) {
+        console.log(`[TBANK→SBP] ⏳ Дополнительное ожидание ${Math.floor(remainingWait / 1000)}с перед закрытием браузера...`);
+        await new Promise(resolve => setTimeout(resolve, remainingWait));
+      }
+
+      return {
+        success: true,
+        amount
+      };
+
+    } catch (error) {
+      console.error('[TBANK→SBP] ❌ Error:', error.message);
+
+      // Take error screenshot
+      await this.takeScreenshot('sbp-transfer-error');
+
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Execute instruction steps 19-21 (инструкция шаги 21-23) after SBP перевод в Т-Банк
+   * Шаг 19: Получить сумму на счёте (инструкция шаг 21)
+   * Шаг 20: Ввести сумму в поле (инструкция шаг 22)
+   * Шаг 21: Нажать "Перевести" (инструкция шаг 23)
+   */
+  async runMorningPostTransferFlow() {
+    try {
+      if (!this.sessionActive) {
+        throw new Error('Not logged in');
+      }
+
+      console.log('[TBANK🌅] ▶️ Запуск шагов 19-21 для утреннего перевода...');
+
+      // Шаг 1: Переход на страницу перевода между счетами
+      console.log('[TBANK🌅] Переход на страницу перевода между счетами...');
+      const transferPageUrl = buildTransferBetweenAccountsUrl(requireEnv('TBANK_SOURCE_ACCOUNT_ID'));
+
+      try {
+        await this.page.goto(transferPageUrl, {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+        console.log('[TBANK🌅] ✅ Переход выполнен, ожидание загрузки страницы...');
+      } catch (navError) {
+        console.log('[TBANK🌅] ⚠️ Таймаут навигации (некритично), продолжаем выполнение...');
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      await this.takeScreenshot('morning-post-transfer-before');
+
+      // Шаг 19: Получить сумму на счёте (шаг 21 инструкции)
+      console.log('[TBANK🌅] 19/21: получаем сумму на счёте...');
+
+      const accountAmount = await this.page.evaluate(() => {
+        // Ищем элемент с суммой на счёте по data-qa-type="uikit/money"
+        const moneyElement = document.querySelector('[data-qa-type="uikit/money"]');
+        if (!moneyElement) return null;
+
+        const text = moneyElement.textContent || '';
+        // Убираем все пробелы и валюту, оставляем только цифры
+        const cleanText = text.replace(/\s/g, '').replace(/₽/g, '').trim();
+        return cleanText;
+      });
+
+      if (!accountAmount) {
+        throw new Error('Не удалось получить сумму на счёте');
+      }
+
+      console.log(`[TBANK🌅] ✅ Сумма на счёте: ${accountAmount} ₽`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Шаг 20: Ввести сумму в поле (шаг 22 инструкции)
+      console.log(`[TBANK🌅] 20/21: вводим сумму ${accountAmount} в поле...`);
+
+      // Wait for input field to appear
+      await this.waitForSelectorWithRetry('[data-qa-type="amount-from.input"]', {
+        timeout: 10000,
+        retries: 3
+      });
+
+      // Click on input to focus
+      await this.page.click('[data-qa-type="amount-from.input"]');
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Clear existing value first
+      await this.page.evaluate(() => {
+        const input = document.querySelector('[data-qa-type="amount-from.input"]');
+        if (input) {
+          input.value = '';
+        }
+      });
+
+      // Type the amount using Puppeteer's type method (simulates real keyboard input)
+      await this.page.type('[data-qa-type="amount-from.input"]', accountAmount, { delay: 50 });
+
+      // Wait a bit and verify the value was entered
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const valueEntered = await this.page.evaluate(() => {
+        const input = document.querySelector('[data-qa-type="amount-from.input"]');
+        return input ? input.value : null;
+      });
+
+      console.log(`[TBANK🌅] 📝 Проверка введённой суммы: "${valueEntered}"`);
+
+      if (!valueEntered || valueEntered.trim() === '') {
+        throw new Error('Не удалось ввести сумму в поле (поле пустое)');
+      }
+
+      console.log('[TBANK🌅] ✅ Сумма введена');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Шаг 21: Нажать "Перевести" (шаг 23 инструкции)
+      console.log('[TBANK🌅] 21/21: подтверждаем перевод...');
+
+      let submitClicked = false;
+
+      // Wait for submit button with retry
+      try {
+        await this.waitForSelectorWithRetry('[data-qa-type="submit-button.content"]', {
+          timeout: 10000,
+          retries: 3
+        });
+
+        submitClicked = await this.page.evaluate(() => {
+          // Ищем кнопку по data-qa-type="submit-button.content"
+          const buttonContent = document.querySelector('[data-qa-type="submit-button.content"]');
+          if (!buttonContent) return false;
+
+          // Находим родительскую кнопку
+          const button = buttonContent.closest('button, [role="button"]');
+          if (!button) return false;
+
+          button.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+          button.click();
+          return true;
+        });
+      } catch (e) {
+        console.log('[TBANK🌅] ⚠️ Селектор submit-button.content не найден после retry, пробуем по тексту...');
+      }
+
+      if (!submitClicked) {
+        submitClicked = await this.clickElementByText('button, [role="button"]', 'Перевести', { timeout: 8000 });
+      }
+
+      if (!submitClicked) {
+        throw new Error('Не удалось нажать кнопку "Перевести"');
+      }
+
+      console.log('[TBANK🌅] ⏳ Ожидание завершения операции перевода...');
+
+      // Wait for navigation after clicking "Перевести"
+      await this.page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 20000 }).catch(() => {
+        console.log('[TBANK🌅] ⚠️ Навигация не произошла или таймаут, продолжаем...');
+      });
+
+      // Additional wait to ensure the operation completes
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Take screenshot and get base64
+      const screenshotBase64 = await this.takeScreenshot('morning-post-transfer-after');
+      console.log('[TBANK🌅] ✅ Шаги 19-21 выполнены успешно');
+
+      return {
+        success: true,
+        screenshotBase64
+      };
+    } catch (error) {
+      console.error('[TBANK🌅] ❌ Ошибка при выполнении шагов 19-21:', error.message);
+      await this.takeScreenshot('morning-post-transfer-error');
       return {
         success: false,
         error: error.message
@@ -1731,26 +1985,6 @@ export class TBankAutomation {
 
     this.sessionActive = false;
 
-    if (this.keepAliveInterval) {
-      clearInterval(this.keepAliveInterval);
-      this.keepAliveInterval = null;
-    }
-
-    // Save session one last time before closing (unless explicitly deleting)
-    if (this.page && !deleteSession) {
-      try {
-        console.log(`[TBANK] 💾 Final session save before closing...`);
-        await this.sessionPersistence.saveSession(this.page);
-      } catch (e) {
-        console.error('[TBANK] Error saving session before close:', e.message);
-      }
-    }
-
-    // Delete saved session if requested
-    if (deleteSession) {
-      console.log(`[TBANK] 🗑️ Deleting saved session as requested`);
-      await this.sessionPersistence.deleteSession();
-    }
 
     // Clear pending input resolvers to prevent memory leaks
     if (this.pendingInputResolve) {
@@ -1758,6 +1992,14 @@ export class TBankAutomation {
     }
     this.pendingInputType = null;
     this.pendingInputData = null;
+
+    // If browser was reused from Alfa automation, don't close it
+    if (this.reusingBrowser) {
+      console.log('[TBANK] Browser was reused from Alfa automation, skipping close');
+      this.browser = null;
+      this.page = null;
+      return;
+    }
 
     // Close page first to free memory
     if (this.page) {
@@ -1782,15 +2024,14 @@ export class TBankAutomation {
       this.browser = null;
     }
 
+    // DISK SPACE OPTIMIZATION: Removed userDataDir cleanup (no longer used)
+    // Browser processes are cleaned up automatically by Puppeteer
+
     // Force garbage collection hint (if available)
     if (global.gc) {
       global.gc();
       console.log('[TBANK] Garbage collection triggered');
     }
-
-    // Log final session stats
-    const stats = this.sessionPersistence.getSessionStats();
-    console.log('[TBANK] 📊 Final Session Stats:', stats);
 
     console.log('[TBANK] Browser and resources cleaned up');
   }
@@ -1800,6 +2041,8 @@ export class TBankAutomation {
    * @returns {Object} Session statistics
    */
   getSessionStats() {
-    return this.sessionPersistence.getSessionStats();
+    return {
+      sessionActive: this.sessionActive
+    };
   }
 }
