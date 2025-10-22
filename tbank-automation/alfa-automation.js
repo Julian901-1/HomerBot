@@ -123,13 +123,33 @@ export class AlfaAutomation {
       visible = false,
       hidden = false,
       targetFrame = null,
-      pollInterval = 500
+      pollInterval = 500,
+      alternativeSelectors = [],
+      textVariants = []
     } = options;
 
     const startTime = Date.now();
     const maxInterval = Math.max(100, pollInterval);
     let lastError = null;
     let framesLogged = false;
+
+    const expandFrames = (rootFrames) => {
+      const result = [];
+      const stack = [...(rootFrames || [])];
+      while (stack.length > 0) {
+        const frame = stack.shift();
+        if (!frame || frame.isDetached()) continue;
+        result.push(frame);
+        if (typeof frame.childFrames === 'function') {
+          stack.push(...frame.childFrames());
+        }
+      }
+      return result;
+    };
+
+    const normalizedVariants = (Array.isArray(textVariants) ? textVariants : [textVariants])
+      .map(v => (typeof v === 'string' ? v.trim().toLowerCase() : ''))
+      .filter(Boolean);
 
     while (true) {
       const elapsed = Date.now() - startTime;
@@ -139,14 +159,7 @@ export class AlfaAutomation {
         break;
       }
 
-      const frames = (() => {
-        if (targetFrame) {
-          const childFrames = typeof targetFrame.childFrames === 'function' ? targetFrame.childFrames() : [];
-          return [targetFrame, ...childFrames];
-        }
-        return this.page.frames();
-      })();
-
+      const frames = targetFrame ? expandFrames([targetFrame]) : expandFrames(this.page.frames());
       const activeFrames = frames.filter(frame => frame && !frame.isDetached());
 
       if (activeFrames.length === 0) {
@@ -167,18 +180,29 @@ export class AlfaAutomation {
       }
 
       const waitTimeout = Math.max(100, Math.min(remaining, maxInterval));
-      const waiters = activeFrames.map(frame =>
-        frame.waitForSelector(selector, {
-          timeout: waitTimeout,
-          visible,
-          hidden
-        }).then(element => ({ element, frame }))
-      );
+      const selectorsToTry = Array.from(
+        new Set([selector, ...(Array.isArray(alternativeSelectors) ? alternativeSelectors : [])])
+      ).filter(sel => typeof sel === 'string' && sel.trim().length > 0);
+      const waiters = [];
+
+      for (const frame of activeFrames) {
+        for (const sel of selectorsToTry) {
+          waiters.push(
+            frame.waitForSelector(sel, {
+              timeout: waitTimeout,
+              visible,
+              hidden
+            }).then(element => ({ element, frame, matchedSelector: sel }))
+          );
+        }
+      }
 
       let result = null;
 
       try {
-        result = await Promise.any(waiters);
+        if (waiters.length > 0) {
+          result = await Promise.any(waiters);
+        }
       } catch (error) {
         if (error instanceof AggregateError) {
           lastError = error.errors && error.errors.length > 0 ? error.errors[0] : error;
@@ -188,7 +212,46 @@ export class AlfaAutomation {
       }
 
       if (result && result.element) {
+        if (result.matchedSelector && result.matchedSelector !== selector) {
+          console.log(`[ALFA-FRAME] Selector fallback matched "${result.matchedSelector}" in frame ${result.frame.url()}`);
+        }
         return result;
+      }
+
+      if (normalizedVariants.length > 0) {
+        for (const frame of activeFrames) {
+          try {
+            const handle = await frame.evaluateHandle((variants) => {
+              const lowerVariants = variants.map(v => v.toLowerCase());
+              const candidates = Array.from(document.querySelectorAll('input, textarea'));
+              for (const candidate of candidates) {
+                const values = [
+                  candidate.getAttribute('placeholder'),
+                  candidate.getAttribute('aria-label'),
+                  candidate.getAttribute('title'),
+                  candidate.previousElementSibling?.textContent,
+                  candidate.parentElement?.textContent
+                ]
+                  .filter(Boolean)
+                  .map(val => val.trim().toLowerCase());
+
+                if (values.some(val => lowerVariants.some(variant => val.includes(variant)))) {
+                  return candidate;
+                }
+              }
+              return null;
+            }, normalizedVariants);
+
+            const candidateElement = handle.asElement();
+            if (candidateElement) {
+              console.log(`[ALFA-FRAME] Fallback matched element by text in frame ${frame.url()}`);
+              return { element: candidateElement, frame };
+            }
+            await handle.dispose();
+          } catch (fallbackError) {
+            console.log('[ALFA-FRAME] Fallback text search failed:', fallbackError.message);
+          }
+        }
       }
 
       await this.sleep(Math.min(maxInterval, remaining));
@@ -256,7 +319,9 @@ export class AlfaAutomation {
       logoRetryDelay = 10000,
       maxLogoCycles = null,
       overallTimeout = null,
-      targetFrame = null
+      targetFrame = null,
+      alternativeSelectors = [],
+      textVariants = []
     } = options;
 
     let lastError;
@@ -272,7 +337,9 @@ export class AlfaAutomation {
             timeout,
             visible,
             hidden,
-            targetFrame
+            targetFrame,
+            alternativeSelectors,
+            textVariants
           });
 
           console.log(`[ALFA-RETRY] Success: "${selector}" found on attempt ${attempt}`);
@@ -1904,7 +1971,16 @@ export class AlfaAutomation {
       }
 
       console.log('[ALFA→TBANK] Этап 2/11: Проверяем наличие поля телефона получателя');
-      const phoneInputOptions = { timeout: 15000, retries: 3 };
+      const phoneInputOptions = {
+        timeout: 15000,
+        retries: 3,
+        alternativeSelectors: [
+          'input[aria-label="Номер телефона получателя"]',
+          'input[placeholder*="телефон"]',
+          'input[type="tel"][aria-label]'
+        ],
+        textVariants: ['номер телефона получателя', 'номер телефона']
+      };
       if (transferFrame) {
         phoneInputOptions.targetFrame = transferFrame;
       }
