@@ -108,6 +108,87 @@ export class AlfaAutomation {
   }
 
   /**
+   * Wait for selector in all available frames (or specific frame)
+   * @param {string} selector
+   * @param {Object} options
+   * @returns {Promise<{ element: import('puppeteer').ElementHandle, frame: import('puppeteer').Frame }>}
+   */
+  async waitForSelectorAcrossFrames(selector, options = {}) {
+    if (!this.page) {
+      throw new Error('Browser page is not initialized');
+    }
+
+    const {
+      timeout = 30000,
+      visible = false,
+      hidden = false,
+      targetFrame = null,
+      pollInterval = 500
+    } = options;
+
+    const startTime = Date.now();
+    const maxInterval = Math.max(100, pollInterval);
+    let lastError = null;
+
+    while (true) {
+      const elapsed = Date.now() - startTime;
+      const remaining = timeout - elapsed;
+
+      if (remaining <= 0) {
+        break;
+      }
+
+      const frames = (() => {
+        if (targetFrame) {
+          const childFrames = typeof targetFrame.childFrames === 'function' ? targetFrame.childFrames() : [];
+          return [targetFrame, ...childFrames];
+        }
+        return this.page.frames();
+      })();
+
+      const activeFrames = frames.filter(frame => frame && !frame.isDetached());
+
+      if (activeFrames.length === 0) {
+        await this.sleep(Math.min(maxInterval, remaining));
+        continue;
+      }
+
+      const waitTimeout = Math.max(100, Math.min(remaining, maxInterval));
+      const waiters = activeFrames.map(frame =>
+        frame.waitForSelector(selector, {
+          timeout: waitTimeout,
+          visible,
+          hidden
+        }).then(element => ({ element, frame }))
+      );
+
+      let result = null;
+
+      try {
+        result = await Promise.any(waiters);
+      } catch (error) {
+        if (error instanceof AggregateError) {
+          lastError = error.errors && error.errors.length > 0 ? error.errors[0] : error;
+        } else {
+          throw error;
+        }
+      }
+
+      if (result && result.element) {
+        return result;
+      }
+
+      await this.sleep(Math.min(maxInterval, remaining));
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
+
+    throw new Error(`Timeout waiting for selector "${selector}" across frames`);
+  }
+
+  /**
    * Wait for selector with retry logic
    * @param {string} selector - CSS selector to wait for
    * @param {Object} options - Options object with timeout, retries, etc.
@@ -123,7 +204,8 @@ export class AlfaAutomation {
       waitForLoadingLogo = true,
       logoRetryDelay = 10000,
       maxLogoCycles = null,
-      overallTimeout = null
+      overallTimeout = null,
+      targetFrame = null
     } = options;
 
     let lastError;
@@ -135,10 +217,11 @@ export class AlfaAutomation {
         try {
           console.log(`[ALFA-RETRY] Attempt ${attempt}/${retries}: waiting for "${selector}"`);
 
-          const element = await this.page.waitForSelector(selector, {
+          const { element } = await this.waitForSelectorAcrossFrames(selector, {
             timeout,
             visible,
-            hidden
+            hidden,
+            targetFrame
           });
 
           console.log(`[ALFA-RETRY] Success: "${selector}" found on attempt ${attempt}`);
@@ -1755,35 +1838,38 @@ export class AlfaAutomation {
       });
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 2/11: Ввод номера телефона получателя');
-      await this.waitForSelectorWithRetry('input[data-test-id="phone-intl-input"]', { timeout: 15000, retries: 3 });
+      console.log('[ALFA→TBANK] Этап 2/11: Проверяем наличие поля телефона получателя');
+      const phoneInputHandle = await this.waitForSelectorWithRetry('input[data-test-id="phone-intl-input"]', { timeout: 15000, retries: 3 });
       const trimmedPhone = typeof recipientPhone === 'string' ? recipientPhone.trim() : '';
       const normalizedPhone = trimmedPhone
         ? (trimmedPhone.startsWith('+') ? trimmedPhone : `+${trimmedPhone}`)
         : '';
-      await this.page.evaluate(phone => {
-        const input = document.querySelector('input[data-test-id="phone-intl-input"]');
-        if (input) {
-          input.focus();
-          const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          nativeSetter.call(input, '');
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          nativeSetter.call(input, phone);
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+      const transferFrame = phoneInputHandle.executionContext().frame();
+      await phoneInputHandle.evaluate((input, phone) => {
+        input.focus();
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(input, '');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        nativeSetter.call(input, phone);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
       }, normalizedPhone);
+      await phoneInputHandle.dispose();
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 3/11: Выбор шаблона "Себе в другой банк"');
+      console.log('[ALFA→TBANK] Этап 3/11: Пытаемся найти шаблон "Перевод в Т-Банк"');
 
       // Try to find and click the template, but continue if not found (not critical)
       let selfTransferClicked = false;
       try {
-        await this.waitForSelectorWithRetry('button[data-test-id="phone-list-item"]', { timeout: 15000, retries: 3 });
-        selfTransferClicked = await this.page.evaluate(() => {
+        await this.waitForSelectorWithRetry('button[data-test-id="phone-list-item"]', {
+          timeout: 15000,
+          retries: 3,
+          targetFrame: transferFrame
+        });
+        selfTransferClicked = await transferFrame.evaluate(() => {
           const items = Array.from(document.querySelectorAll('button[data-test-id="phone-list-item"]'));
-          const selfTransfer = items.find(item => item.textContent.includes('Себе в другой банк'));
+          const selfTransfer = items.find(item => item.textContent.includes('Перевод в Т-Банк'));
           if (selfTransfer) {
             selfTransfer.click();
             return true;
@@ -1792,23 +1878,27 @@ export class AlfaAutomation {
         });
 
         if (selfTransferClicked) {
-          console.log('[ALFA→TBANK] ✅ Шаблон "Себе в другой банк" найден и выбран');
+          console.log('[ALFA→TBANK] ✔ Шаблон "Перевод в Т-Банк" найден и выбран');
         } else {
-          console.log('[ALFA→TBANK] ⚠️ Шаблон "Себе в другой банк" не найден, пропускаем этот шаг (не критично)');
+          console.log('[ALFA→TBANK] ⚠️ Шаблон "Перевод в Т-Банк" не найден, пропускаем этот шаг (не критично)');
         }
       } catch (templateError) {
-        console.log('[ALFA→TBANK] ⚠️ Не удалось найти шаблон "Себе в другой банк", продолжаем без него:', templateError.message);
+        console.log('[ALFA→TBANK] ⚠️ Не удалось найти шаблон "Перевод в Т-Банк", продолжаем без него:', templateError.message);
         // Continue execution - this is not critical
       }
 
-      console.log('[ALFA→TBANK] Ожидание загрузки списка банков...');
-      // Wait for bank options to load after clicking "Себе в другой банк"
+      console.log('[ALFA→TBANK] Ждём подгрузку списка банков...');
+      // Wait for bank options to load after clicking "Перевод в телефон"
       // Using the selector from your HTML: div[data-test-id="recipient-select-option"]
-      await this.waitForSelectorWithRetry('div[data-test-id="recipient-select-option"]', { timeout: 30000, retries: 3 });
+      await this.waitForSelectorWithRetry('div[data-test-id="recipient-select-option"]', {
+        timeout: 30000,
+        retries: 3,
+        targetFrame: transferFrame
+      });
       await this.sleep(2000); // Additional 2s to ensure all options are rendered
 
-      console.log('[ALFA→TBANK] Этап 4/11: Выбор банка "Т-Банк"');
-      const tbankClicked = await this.page.evaluate(() => {
+      console.log('[ALFA→TBANK] Этап 4/11: Выбираем Т-Банк');
+      const tbankClicked = await transferFrame.evaluate(() => {
         // Find the option that contains "Т-Банк" text
         const options = Array.from(document.querySelectorAll('div[data-test-id="recipient-select-option"]'));
         const tbankOption = options.find(opt => {
@@ -1841,7 +1931,7 @@ export class AlfaAutomation {
       await waitBetweenSteps();
 
       console.log('[ALFA→TBANK] Этап 5/11: Получение доступного баланса');
-      const accountBalance = await this.page.evaluate(() => {
+      const accountBalance = await transferFrame.evaluate(() => {
         const amountElement = document.querySelector('span[data-test-id="amount"]');
         return amountElement ? amountElement.textContent : '0';
       });
@@ -1856,34 +1946,45 @@ export class AlfaAutomation {
 
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 6/11: Ввод суммы');
-      await this.waitForSelectorWithRetry('input[name="amount"]', { timeout: 15000, retries: 3 });
+      console.log('[ALFA→TBANK] Этап 6/11: Вводим сумму');
+      const amountInputHandle = await this.waitForSelectorWithRetry('input[name="amount"]', {
+        timeout: 15000,
+        retries: 3,
+        targetFrame: transferFrame
+      });
       const amountInputValue = transferAmount.toFixed(2).replace('.', ',');
-      await this.page.evaluate(value => {
-        const input = document.querySelector('input[name="amount"]');
-        if (input) {
-          input.focus();
-          const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          nativeSetter.call(input, '');
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          nativeSetter.call(input, value);
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+      await amountInputHandle.evaluate((input, value) => {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(input, '');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        nativeSetter.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
       }, amountInputValue);
+      await amountInputHandle.dispose();
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 7/11: Нажатие "Продолжить"');
-      await this.waitForSelectorWithRetry('button[type="submit"]', { timeout: 15000, retries: 3 });
-      await this.page.click('button[type="submit"]');
+      console.log('[ALFA→TBANK] Этап 7/11: Нажимаем "Продолжить"');
+      const submitButtonHandle = await this.waitForSelectorWithRetry('button[type="submit"]', {
+        timeout: 15000,
+        retries: 3,
+        targetFrame: transferFrame
+      });
+      await submitButtonHandle.click();
+      await submitButtonHandle.dispose();
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 8/11: Нажатие "Перевести"');
-      await this.waitForSelectorWithRetry('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]', { timeout: 15000, retries: 3 });
-      await this.page.click('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]');
+      console.log('[ALFA→TBANK] Этап 8/11: Нажимаем "Подтвердить"');
+      const confirmationButtonHandle = await this.waitForSelectorWithRetry('button[data-test-id="transfer-by-phone-confirmation-submit-btn"]', {
+        timeout: 15000,
+        retries: 3,
+        targetFrame: transferFrame
+      });
+      await confirmationButtonHandle.click();
+      await confirmationButtonHandle.dispose();
       await waitBetweenSteps();
 
-      console.log('[ALFA→TBANK] Этап 9/11: Ожидание SMS-кода для подтверждения');
+      console.log('[ALFA→TBANK] Этап 9/11: Ожидание SMS-кода от Т-Банка');
       this.pendingInputType = 'alfa_sms';
       this.pendingInputData = {
         message: 'Ожидание SMS-кода для подтверждения перевода'
@@ -1893,17 +1994,22 @@ export class AlfaAutomation {
       console.log('[ALFA→TBANK] Этап 10/11: Ввод SMS-кода');
       console.log(`[ALFA→TBANK] 📝 SMS-код для ввода: "${this.alfaSmsCode}" (длина: ${this.alfaSmsCode ? this.alfaSmsCode.length : 0})`);
 
-      await this.waitForSelectorWithRetry('input.KRyR4.uokLS', { timeout: 15000, retries: 3 });
-      const codeInputs = await this.page.$$('input.KRyR4.uokLS');
+      const smsInputHandle = await this.waitForSelectorWithRetry('input.KRyR4.uokLS', {
+        timeout: 15000,
+        retries: 3,
+        targetFrame: transferFrame
+      });
+      await smsInputHandle.dispose();
+      const codeInputs = await transferFrame.$$('input.KRyR4.uokLS');
 
-      console.log(`[ALFA→TBANK] 📊 Найдено ${codeInputs.length} полей для ввода кода`);
+      console.log(`[ALFA→TBANK] Найдено ${codeInputs.length} полей для ввода кода`);
 
       // Log all input fields found on the page
-      const allInputs = await this.page.$$('input');
-      console.log(`[ALFA→TBANK] 📊 Всего input элементов на странице: ${allInputs.length}`);
+      const allInputs = await transferFrame.$$('input');
+      console.log(`[ALFA→TBANK] Количество input элементов в текущем фрейме: ${allInputs.length}`);
 
       for (let i = 0; i < allInputs.length; i++) {
-        const inputInfo = await this.page.evaluate(el => {
+        const inputInfo = await transferFrame.evaluate(el => {
           return {
             type: el.type,
             className: el.className,
@@ -1913,7 +2019,7 @@ export class AlfaAutomation {
             value: el.value
           };
         }, allInputs[i]);
-        console.log(`[ALFA→TBANK] 📊 Input ${i + 1}:`, JSON.stringify(inputInfo));
+        console.log(`[ALFA→TBANK] Input ${i + 1}:`, JSON.stringify(inputInfo));
       }
 
       // Enter code digit by digit with focus
@@ -1942,7 +2048,7 @@ export class AlfaAutomation {
       console.log('[ALFA→TBANK] Этап 11/11: Проверка успешности перевода');
 
       // Check for error messages
-      const errorMessages = await this.page.evaluate(() => {
+      const errorMessages = await transferFrame.evaluate(() => {
         const errors = [];
         document.querySelectorAll('[class*="error"], [class*="Error"], .error-message, .alert-danger').forEach(el => {
           if (el.textContent.trim()) {
