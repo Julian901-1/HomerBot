@@ -2002,7 +2002,17 @@ export class AlfaAutomation {
       const normalizedPhone = trimmedPhone
         ? (trimmedPhone.startsWith('+') ? trimmedPhone : `+${trimmedPhone}`)
         : '';
-      const handleFrame = phoneInputHandle.executionContext().frame();
+      let handleFrame = null;
+      if (phoneInputHandle && typeof phoneInputHandle === 'object') {
+        if (phoneInputHandle.__alfaFrame) {
+          handleFrame = phoneInputHandle.__alfaFrame;
+        } else if (typeof phoneInputHandle.executionContext === 'function') {
+          const context = phoneInputHandle.executionContext();
+          if (context && typeof context.frame === 'function') {
+            handleFrame = context.frame();
+          }
+        }
+      }
       if (handleFrame && transferFrame && handleFrame !== transferFrame) {
         console.log(`[ALFA→TBANK] ⚠️ Обнаружен новый iframe формы: ${handleFrame.url()}`);
       }
