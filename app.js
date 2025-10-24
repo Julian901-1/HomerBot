@@ -1,0 +1,2344 @@
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzIAGI3xqdLJeOGHs8cgvLbMll5x82pc7clF_HTmQBQkc-5jbONBaq27NPZuaQAfuR_oA/exec';
+const TBANK_API_URL = 'https://homerbot.onrender.com';
+
+// -------- STATE --------
+let username = null; // Оригинальный никнейм пользователя (для отправки на сервер и отображения)
+let displayName = null; // Отображаемое имя пользователя (возвращается сервером)
+let initData = '';
+let serverState = { balance: 0, rate: 16, monthBase: 0, lockedAmount: 0, lockedAmountForWithdrawal: 0, availableBalance: 0, history: [], portfolio: [] };
+let userPrefs = { currency: 'RUB', sbpMethods: [], autoRenew: true };
+let devMode = false;
+let lastChosenRate = null;
+let syncTimer = null;
+let syncInFlight = false;
+let syncBackoffMs = 20000;       // start 20s
+const SYNC_BACKOFF_MAX = 60000;  // max 60s
+let lastDepositAmount = 0;
+let lastDepositShortId = null;
+let hasPendingDeposit = false;
+let lastDepositCreatedTime = 0; // Время создания последнего депозита (для предотвращения дубликатов pop-up)
+
+// Status: show loading/synced only once
+let hasShownInitialStatus = false;
+
+// Exchange rates and today income (in RUB) for instant recalculation
+const exchangeRates = { RUB: 1, USD: 0.011, EUR: 0.010 };
+let latestTodayIncomeRub = 0;
+
+// History — pagination and filter
+let historyOffset = 0;
+// Withdraw: user explicitly chose "Add new credentials"
+let withdrawAddingNew = false;
+const HISTORY_PAGE_SIZE = 10;
+let currentHistoryFilterType = 'all';
+let filteredHistory = [];
+
+// -------- HELPERS --------
+function getCurrencySymbol() {
+  const currency = userPrefs.currency || 'RUB';
+  return currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+}
+
+const fmtMoney = (val, currency) => {
+  const rate = exchangeRates[currency];
+  const num = (Number(val) || 0) * rate;
+  return num.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+function parseAmount(str) {
+  if (!str) return 0;
+  const s = String(str).replace(/\s/g, '').replace(',', '.');
+  const n = Number(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function formatCardInput(input) {
+  // Extract only digits
+  let digits = input.value.replace(/\D/g, '');
+
+  // Limit to 16 digits
+  digits = digits.slice(0, 16);
+
+  // Format as 0000 0000 0000 0000
+  let formatted = '';
+  for (let i = 0; i < digits.length; i++) {
+    if (i > 0 && i % 4 === 0) {
+      formatted += ' ';
+    }
+    formatted += digits[i];
+  }
+
+  input.value = formatted;
+}
+
+function formatPhoneInput(input) {
+  // Извлекаем только цифры
+  let digits = input.value.replace(/\D/g, '');
+
+  // Если первая цифра не 7, добавляем 7
+  if (digits.length > 0 && digits[0] !== '7') {
+    digits = '7' + digits;
+  }
+
+  // Ограничиваем до 11 цифр (7 + 10 цифр номера)
+  digits = digits.slice(0, 11);
+
+  // Форматируем: +7 (XXX) XXX-XX-XX
+  let formatted = '';
+  if (digits.length > 0) {
+    formatted = '+7';
+    if (digits.length > 1) {
+      formatted += ' (' + digits.slice(1, 4);
+      if (digits.length > 4) {
+        formatted += ') ' + digits.slice(4, 7);
+        if (digits.length > 7) {
+          formatted += '-' + digits.slice(7, 9);
+          if (digits.length > 9) {
+            formatted += '-' + digits.slice(9, 11);
+          }
+        }
+      }
+    }
+  }
+
+  input.value = formatted;
+
+  // Сохраняем чистый номер в data-атрибут для последующего использования
+  input.dataset.phone = digits;
+}
+
+// Suppress only this specific noise, not affecting other errors
+window.addEventListener('unhandledrejection', (e) => {
+  const msg = String((e.reason && e.reason.message) || e.reason || '');
+  if (msg.includes('A listener indicated an asynchronous response')) {
+    e.preventDefault(); // do not log to console
+  }
+});
+
+window.addEventListener('error', (e) => {
+  const msg = String(e.message || '');
+  if (msg.includes('A listener indicated an asynchronous response')) {
+    e.stopImmediatePropagation();
+  }
+});
+
+// formatting with decimal part preservation
+function formatAmountInput(input) {
+  let v = (input.value || '').replace(/[^\d.,]/g, '');
+  // if multiple separators — keep first, remove others
+  const firstSep = v.search(/[.,]/);
+  if (firstSep !== -1) {
+    const intPart = v.slice(0, firstSep).replace(/[.,]/g, '');
+    const fracPartRaw = v.slice(firstSep + 1).replace(/[^\d]/g, '');
+    const fracPart = fracPartRaw.slice(0, 2); // up to 2 digits
+    input.value = formatIntWithSpaces(intPart) + ',' + fracPart;
+  } else {
+    input.value = formatIntWithSpaces(v.replace(/[.,]/g, ''));
+  }
+}
+function formatIntWithSpaces(s) {
+  if (!s) return '';
+  const num = s.replace(/\D/g, '');
+  return num.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
+function scheduleSync(delay = syncBackoffMs) {
+  clearTimeout(syncTimer);
+  const jitter = Math.floor(Math.random() * 3000);
+  const next = Math.min(Math.max(delay, 5000), SYNC_BACKOFF_MAX); // 5s..60s
+  syncTimer = setTimeout(() => syncBalance(true), next + jitter);
+}
+document.addEventListener('visibilitychange', () => {
+  // return to tab — fast ping
+  if (!document.hidden) scheduleSync(2000);
+});
+
+function showPopup(text, timeout = 3000) {
+  const el = document.createElement('div');
+  el.className = 'popup';
+  el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity .25s ease, transform .25s ease';
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(-50%) translateY(10px)';
+    setTimeout(() => el.remove(), 250);
+  }, timeout);
+}
+
+function setStatus(text, type = 'loading') {
+  const el = document.getElementById('status');
+  if (!el) return;
+
+  // Show "loading/synced" only on first connection
+  if ((type === 'loading' || type === 'synced') && hasShownInitialStatus) return;
+
+  el.textContent = text;
+  el.className = `status ${type} show`;
+
+  if (type === 'error') {
+    setTimeout(() => el.classList.remove('show'), 3000);
+  } else if (type === 'synced') {
+    setTimeout(() => el.classList.remove('show'), 1500);
+    hasShownInitialStatus = true;
+  }
+}
+
+function computeHasPendingDeposit() {
+  const h = serverState.history || [];
+  return h.some(x => x.type === 'DEPOSIT' && x.status === 'PENDING');
+}
+function showDepositStep(step) {
+  const s1 = document.getElementById('deposit-step1');
+  const s2 = document.getElementById('deposit-step2');
+  if (!s1 || !s2) return;
+  if (step === 1) { s1.style.display = 'block'; s2.style.display = 'none'; }
+  else { s1.style.display = 'none'; s2.style.display = 'block'; }
+}
+// Deposit: toggle agreement controls button availability
+function updateDepositBtnState() {
+  const agree = document.getElementById('depositAgree');
+  const amountEl = document.getElementById('depositAmount');
+  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100; // round to 2 decimal places
+  const btn = document.getElementById('depositConfirmBtn');
+  if (btn) btn.disabled = !(agree && agree.checked) || amount < 100 || amount > 10000000;
+}
+
+
+// -------- NAV & MODALS --------
+function openPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page${pageId}`).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    n.classList.remove('active');
+    if (n.onclick.toString().includes(`'${pageId}'`)) n.classList.add('active');
+  });
+}
+// NEW: close all modals before opening new one
+function closeAllModals() {
+  document.querySelectorAll('.modal-overlay.active').forEach(m => {
+    m.classList.remove('active');
+    m.style.display = '';
+  });
+  document.body.classList.remove('modal-open');
+}
+
+function openModal(modalId) {
+  // NEW: extinguish all old modals
+  closeAllModals();
+
+  const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
+  if (!modal) return;
+  modal.classList.add('active');
+  modal.style.display = 'flex';          // NEW: ensure shown
+  document.body.classList.add('modal-open');
+
+        // Special logic for "Settings"
+  if (modalId === 'settings') {
+    const autoRenewToggle = document.getElementById('autoRenewToggle');
+    if (autoRenewToggle) autoRenewToggle.checked = userPrefs.autoRenew !== false;
+  }
+
+  // Special logic for "Evening Percent" - no authentication needed, working with fixed credentials
+  if (modalId === 'eveningPercent') {
+    // Load user's current settings if any
+    loadEveningPercentSettings();
+  }
+
+        // Special logic for "Withdraw"
+ if (modalId === 'withdraw') {
+   // New entry into modal — forget previous "Add new credentials"
+   withdrawAddingNew = false;
+
+   const methodChoice = document.getElementById('withdraw-method-choice');
+   const addForm      = document.getElementById('withdraw-add-sbp-form');
+   const view         = document.getElementById('withdraw-view');
+   const sel          = document.getElementById('withdraw-recipient-select');
+
+   // Standard behavior:
+   // - if saved credentials exist → immediately withdrawal screen;
+   // - if none → method selection screen.
+   const hasMethods = (userPrefs.sbpMethods || []).length > 0;
+
+   if (hasMethods) {
+     if (methodChoice) methodChoice.style.display = 'none';
+     if (addForm)      addForm.style.display      = 'none';
+     if (view)         view.style.display         = 'block';
+     if (sel) {
+       // just in case choose first real credential (not "add_new")
+       if (sel.value === 'add_new' || sel.selectedIndex < 0) sel.selectedIndex = 0;
+     }
+     // Ensure trigger shows first credential, not "Add new"
+     const trigger = document.getElementById('select-trigger');
+     if (trigger && userPrefs.sbpMethods && userPrefs.sbpMethods.length > 0) {
+       const first = userPrefs.sbpMethods[0];
+       trigger.textContent = `СБП: ${first.phone} (${first.bank})`;
+       trigger.dataset.index = 0;
+     }
+     setTimeout(updateWithdrawBtnState, 0);
+     setTimeout(updateWithdrawWarning, 0);
+   } else {
+     if (methodChoice) methodChoice.style.display = 'block';
+     if (addForm)      addForm.style.display      = 'none';
+     if (view)         view.style.display         = 'none';
+     if (sel) sel.selectedIndex = -1; // nothing selected
+   }
+
+   // scroll to top in case of previous scrolling
+   const modalEl = document.getElementById('modalWithdraw');
+   const inner   = modalEl && modalEl.querySelector('.modal');
+   if (inner) inner.scrollTop = 0;
+
+   // Ensure stat text is resized after modal opens
+   setTimeout(fitStatText, 0);
+ }
+ if (modalId === 'deposit') {
+   // Update history to check for pending deposits
+   apiGet('?action=getHistory&username=' + encodeURIComponent(username))
+     .then(data => {
+       if (data.success && data.history) {
+         serverState.history = data.history;
+         hasPendingDeposit = computeHasPendingDeposit();
+         if (hasPendingDeposit) {
+           // try to take from history the last PENDING deposit
+           const pending = (serverState.history || [])
+             .filter(x => x.type === 'DEPOSIT' && x.status === 'PENDING')
+             .sort((a,b) => b.date - a.date)[0];
+           const amt = pending ? Math.abs(Number(pending.amount||0)) : lastDepositAmount;
+           const sid = pending ? pending.shortId : lastDepositShortId;
+           hydrateDepositStep2(amt || 0, sid || null);
+         } else {
+           // Нет PENDING депозита - очищаем старые данные и показываем шаг 1
+           lastDepositAmount = 0;
+           lastDepositShortId = null;
+           // Очищаем поле только если оно пустое (не переписываем значение от быстрой кнопки)
+           const amountInput = document.getElementById('depositAmount');
+           if (amountInput && !amountInput.value) {
+             amountInput.value = '';
+           }
+           const agreeCheckbox = document.getElementById('depositAgree');
+           if (agreeCheckbox) {
+             agreeCheckbox.checked = false;
+           }
+         }
+         showDepositStep(hasPendingDeposit ? 2 : 1);
+       }
+     })
+     .catch(() => {
+       showDepositStep(hasPendingDeposit ? 2 : 1);
+     });
+   // synchronize button once on entry
+   setTimeout(updateDepositBtnState, 0);
+ }
+}
+
+function closeModal(modalId) {
+  const modal = document.getElementById(`modal${modalId.charAt(0).toUpperCase() + modalId.slice(1)}`);
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = ''; // NEW
+  }
+  if (modalId === 'withdraw') withdrawAddingNew = false;
+  const anyOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.classList.contains('active'));
+  if (!anyOpen) document.body.classList.remove('modal-open');
+}
+
+// -------- BALANCE AUTOSIZE --------
+function fitBalanceText() {
+   const el = document.getElementById('balanceValue');
+   if (!el) return;
+   const max = 42, min = 18;
+   el.style.fontSize = max + 'px';
+   const limit = el.parentElement ? el.parentElement.clientWidth - 24 : el.clientWidth;
+   let size = max, safety = 50;
+   while (el.scrollWidth > limit && size > min && safety-- > 0) {
+      size -= 1;
+      el.style.fontSize = size + 'px';
+   }
+}
+window.addEventListener('resize', fitBalanceText);
+
+// -------- STAT VALUES AUTOSIZE --------
+function fitStatText() {
+    const statIds = ['freeBalance', 'investedBalance', 'withdrawAvailable', 'todayIncome'];
+    const max = 20, min = 14;
+    let commonSize = max;
+
+    // First pass: find the smallest size that fits all
+    statIds.forEach(id => {
+       const el = document.getElementById(id);
+       if (!el) return;
+       el.style.fontSize = max + 'px';
+       const limit = el.parentElement ? el.parentElement.clientWidth - 24 : el.clientWidth;
+       let size = max, safety = 50;
+       while (el.scrollWidth > limit && size > min && safety-- > 0) {
+          size -= 1;
+       }
+       if (size < commonSize) commonSize = size;
+    });
+
+    // Second pass: apply the common size to all
+    statIds.forEach(id => {
+       const el = document.getElementById(id);
+       if (el) el.style.fontSize = commonSize + 'px';
+    });
+ }
+window.addEventListener('resize', fitStatText);
+
+// -------- RENDER --------
+function updateDashboard(data) {
+console.log('=== UPDATE DASHBOARD ===');
+  console.log('Received data:', data);
+
+  serverState = { ...serverState, ...data };
+  const currency = userPrefs.currency;
+  const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+
+  // Extract data from server response
+  const balance = data.balance || 0;
+  const userDeposits = data.userDeposits || 0;
+  const totalEarnings = data.totalEarnings || 0;
+  console.log('balance:', balance);
+  console.log('userDeposits:', userDeposits);
+  console.log('totalEarnings:', totalEarnings);
+  const investedAmount = data.investedAmount || data.monthBase || 0;
+  const availableForWithdrawal = data.availableForWithdrawal || 0;
+  const availableForInvest = data.availableForInvest || 0;
+  const accruedToday = data.accruedToday || 0;
+
+  // Main balance: userDeposits + totalEarnings
+  document.getElementById('balanceValue').textContent =
+    `${fmtMoney(balance, currency)} ${currencySymbol}`;
+
+  // Free balance = available for investing
+  document.getElementById('freeBalance').innerHTML =
+    `${fmtMoney(availableForInvest, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+
+  // Invested amount
+  document.getElementById('investedBalance').innerHTML =
+    `${fmtMoney(investedAmount, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+
+  // Username (используем displayName, если доступен)
+  document.getElementById('profileUsername').textContent = displayName || username || 'User';
+
+  // Available for withdrawal
+  document.getElementById('withdrawAvailable').innerHTML =
+    `${fmtMoney(availableForWithdrawal, currency)} <span class="cur-sym">${currencySymbol}</span>`;
+
+  // Available for investing
+  document.getElementById('investAvailable').innerHTML =
+    `${fmtMoney(availableForInvest, currency)} ${currencySymbol}`;
+
+  // Today's income
+  latestTodayIncomeRub = accruedToday;
+  renderTodayIncome();
+
+  fitBalanceText();
+  fitStatText();
+}
+function renderTodayIncome(accruedToday) {
+  const currency = userPrefs.currency;
+  const symbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+  const value = accruedToday !== undefined ? accruedToday : latestTodayIncomeRub;
+  const el = document.getElementById('todayIncome');
+  if (el) el.innerHTML = `+${fmtMoney(value, currency)} <span class="cur-sym">${symbol}</span>`;
+}
+function getHistoryFilterPredicate(type) {
+  if (!type || type === 'all') return () => true;
+  const map = { deposit: 'DEPOSIT', withdraw: 'WITHDRAW', invest: 'INVEST' };
+  const wanted = map[type] || null;
+  return (item) => !wanted || (item.type === wanted);
+}
+
+function recomputeFilteredHistory() {
+  const pred = getHistoryFilterPredicate(currentHistoryFilterType);
+  filteredHistory = (serverState.history || []).filter(pred);
+}
+
+function renderHistoryPage(append = false) {
+  const list = document.getElementById('history-list');
+  const placeholder = document.getElementById('history-placeholder');
+  const loadMoreBtn = document.getElementById('load-more-history');
+
+  if (!append) {
+    historyOffset = 0;
+    list.innerHTML = '';
+  }
+
+  const slice = filteredHistory.slice(historyOffset, historyOffset + HISTORY_PAGE_SIZE);
+
+  if (!append && filteredHistory.length === 0) {
+    placeholder.style.display = 'block';
+    loadMoreBtn.style.display = 'none';
+    return;
+  }
+  placeholder.style.display = 'none';
+
+  const currency = userPrefs.currency;
+  const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+
+  slice.forEach(item => {
+    const el = document.createElement('div');
+    el.className = `glass-card history-item status-${item.status.toLowerCase()}`;
+
+    const date = new Date(item.date);
+    const timeStr = `${String(date.getDate()).padStart(2,'0')}.${String(date.getMonth()+1).padStart(2,'0')}.${String(date.getFullYear()).slice(-2)} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+
+    const absAmount = Math.abs(item.amount);
+    let title = '', amountStr = '', subTitle = '';
+
+    switch(item.type) {
+      case 'DEPOSIT':  title = 'Депозит';    amountStr = `+${fmtMoney(absAmount, currency)}`; break;
+      case 'WITHDRAW': title = 'Вывод';      amountStr = `-${fmtMoney(absAmount, currency)}`; break;
+      case 'INVEST':
+        title = 'Инвестиция';
+        amountStr = `${fmtMoney(absAmount, currency)}`;
+        subTitle = `<div style="font-size:12px;color:var(--text-secondary);">Стратегия: ${item.rate}%</div>`;
+        break;
+    }
+
+    const uid = devMode ? ` · #${item.shortId}` : '';
+    el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div><b>${title}</b>${subTitle}<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">${timeStr}${uid}</div></div>
+      <div style="font-weight:700;font-size:16px;text-align:right;">${amountStr} ${currencySymbol}</div>
+    </div>`;
+    list.appendChild(el);
+  });
+
+  historyOffset += slice.length;
+  loadMoreBtn.style.display = historyOffset < filteredHistory.length ? 'block' : 'none';
+}
+
+function applyHistoryFilter(element, type) {
+  if (type) currentHistoryFilterType = type;
+  if (element) {
+    document.querySelectorAll('.filter-chip').forEach(chip => chip.classList.remove('active'));
+    element.classList.add('active');
+  }
+  recomputeFilteredHistory();
+  renderHistoryPage(false);
+}
+
+function renderPortfolio(portfolio) {
+  const list = document.getElementById('portfolio-list');
+  const placeholder = document.getElementById('portfolio-placeholder');
+  list.innerHTML = '';
+  if (!portfolio || portfolio.length === 0) { placeholder.style.display = 'block'; return; }
+  placeholder.style.display = 'none';
+
+  const currency = userPrefs.currency;
+  const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+
+  portfolio.forEach(item => {
+    const el = document.createElement('div');
+    el.className = 'glass-card';
+    const uid = devMode ? `<b>#${item.shortId}</b> · ` : '';
+    el.innerHTML = `${uid}${fmtMoney(item.amount, currency)} ${currencySymbol} · <b>${item.rate}%</b>`;
+    list.appendChild(el);
+  });
+}
+
+// -------- API --------
+async function apiGet(path) {
+   try {
+     const separator = path.includes('?') ? '&' : '?';
+     const fullPath = initData ? `${path}${separator}initData=${encodeURIComponent(initData)}` : path;
+     const r = await fetch(`${SCRIPT_URL}${fullPath}`);
+     if (!r.ok) throw new Error(`Network error: ${r.statusText}`);
+
+     // Проверяем, что ответ действительно JSON
+     const contentType = r.headers.get('content-type');
+     if (!contentType || !contentType.includes('application/json')) {
+       const text = await r.text();
+       console.error("Non-JSON response received:", text.substring(0, 200));
+       throw new Error("Сервер вернул некорректный ответ (не JSON). Возможно, произошла ошибка на сервере.");
+     }
+
+     const data = await r.json();
+     if (!data) throw new Error("Empty response from server");
+     return data;
+   } catch (e) {
+     console.error("API Fetch Error:", e);
+     return { success: false, error: e.message };
+   }
+}
+
+async function initializeApp() {
+  try {
+    startBootScreen();
+    setBootProgress(10);
+
+    const tg = window.Telegram?.WebApp;
+
+    // Детальное логирование Telegram WebApp
+    console.log('=== TELEGRAM WEBAPP DEBUG ===');
+    console.log('1. window.Telegram exists:', !!window.Telegram);
+    console.log('2. WebApp exists:', !!tg);
+    console.log('3. Full WebApp object:', tg);
+    console.log('4. initDataUnsafe:', tg?.initDataUnsafe);
+    console.log('5. initData (raw):', tg?.initData);
+    console.log('=============================');
+
+    tg?.expand?.();
+    username = (tg?.initDataUnsafe?.user?.username) || 'marulin';
+    initData = tg?.initData || '';
+
+    // Получаем chatId из Telegram WebApp (для личных чатов user.id = chat_id)
+    let chatId = tg?.initDataUnsafe?.user?.id || null;
+
+    // ВРЕМЕННО: Для тестирования без Telegram можно указать chatId вручную
+    // Раскомментируйте следующую строку и укажите ваш Telegram ID для тестов
+    // chatId = chatId || '487525838'; // Замените на ваш реальный Telegram ID
+
+    console.log('Telegram WebApp data:', {
+      username: username,
+      chatId: chatId,
+      hasInitData: !!initData,
+      fullUser: tg?.initDataUnsafe?.user,
+      isTelegramEnvironment: !!tg?.initDataUnsafe
+    });
+
+    // ОПТИМИЗАЦИЯ: Показываем UI с заглушками немедленно
+    devMode = localStorage.getItem('devMode') === 'true';
+    const devToggle = document.getElementById('devModeToggle');
+    if (devToggle) devToggle.checked = devMode;
+    const dv = document.getElementById('devVersion');
+    if (dv) dv.style.display = devMode ? 'block' : 'none';
+
+    // ОПТИМИЗАЦИЯ: Показываем закэшированные данные мгновенно (если есть)
+    const cachedData = localStorage.getItem(`cachedData_${username}`);
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        serverState = { ...serverState, ...parsed };
+        userPrefs = parsed.userPrefs || { currency: 'RUB', sbpMethods: [] };
+        hasPendingDeposit = computeHasPendingDeposit();
+
+        // Мгновенно показываем закэшированные данные
+        updateDashboard(serverState);
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+        renderPortfolio(serverState.portfolio);
+        updateWithdrawUI();
+
+        setBootProgress(50);
+        console.log('Loaded cached data, fetching fresh data in background...');
+      } catch (e) {
+        console.warn('Failed to parse cached data:', e);
+      }
+    }
+
+    setBootProgress(cachedData ? 50 : 30);
+
+    console.log('=== CALLING getInitialData from initializeApp ===');
+    // Передаём chatId в backend для сохранения
+    const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}${chatId ? `&chatId=${chatId}` : ''}`);
+    console.log('=== RECEIVED from getInitialData ===', data);
+
+    if (!data || !data.success) {
+      const errorMsg = data?.error ? (typeof data.error === 'string' ? data.error : 'Server error') : 'Failed to get initial data';
+      console.error('Backend error:', errorMsg);
+      throw new Error('Failed to get initial data');
+    }
+
+    setBootProgress(60);
+
+    // Сохраняем displayName из ответа сервера
+    displayName = data.displayName || username;
+    userPrefs = data.userPrefs || { currency: 'RUB', sbpMethods: [] };
+    serverState = { ...serverState, ...data };
+
+    // Получаем сохранённый T-Bank sessionId (если есть)
+    try {
+      const sessionResp = await apiGet(`?action=tbankGetSessionId&username=${encodeURIComponent(username)}`);
+      if (sessionResp && sessionResp.success && sessionResp.sessionId) {
+        tbankSessionId = sessionResp.sessionId;
+        console.log('[TBANK] Restored sessionId from Google Sheets:', tbankSessionId);
+      } else {
+        console.log('[TBANK] No saved sessionId found');
+      }
+    } catch (e) {
+      console.error('[TBANK] Error restoring sessionId:', e);
+    }
+    if (!serverState.balance) serverState.balance = 0;
+    if (!serverState.rate) serverState.rate = 16;
+    if (!serverState.monthBase) serverState.monthBase = 0;
+    if (!serverState.lockedAmount) serverState.lockedAmount = 0;
+    if (!serverState.lockedAmountForWithdrawal) serverState.lockedAmountForWithdrawal = 0;
+    if (!serverState.availableBalance) serverState.availableBalance = serverState.balance - serverState.lockedAmountForWithdrawal;
+    if (!serverState.history) serverState.history = [];
+    if (!serverState.portfolio) serverState.portfolio = [];
+    hasPendingDeposit = computeHasPendingDeposit();
+
+    setBootProgress(75);
+
+    // ОПТИМИЗАЦИЯ: Сохраняем данные в кэш для следующей загрузки
+    try {
+      localStorage.setItem(`cachedData_${username}`, JSON.stringify(data));
+    } catch (e) {
+      console.warn('Failed to cache data:', e);
+    }
+
+    // ОПТИМИЗАЦИЯ: Рендерим UI немедленно без requestAnimationFrame
+    updateDashboard(serverState);
+    setBootProgress(85);
+
+    recomputeFilteredHistory();
+    renderHistoryPage(false);
+    renderPortfolio(serverState.portfolio);
+    updateWithdrawUI();
+
+    setBootProgress(95);
+    scheduleSync(2000);
+    finishBootScreen();
+  } catch (e) {
+    console.error('Initialization error:', e.message, e.stack);
+    finishBootScreen();
+    setStatus('Error: Failed to initialize app', 'error');
+  }
+}
+
+// Updates balance + "Today income"; additionally tracks completion of PENDING deposit
+async function syncBalance(fromScheduler = false) {
+  console.log('=== FRONTEND syncBalance START ===', new Date().toISOString());
+  
+  if (syncInFlight) {
+    console.log('Sync already in flight, skipping');
+    if (fromScheduler) scheduleSync();
+    return;
+  }
+  
+  syncInFlight = true;
+  const syncStartTime = Date.now();
+  const SYNC_TIMEOUT = 30000;
+
+  try {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Sync timeout after 30s')), SYNC_TIMEOUT)
+    );
+
+    const syncPromise = (async () => {
+      let data = null;
+      
+      if (hasPendingDeposit) {
+        console.log('=== CALLING getInitialData (hasPendingDeposit) ===');
+        const full = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+        console.log('=== RECEIVED from getInitialData ===', full);
+        if (full && full.success) {
+          data = full;
+          displayName = full.displayName || username; // Обновляем displayName
+          serverState = { ...serverState, ...full };
+          updateDashboard(serverState);
+          recomputeFilteredHistory();
+          renderHistoryPage(false);
+          renderPortfolio(serverState.portfolio);
+        }
+      } else {
+        console.log('=== CALLING syncBalance + previewAccrual + getHistory ===');
+        const [balRes, accrRes, histRes] = await Promise.allSettled([
+          apiGet(`?action=syncBalance&username=${encodeURIComponent(username)}`),
+          apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`),
+          apiGet(`?action=getHistory&username=${encodeURIComponent(username)}`)
+        ]);
+
+        console.log('=== RECEIVED from syncBalance ===', balRes);
+        console.log('=== RECEIVED from previewAccrual ===', accrRes);
+        console.log('=== RECEIVED from getHistory ===', histRes);
+
+        if (balRes.status === 'fulfilled' && balRes.value?.success) {
+          displayName = balRes.value.displayName || username; // Обновляем displayName
+          data = balRes.value;
+          serverState = { ...serverState, ...balRes.value };
+          updateDashboard(serverState);
+          // ВАЖНО: Обновляем портфель если он пришел в ответе
+          if (balRes.value.portfolio) {
+            renderPortfolio(balRes.value.portfolio);
+          }
+          // ВАЖНО: Обновляем предупреждение о выводе если модальное окно открыто
+          const withdrawModal = document.getElementById('modalWithdraw');
+          if (withdrawModal && withdrawModal.classList.contains('active')) {
+            updateWithdrawWarning();
+          }
+        }
+
+        if (accrRes.status === 'fulfilled' && accrRes.value?.success) {
+          latestTodayIncomeRub = Number(accrRes.value.accruedToday || 0);
+        }
+
+        // ВАЖНО: Обновляем историю если пришла в ответе
+        if (histRes.status === 'fulfilled' && histRes.value?.success && histRes.value?.history) {
+          serverState.history = histRes.value.history;
+          recomputeFilteredHistory();
+          renderHistoryPage(false);
+        }
+
+        renderTodayIncome();
+      }
+
+
+      // Check deposit status transition
+      const before = hasPendingDeposit;
+      const now = computeHasPendingDeposit();
+      hasPendingDeposit = now;
+
+      if (before && !now) {
+        const last = (serverState.history || [])
+          .filter(x => x.type === 'DEPOSIT')
+          .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+        if (last && (last.status === 'APPROVED' || last.status === 'REJECTED')) {
+          // ЗАЩИТА: Не показываем pop-up если депозит был создан только что (меньше 5 секунд назад)
+          const timeSinceCreated = Date.now() - lastDepositCreatedTime;
+          const isJustCreated = lastDepositCreatedTime > 0 && timeSinceCreated < 5000;
+
+          if (!isJustCreated) {
+            const msg = last.status === 'APPROVED' ?
+              'Средства зачислены на счёт' : 'Депозит отклонён';
+
+            // Очищаем старые данные депозита
+            lastDepositAmount = 0;
+            lastDepositShortId = null;
+            lastDepositCreatedTime = 0;
+
+            closeDepositFlowWithPopup(msg);
+          } else {
+            console.log('Skipping deposit notification - deposit was just created');
+            // Очищаем флаги без pop-up
+            lastDepositAmount = 0;
+            lastDepositShortId = null;
+            lastDepositCreatedTime = 0;
+          }
+        }
+        // CANCELED не обрабатывается здесь - обрабатывается только в cancelDeposit()
+      }
+
+      // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Если модалка депозита открыта, но нет PENDING депозитов - закрыть её
+      const depositModal = document.getElementById('modalDeposit');
+      if (depositModal && depositModal.classList.contains('active') && !now) {
+        // Проверяем последний депозит
+        const lastDeposit = (serverState.history || [])
+          .filter(x => x.type === 'DEPOSIT')
+          .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+        // ЗАЩИТА: Не показываем pop-up если депозит был создан только что (меньше 5 секунд назад)
+        const timeSinceCreated = Date.now() - lastDepositCreatedTime;
+        const isJustCreated = lastDepositCreatedTime > 0 && timeSinceCreated < 5000;
+
+        if (!isJustCreated) {
+          if (lastDeposit && lastDeposit.status === 'APPROVED') {
+            lastDepositAmount = 0;
+            lastDepositShortId = null;
+            lastDepositCreatedTime = 0;
+            closeDepositFlowWithPopup('Средства зачислены на счёт');
+          } else if (lastDeposit && lastDeposit.status === 'REJECTED') {
+            // ТОЛЬКО для REJECTED (отклонено админом), не для CANCELED (отменено пользователем)
+            lastDepositAmount = 0;
+            lastDepositShortId = null;
+            lastDepositCreatedTime = 0;
+            closeDepositFlowWithPopup('Депозит отклонён');
+          }
+        } else {
+          console.log('Skipping deposit modal closure - deposit was just created');
+        }
+        // CANCELED не обрабатывается здесь - обрабатывается только в cancelDeposit()
+      }
+
+      syncBackoffMs = 20000; // Reset backoff on success
+      console.log('=== FRONTEND syncBalance SUCCESS ===');
+      return data;
+    })();
+
+    // Race between sync and timeout
+    await Promise.race([syncPromise, timeoutPromise]);
+
+  } catch (e) {
+    console.error('Sync error:', e.message);
+    // Increase backoff on error, max 60s
+    syncBackoffMs = Math.min((syncBackoffMs || 20000) * 2, 60000);
+  } finally {
+    syncInFlight = false;
+    const syncDuration = Date.now() - syncStartTime;
+    console.log(`=== FRONTEND syncBalance END === Duration: ${syncDuration}ms`);
+    
+    if (fromScheduler) {
+      scheduleSync();
+    }
+  }
+}
+
+async function cancelDeposit() {
+  try {
+    const r = await apiGet(`?action=cancelPendingDeposit&username=${username}`);
+    if (r && r.success) {
+      // Очищаем локальные данные о pending депозите
+      hasPendingDeposit = false;
+      lastDepositAmount = 0;
+      lastDepositShortId = null;
+
+      // Обновляем историю чтобы отменённый депозит не показывался как PENDING
+      const historyData = await apiGet(`?action=getHistory&username=${encodeURIComponent(username)}`);
+      if (historyData && historyData.success) {
+        serverState.history = historyData.history;
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+      }
+
+      // Возвращаемся к шагу 1
+      showDepositStep(1);
+      document.getElementById('depositAmount').value = '';
+      document.getElementById('depositAgree').checked = false;
+      updateDepositBtnState();
+
+      showPopup('Депозит отменён');
+    } else {
+      showPopup('Не удалось отменить депозит');
+    }
+  } catch {
+    showPopup('Ошибка сети');
+  }
+}
+
+// Update "Today income" — without using `res` name
+async function refreshTodayIncome() {
+  let accrued = latestTodayIncomeRub; // default value — what was
+  try {
+    const r = await apiGet(`?action=previewAccrual&username=${encodeURIComponent(username)}`);
+    if (r && r.success) {
+      accrued = Number(r.accruedToday || 0);
+    }
+  } catch (e) {
+    console.debug('refreshTodayIncome error:', e);
+  } finally {
+    latestTodayIncomeRub = accrued;
+    renderTodayIncome();
+  }
+}
+
+// -------- EVENTS --------
+function setupEventListeners() {
+  const $id = (x) => document.getElementById(x);
+  const onIf = (el, ev, fn, opts) => { if (el) el.addEventListener(ev, fn, opts); };
+
+  // Click on modal background — close. Close currency dropdown and custom select.
+  document.addEventListener('click', (e) => {
+      const target = e.target;
+      if (target && target.classList && target.classList.contains('modal-overlay')) {
+          closeAllModals();
+      }
+    const anyOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.classList.contains('active'));
+    if (!anyOpen) document.body.classList.remove('modal-open');
+
+    const currencyDropdown = $id('currencyDropdown');
+    const currencyToggler  = document.querySelector('.balance-currency');
+    if (currencyDropdown && currencyToggler && !currencyDropdown.contains(target) && !currencyToggler.contains(target)) {
+      currencyDropdown.classList.remove('open');
+    }
+
+    // Close custom select if click outside
+    const customSelect = $id('withdraw-recipient-select');
+    if (customSelect && !customSelect.contains(target)) {
+      closeCustomSelect();
+    }
+  });
+  // React to change only of specific toggle
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'depositAgree') updateDepositBtnState();
+  });
+  // (IMPORTANT) on modal open call setTimeout(updateDepositBtnState, 0) in openModal('deposit')
+
+  // Custom select events
+  const selectBtn = $id('select-btn');
+  onIf(selectBtn, 'click', (e) => {
+    e.stopPropagation();
+    toggleCustomSelect();
+  });
+
+  const selectOptions = document.querySelectorAll('#withdraw-recipient-select .select-options li');
+  selectOptions.forEach(li => {
+    onIf(li, 'click', (e) => {
+      e.stopPropagation();
+      selectCustomOption(li);
+    });
+  });
+
+  // Dev mode
+  onIf(document.getElementById('devModeToggle'), 'change', function () {
+  devMode = this.checked;
+  localStorage.setItem('devMode', devMode);
+  const dv = document.getElementById('devVersion');
+  if (dv) dv.style.display = devMode ? 'block' : 'none';
+  renderHistoryPage(false);
+  renderPortfolio(serverState.portfolio);
+});
+
+  // Auto renew toggle
+  onIf(document.getElementById('autoRenewToggle'), 'change', async function () {
+    userPrefs.autoRenew = this.checked;
+    try {
+      await apiGet(`?action=setUserPref&username=${encodeURIComponent(username)}&key=autoRenew&value=${this.checked}`);
+      showPopup(this.checked ? 'Автопродление включено' : 'Автопродление отключено');
+    } catch (err) {
+      console.error('Failed to update autoRenew:', err);
+      showPopup('Ошибка сохранения настройки');
+      this.checked = !this.checked;
+      userPrefs.autoRenew = this.checked;
+    }
+  });
+
+
+// Deposit – create request
+onIf($id('depositConfirmBtn'), 'click', async function () {
+  const amountEl = $id('depositAmount');
+  const agreeEl = $id('depositAgree');
+  const amount = amountEl ? Math.round(parseAmount(amountEl.value) * 100) / 100 : 0;
+  const agreed = agreeEl ? agreeEl.checked : false;
+
+  // ВАЛИДАЦИЯ: тумблер согласия
+  if (!agreed) {
+    showPopup('Необходимо согласиться с условиями');
+    return;
+  }
+
+  // ВАЛИДАЦИЯ: минимальная и максимальная сумма
+  if (amount < 100) {
+    showPopup('Минимальная сумма депозита: 100 ₽');
+    return;
+  }
+  if (amount > 10000000) {
+    showPopup('Максимальная сумма депозита: 10 000 000 ₽');
+    return;
+  }
+
+  this.disabled = true;
+
+  try {
+    const resp = await apiGet(
+      `?action=requestDeposit&username=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}`
+    );
+
+    if (resp && resp.success) {
+      showPopup('Запрос на депозит отправлен!');
+      hasPendingDeposit = true;
+      lastDepositAmount = amount;
+      lastDepositShortId = resp && (resp.shortId || resp.requestShortId) || null;
+      lastDepositCreatedTime = Date.now(); // Запоминаем время создания
+      const cleanAmount = lastDepositAmount.toString().replace(/[^\d]/g, '');
+      amountEl.value = cleanAmount;
+      hydrateDepositStep2(lastDepositAmount, lastDepositShortId);
+      showDepositStep(2);
+
+      // Обновляем данные без полной переинициализации
+      const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+      if (data && data.success) {
+        serverState = { ...serverState, ...data };
+        updateDashboard(serverState);
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+        renderPortfolio(serverState.portfolio);
+      }
+    } else {
+      showPopup('Error: ' + ((resp && resp.error) || 'unknown'));
+    }
+  } catch (e) {
+    showPopup('Ошибка сети.');
+  } finally {
+    this.disabled = false;
+  }
+});
+
+  // Withdraw — bank selection (icons)
+  document.querySelectorAll('.bank-icon').forEach((icon) => {
+    icon.addEventListener('click', () => {
+      document.querySelectorAll('.bank-icon').forEach(i => i.classList.remove('selected'));
+      icon.classList.add('selected');
+    });
+  });
+
+  // Withdraw — save SBP credentials
+  onIf($id('save-sbp-btn'), 'click', async function () {
+    const phoneEl = $id('withdraw-sbp-phone');
+    // Используем чистый номер из data-атрибута или парсим из value
+    const phone = phoneEl ? (phoneEl.dataset.phone || phoneEl.value.replace(/\D/g, '')) : '';
+    const selectedBankEl = document.querySelector('.bank-icon.selected');
+
+    // Валидация: проверяем что номер начинается с 7 и имеет 11 цифр
+    if (!phone || phone.length !== 11 || phone[0] !== '7') {
+      showPopup('Введите корректный номер телефона (11 цифр, начинается с 7)');
+      return;
+    }
+
+    if (!selectedBankEl) {
+      showPopup('Выберите банк');
+      return;
+    }
+
+    const bank = selectedBankEl.dataset.bank;
+    userPrefs.sbpMethods = userPrefs.sbpMethods || [];
+    userPrefs.sbpMethods.unshift({ phone, bank });
+
+    this.disabled = true;
+    try {
+      const resp = await apiGet(`?action=saveUserPrefs&username=${encodeURIComponent(username)}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
+      if (resp && resp.success) {
+        userPrefs = resp.savedPrefs;
+        withdrawAddingNew = false; // <-- reset, credentials added
+        updateWithdrawUI();
+      } else {
+        showPopup('Failed to save credentials.');
+      }
+    } catch (e) {
+      showPopup('Network error.');
+    } finally { this.disabled = false; }
+  });
+
+  // Custom select for withdrawal
+  onIf($id('select-trigger'), 'click', function(e) {
+    e.stopPropagation();
+    toggleCustomSelect();
+  });
+
+  // Close custom select on outside click (already handled in general click listener)
+
+  // Withdraw – create request
+onIf($id('withdrawConfirmBtn'), 'click', async function () {
+  const amountEl = $id('withdrawAmount');
+  const trigger = $id('select-trigger');
+  const amount = amountEl ? Math.round(parseAmount(amountEl.value) * 100) / 100 : 0;
+  const idx = trigger ? parseInt(trigger.dataset.index) : -1;
+  const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
+  const available = (serverState.balance || 0) - (serverState.lockedAmount || 0);
+
+  if (amount <= 0) { showPopup('Введите сумму.'); return; }
+  if (amount > available) { showPopup('Недостаточно свободных средств.'); return; }
+  if (!recipient) { showPopup('Выберите реквизиты для вывода.'); return; }
+
+  this.disabled = true;
+  try {
+    const details = JSON.stringify({ method: 'sbp', phone: recipient.phone, bank: recipient.bank });
+    const resp = await apiGet(`?action=requestWithdraw&username=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}&details=${encodeURIComponent(details)}`);
+    if (resp && resp.success) {
+      showPopup('Запрос на вывод отправлен!');
+      closeModal('withdraw');
+      
+      // Обновляем данные без полной переинициализации
+      const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+      if (data && data.success) {
+        serverState = { ...serverState, ...data };
+        updateDashboard(serverState);
+        recomputeFilteredHistory();
+        renderHistoryPage(false);
+        renderPortfolio(serverState.portfolio);
+      }
+    } else {
+      showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестна'));
+    }
+  } catch (e) {
+    showPopup('Ошибка сети.');
+  } finally {
+    this.disabled = false;
+  }
+});
+
+  // New Investment — confirm
+  onIf($id('niConfirmBtn'), 'click', async function () {
+    const amountEl = $id('niAmount');
+    const amount = amountEl ? Math.round(parseAmount(amountEl.value) * 100) / 100 : 0;
+    const rate = lastChosenRate;
+    if (!rate || amount <= 0) { showPopup('Enter correct amount.'); return; }
+    const availableText = document.getElementById('investAvailable').textContent;
+    const available = parseAmount(availableText.replace(/[^\d.,]/g, ''));
+    if (amount > available) { showPopup('Недостаточно средств для инвестирования.'); return; }
+    this.disabled = true;
+    try {
+      const resp = await apiGet(`?action=logStrategyInvestment&username=${encodeURIComponent(username)}&rate=${encodeURIComponent(rate)}&amount=${encodeURIComponent(amount)}`);
+// После создания инвестиции
+if (resp && resp.success) {
+  showPopup('Инвестиция создана!');
+  closeModal('newInvestment');
+  
+  // Обновляем данные без полной переинициализации
+  const data = await apiGet(`?action=getInitialData&username=${encodeURIComponent(username)}`);
+  if (data && data.success) {
+    serverState = { ...serverState, ...data };
+    updateDashboard(serverState);
+    recomputeFilteredHistory();
+    renderHistoryPage(false);
+    renderPortfolio(serverState.portfolio);
+  }
+} else {
+        showPopup('Ошибка: ' + ((resp && resp.error) || 'неизвестна'));
+      }
+    } catch (e) {
+      showPopup('Ошибка сети');
+    } finally {
+      this.disabled = false;
+    }
+  });
+
+  // History — "Load more"
+  onIf($id('load-more-history'), 'click', () => {
+    renderHistoryPage(true);
+  });
+}
+
+// -------- UI UTILS --------
+// Boot screen helpers
+const BOOT_HINTS = [
+  'Ищем лучшие инвестиционные инструменты',
+  'Танцуем с бубном',
+  'Оптимизируем процентные ставки',
+  'Увеличиваем прибыльность до бесконечности',
+  'Находим ключ, чтобы впустить тебя',
+  'Аккуратно переводим твои средства на депозит',
+];
+
+let bootHintsPicked = [];
+let bootProgressTarget = 0, bootProgressTimer = null;
+
+function startBootScreen() {
+  const el = document.getElementById('boot-screen');
+  if (!el) return;
+  el.classList.remove('hidden');
+  bootHintsPicked = pickTwoHints_();
+  setBootHint(bootHintsPicked[0]);
+  setBootProgress(5);
+}
+function pickTwoHints_() {
+  const arr = [...BOOT_HINTS];
+  const a = arr.splice(Math.floor(Math.random()*arr.length),1)[0];
+  const b = arr[Math.floor(Math.random()*arr.length)];
+  return [a,b];
+}
+function setBootHint(text) {
+  const h = document.getElementById('boot-hint');
+  if (h) {
+    // ОПТИМИЗАЦИЯ: Убираем задержку - мгновенно показываем текст
+    h.textContent = text;
+    h.style.opacity = '1';
+  }
+}
+function setBootProgress(p) {
+  // ОПТИМИЗАЦИЯ: Мгновенная установка прогресса без анимации
+  bootProgressTarget = Math.max(0, Math.min(100, p));
+  const fill = document.getElementById('boot-progress-fill');
+  if (!fill) return;
+  clearInterval(bootProgressTimer);
+
+  // Устанавливаем прогресс мгновенно
+  fill.style.width = bootProgressTarget + '%';
+
+  // switch phrase roughly in the middle
+  if (bootProgressTarget > 55 && bootHintsPicked[1]) {
+    setBootHint(bootHintsPicked[1]);
+    bootHintsPicked[1] = null;
+  }
+}
+function finishBootScreen() {
+  const overlay = document.getElementById('boot-screen');
+  const title = document.getElementById('boot-title');
+  const target = document.getElementById('appBrand');
+
+  setBootProgress(100);
+
+  if (overlay && title && target) {
+    // Instant hide for title
+    title.style.opacity = '0';
+
+    // Show target title immediately
+    target.style.opacity = '1';
+
+    // Hide overlay immediately
+    overlay.classList.add('hidden');
+  } else if (overlay) {
+    // Fallback
+    overlay.classList.add('hidden');
+  }
+}
+// Redefine setStatus: use only for errors
+function setStatus(text, type = 'error') {
+  if (type === 'error') {
+    // show existing popup notification
+    showPopup(text || 'Error', 3000);
+  }
+  // loading/synced ignored here — boot screen handles it
+}
+
+function setDepositAmount(amount) {
+  const input = document.getElementById('depositAmount');
+  input.value = amount;
+  formatAmountInput(input);
+  updateDepositBtnState();
+
+  // Снимаем фокус с кнопки чтобы она не оставалась "нажатой" (серой)
+  if (document.activeElement && document.activeElement.classList.contains('quick-amount-btn')) {
+    document.activeElement.blur();
+  }
+}
+
+function setMaxWithdrawAmount() {
+  const available = serverState.availableForWithdrawal || 0;
+  const input = document.getElementById('withdrawAmount');
+  if (input) {
+    input.value = available.toString().replace('.', ',');
+    formatAmountInput(input);
+    updateWithdrawBtnState();
+    updateWithdrawWarning();
+  }
+  // Снимаем фокус с кнопки
+  if (document.activeElement) {
+    document.activeElement.blur();
+  }
+}
+
+function setMaxInvestAmount() {
+  const available = serverState.availableForInvest || 0;
+  const input = document.getElementById('niAmount');
+  if (input) {
+    input.value = available.toString().replace('.', ',');
+    formatAmountInput(input);
+    updateInvestButtonState();
+  }
+  // Снимаем фокус с кнопки
+  if (document.activeElement) {
+    document.activeElement.blur();
+  }
+}
+function hydrateDepositStep2(amountRub, shortId) {
+  const currency = userPrefs.currency;
+  const currencySymbol = currency === 'RUB' ? '₽' : (currency === 'USD' ? '$' : '€');
+
+  const amountEl = document.getElementById('deposit-amount-display');
+  const codeEl = document.getElementById('deposit-short-display');
+  if (amountEl) amountEl.value = `${fmtMoney(amountRub, currency)} ${currencySymbol}`;
+  if (codeEl) codeEl.value = shortId ? `#${shortId}` : '—';
+
+  // Hide the loading spinner after showing step 2
+  const spinner = document.querySelector('.spinner-big');
+  if (spinner) spinner.style.display = 'none';
+}
+
+function closeDepositFlowWithPopup(msg) {
+  closeModal('deposit');    // close modal
+  openPage('Home');         // go to Home
+  showPopup(msg, 3500);     // show notification
+}
+
+function selectWithdrawMethod(method) {
+  // if came here after "Add new credentials" — lead to addition form
+  if (withdrawAddingNew && method === 'sbp') {
+    showAddRecipientForm('sbp');
+    return;
+  }
+
+  if (method === 'sbp') {
+    const has = (userPrefs.sbpMethods || []).length > 0;
+    if (has) {
+      // immediately to withdrawal form with dropdown list
+      document.getElementById('withdraw-method-choice').style.display = 'none';
+      document.getElementById('withdraw-add-sbp-form').style.display = 'none';
+      document.getElementById('withdraw-view').style.display = 'block';
+      const sel = document.getElementById('withdraw-recipient-select');
+      if (sel) sel.selectedIndex = Math.max(0, sel.selectedIndex); // just in case
+    } else {
+      showAddRecipientForm('sbp');
+    }
+  }
+
+  // TODO: if add crypto/bank — logic by analogy
+}
+
+function toggleCurrencyDropdown(event) {
+  event.stopPropagation();
+  document.getElementById('currencyDropdown').classList.toggle('open');
+}
+
+async function selectCurrency(currency, event) {
+  event.stopPropagation();
+  userPrefs.currency = currency;
+  document.getElementById('currentCurrency').textContent = currency;
+  document.querySelectorAll('.currency-option').forEach(opt => opt.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('currencyDropdown').classList.remove('open');
+
+  updateDashboard(serverState);
+  recomputeFilteredHistory();
+  renderHistoryPage(false);
+  renderPortfolio(serverState.portfolio);
+
+  await apiGet(`?action=saveUserPrefs&username=${username}&prefs=${encodeURIComponent(JSON.stringify(userPrefs))}`);
+}
+
+function openNewInvestment(rate) {
+  lastChosenRate = rate;
+  const names = { 16: 'Ликвидный', 17: 'Стабильный', 18: 'Агрессивный' };
+  const name = names[rate] || `Strategy ${rate}%`;
+  document.getElementById('niStrategyReadonly').textContent = name;
+  document.getElementById('niAmount').value = '';
+  // NEW: close any modals before opening "New Investment"
+  closeAllModals();
+  openModal('newInvestment');
+  setTimeout(updateInvestButtonState, 0);
+}
+
+function updateInvestButtonState() {
+  const amountEl = document.getElementById('niAmount');
+  const btn = document.getElementById('niConfirmBtn');
+  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100;
+  const available = serverState.availableForInvest || 0;
+  btn.disabled = amount <= 0 || amount > available;
+}
+
+function updateWithdrawBtnState() {
+  const amountEl = document.getElementById('withdrawAmount');
+  const trigger = document.getElementById('select-trigger');
+  const btn = document.getElementById('withdrawConfirmBtn');
+  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100;
+  const idx = trigger ? parseInt(trigger.dataset.index) : -1;
+  const recipient = idx >= 0 ? (userPrefs.sbpMethods || [])[idx] : null;
+  const available = serverState.availableForWithdrawal || 0;
+  btn.disabled = amount <= 0 || amount > available || !recipient;
+}
+
+function updateWithdrawWarning() {
+  const amountEl = document.getElementById('withdrawAmount');
+  const warningDiv = document.getElementById('withdraw-warning');
+  const warningContent = document.getElementById('withdraw-warning-content');
+
+  if (!amountEl || !warningDiv || !warningContent) return;
+
+  const amount = Math.round(parseAmount(amountEl.value) * 100) / 100;
+
+  if (amount <= 0) {
+    warningDiv.style.display = 'none';
+    return;
+  }
+
+  const portfolio = serverState.portfolio || [];
+  const userDeposits = serverState.userDeposits || 0;
+  const investedAmount = serverState.investedAmount || 0;
+  const availableForWithdrawal = serverState.availableForWithdrawal || 0;
+
+  // КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Инвестиции закрываются если вывод затрагивает userDeposits
+  // availableForWithdrawal может включать проценты, но если amount > (userDeposits - investedAmount),
+  // то придётся закрывать инвестиции
+  const freeUserDeposits = userDeposits - investedAmount; // Свободные депозиты (не инвестированные)
+
+  // Если выводимая сумма НЕ превышает свободные депозиты, инвестиции не закрываются
+  if (amount <= freeUserDeposits) {
+    warningDiv.style.display = 'none';
+    return;
+  }
+
+  // Нужно закрыть инвестиции на сумму shortfall
+  const shortfall = amount - freeUserDeposits;
+
+  // ТОЛЬКО 16% инвестиции могут быть закрыты досрочно
+  // 17%/18% заблокированы до unfreezeDate и не учитываются в availableForWithdrawal
+  const now = new Date();
+  const liquidInvestments = portfolio.filter(inv => inv.rate === 16);
+
+  // Сортируем 16% инвестиции по дате создания (старые первыми)
+  const sorted = liquidInvestments.slice().sort((a, b) => {
+    const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return aDate - bDate;
+  });
+
+  // Найдем, какие инвестиции будут закрыты
+  let remaining = shortfall;
+  const toClose = [];
+  let totalPendingInterestLost = 0;
+
+  for (const inv of sorted) {
+    if (remaining <= 0) break;
+
+    const currentAmount = inv.amount;
+    const accruedInterest = inv.accruedInterest || 0;
+
+    // Считаем сколько будет закрыто
+    const amountToClose = Math.min(remaining, currentAmount);
+
+    // Считаем pending income (сегодняшний незаблокированный доход) ТОЛЬКО для закрываемой суммы
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const createdAt = new Date(inv.createdAt);
+    const dailyRate = (inv.rate / 100) / 365.25;
+    const effectiveStart = createdAt > todayStart ? createdAt : todayStart;
+    const msElapsedToday = Math.max(0, now.getTime() - effectiveStart.getTime());
+    const daysElapsedToday = msElapsedToday / (24 * 60 * 60 * 1000);
+
+    // ИСПРАВЛЕНИЕ: Считаем pending доход только для закрываемой суммы
+    const pendingTodayForClosedAmount = amountToClose * dailyRate * daysElapsedToday;
+
+    if (remaining >= currentAmount) {
+      // Полное закрытие
+      toClose.push({ ...inv, closureType: 'full', closedAmount: currentAmount });
+      totalPendingInterestLost += pendingTodayForClosedAmount;
+      remaining -= currentAmount;
+    } else {
+      // Частичное закрытие
+      toClose.push({ ...inv, closureType: 'partial', closedAmount: remaining });
+      totalPendingInterestLost += pendingTodayForClosedAmount;
+      remaining = 0;
+    }
+  }
+
+  // Формируем предупреждение
+  if (toClose.length === 0) {
+    warningDiv.style.display = 'none';
+    return;
+  }
+
+  const currency = userPrefs.currency || 'RUB';
+  const currencySymbol = getCurrencySymbol();
+  let html = '<p style="margin: 0 0 8px 0;"><b>Будут закрыты инвестиции:</b></p><ul style="margin: 0; padding-left: 20px;">';
+
+  toClose.forEach(inv => {
+    const typeText = inv.closureType === 'full' ? 'полностью' : 'частично';
+    const strategyName = inv.rate === 16 ? 'Ликвидный' : inv.rate === 17 ? 'Стабильный' : 'Агрессивный';
+    html += `<li>${strategyName} (${inv.rate}%): ${fmtMoney(inv.closedAmount, currency)} ${currencySymbol} (${typeText})</li>`;
+  });
+
+  html += '</ul>';
+
+  if (totalPendingInterestLost > 0.01) {
+    html += `<p style="margin: 8px 0 0 0; color: #dc2626;"><b>⚠ Будет потерян незаблокированный доход за сегодня: ~${fmtMoney(totalPendingInterestLost, currency)} ${currencySymbol}</b></p>`;
+  }
+
+  warningContent.innerHTML = html;
+  warningDiv.style.display = 'block';
+}
+
+
+function showAddRecipientForm(method) {
+  if (method !== 'sbp') return;
+  document.getElementById('withdraw-method-choice').style.display = 'none';
+  document.getElementById('withdraw-add-sbp-form').style.display = 'block';
+  const phoneInput = document.getElementById('withdraw-sbp-phone');
+  if (phoneInput) phoneInput.focus();
+  document.querySelectorAll('.bank-icon').forEach(i => i.classList.remove('selected'));
+}
+
+function updateWithdrawUI() {
+  const optionsContainer = document.getElementById('select-options');
+  const trigger = document.getElementById('select-trigger');
+  if (!optionsContainer || !trigger) return;
+
+  optionsContainer.innerHTML = '';
+  trigger.textContent = 'Выберите реквизиты';
+
+  if (userPrefs.sbpMethods && userPrefs.sbpMethods.length > 0) {
+    userPrefs.sbpMethods.forEach((method, index) => {
+      const option = document.createElement('div');
+      option.className = 'select-option';
+      option.dataset.index = index;
+      option.textContent = `СБП: ${method.phone} (${method.bank})`;
+      option.onclick = () => selectCustomOption(option);
+      optionsContainer.appendChild(option);
+    });
+    const addNewOption = document.createElement('div');
+    addNewOption.className = 'select-option add-new';
+    addNewOption.dataset.value = 'add_new';
+    addNewOption.textContent = '+ Добавить реквизиты';
+    addNewOption.onclick = () => selectCustomOption(addNewOption);
+    optionsContainer.appendChild(addNewOption);
+
+    document.getElementById('withdraw-view').style.display = 'block';
+    document.getElementById('withdraw-method-choice').style.display = 'none';
+    document.getElementById('withdraw-add-sbp-form').style.display = 'none';
+
+  } else {
+    document.getElementById('withdraw-view').style.display = 'none';
+    document.getElementById('withdraw-method-choice').style.display = 'block';
+    document.getElementById('withdraw-add-sbp-form').style.display = 'none';
+  }
+}
+
+function toggleCustomSelect() {
+  const container = document.getElementById('withdraw-recipient-select');
+  const options = document.getElementById('select-options');
+  const trigger = document.getElementById('select-trigger');
+  if (!container || !options || !trigger) return;
+
+  const isActive = options.classList.contains('active');
+  closeCustomSelect(); // Close others if open
+  if (!isActive) {
+    options.classList.add('active');
+    trigger.classList.add('active');
+    container.classList.add('active');
+  }
+}
+
+function selectCustomOption(option) {
+  const container = document.getElementById('withdraw-recipient-select');
+  const trigger = document.getElementById('select-trigger');
+  const options = document.getElementById('select-options');
+  if (!container || !trigger || !options) return;
+
+  // Update trigger text
+  trigger.textContent = option.textContent;
+  trigger.dataset.value = option.dataset.value || option.dataset.index;
+  trigger.dataset.index = option.dataset.index || -1;
+
+  // Close dropdown
+  options.classList.remove('active');
+  trigger.classList.remove('active');
+  container.classList.remove('active');
+
+  // Handle add new
+  if (option.dataset.value === 'add_new') {
+    withdrawAddingNew = true;
+    document.getElementById('withdraw-view').style.display = 'none';
+    document.getElementById('withdraw-method-choice').style.display = 'block';
+    document.getElementById('withdraw-add-sbp-form').style.display = 'none';
+  } else {
+    updateWithdrawBtnState();
+  }
+}
+
+function closeCustomSelect() {
+  const options = document.getElementById('select-options');
+  const trigger = document.getElementById('select-trigger');
+  const container = document.getElementById('withdraw-recipient-select');
+  if (options) options.classList.remove('active');
+  if (trigger) trigger.classList.remove('active');
+  if (container) container.classList.remove('active');
+}
+
+
+// Update general click listener to close custom select
+// Already handled in document.click, but ensure closeCustomSelect() is called there
+
+// Reliable copying + change icon to checkmark for 2 sec
+async function copyToClipboard(text, btnEl) {
+  const inTG = !!(window.Telegram && window.Telegram.WebApp); // key line
+
+  const ok = await (async () => {
+    try {
+      if (!inTG && navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true; // here previously threw violation — now not called at all in TG
+      }
+      throw new Error();
+    } catch {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.left='-9999px';
+        document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, ta.value.length);
+        const res = document.execCommand('copy'); document.body.removeChild(ta);
+        return res;
+      } catch { return false; }
+    }
+  })();
+
+  if (ok) {
+    if (btnEl) {
+      if (!btnEl.dataset.orig) btnEl.dataset.orig = btnEl.innerHTML;
+      btnEl.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
+      btnEl.blur(); // Remove focus to prevent stuck state
+      setTimeout(() => { btnEl.innerHTML = btnEl.dataset.orig; }, 2000);
+    }
+    let msg = 'Скопировано';
+    if (text.includes('₽') || text.includes('$') || text.includes('€')) msg = 'Сумма скопирована';
+    else if (text.startsWith('#')) msg = 'Код скопирован';
+    else if (text.includes('+7') || text.includes('+')) msg = 'Номер скопирован';
+    showPopup(msg);
+  } else {
+    if (btnEl) btnEl.blur();
+    showPopup('Не удалось скопировать. Скопируйте вручную.');
+  }
+}
+
+// -------- EVENING PERCENT --------
+// T-Bank state
+let tbankSessionId = null;
+let tbankConnected = false;
+let tbankAccounts = [];
+
+function updateEveningTimeDisplay() {
+  const startTime = parseInt(document.getElementById('eveningStartTime').value);
+  const endTime = parseInt(document.getElementById('eveningEndTime').value);
+
+  document.getElementById('eveningStartTimeDisplay').textContent =
+    `${String(startTime).padStart(2, '0')}:00`;
+  document.getElementById('eveningEndTimeDisplay').textContent =
+    `${String(endTime).padStart(2, '0')}:00`;
+}
+
+function updateEveningPercentBtnState() {
+  const agreeEl = document.getElementById('eveningPercentAgree');
+  const btn = document.getElementById('eveningPercentApplyBtn');
+  if (btn && agreeEl) {
+    btn.disabled = !agreeEl.checked;
+  }
+}
+
+function showTBankStep(step, data = null) {
+  const step1 = document.getElementById('tbankStep1');
+  const stepSMS = document.getElementById('tbankStepSMS');
+  const stepCard = document.getElementById('tbankStepCard');
+  const stepSecurityQuestion = document.getElementById('tbankStepSecurityQuestion');
+  const timeConfig = document.getElementById('timeConfigSection');
+
+  // Hide all steps first
+  if (step1) step1.style.display = 'none';
+  if (stepSMS) stepSMS.style.display = 'none';
+  if (stepCard) stepCard.style.display = 'none';
+  if (stepSecurityQuestion) stepSecurityQuestion.style.display = 'none';
+  if (timeConfig) timeConfig.style.display = 'none';
+
+  // Show requested step
+  if (step === 'step1') {
+    if (step1) step1.style.display = 'block';
+  } else if (step === 'sms') {
+    if (stepSMS) stepSMS.style.display = 'block';
+  } else if (step === 'dynamic-question') {
+    // Universal dynamic question handler
+    if (stepSecurityQuestion) {
+      stepSecurityQuestion.style.display = 'block';
+      // Set question text from data.question
+      const questionText = document.getElementById('tbankQuestionText');
+      if (questionText && data && data.question) {
+        questionText.textContent = data.question;
+      }
+
+      // Update input placeholder based on field type
+      const answerInput = document.getElementById('tbankSecurityAnswer');
+      if (answerInput && data) {
+        // Remove old event listeners by cloning the node
+        const newInput = answerInput.cloneNode(true);
+        answerInput.parentNode.replaceChild(newInput, answerInput);
+
+        if (data.fieldType === 'card-input') {
+          newInput.placeholder = '0000 0000 0000 0000';
+          newInput.type = 'text';
+          newInput.inputMode = 'numeric';
+          newInput.maxLength = 19;
+          // Add formatting for card input
+          newInput.addEventListener('input', function(e) {
+            formatCardInput(e.target);
+          });
+        } else if (data.fieldType === 'password-input') {
+          newInput.placeholder = 'Введите пароль';
+          newInput.type = 'password';
+          newInput.inputMode = 'text';
+          newInput.maxLength = 64;
+        } else {
+          newInput.placeholder = 'Ваш ответ';
+          newInput.type = 'text';
+          newInput.inputMode = 'text';
+          newInput.maxLength = 200;
+        }
+      }
+
+      console.log('[TBANK] Showing dynamic question:', data);
+    }
+  } else if (step === 'card') {
+    if (stepCard) stepCard.style.display = 'block';
+  } else if (step === 'security-question') {
+    if (stepSecurityQuestion) {
+      stepSecurityQuestion.style.display = 'block';
+      // Set question text
+      const questionText = document.getElementById('tbankQuestionText');
+      if (questionText && data) {
+        questionText.textContent = data;
+      }
+    }
+  } else if (step === 'connected') {
+    if (timeConfig) timeConfig.style.display = 'block';
+  }
+}
+
+let tbankPollingInterval = null;
+let lastShownQuestion = null; // Track last shown question to avoid re-rendering
+let tbankConnectionHandled = false; // Prevent multiple onTBankConnected calls
+
+async function connectTBank() {
+  const phoneInput = document.getElementById('tbankPhone');
+  const btn = document.getElementById('tbankConnectBtn');
+
+  const phone = phoneInput?.dataset.phone || phoneInput?.value.replace(/\D/g, '');
+
+  if (!phone || phone.length !== 11) {
+    showPopup('Введите корректный номер телефона');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Пробуждение сервиса...';
+  }
+
+  // Сначала проверяем доступность сервиса (может занять до 60 сек для cold start)
+  try {
+    showPopup('Проверка сервиса... При первом запросе после деплоя может потребоваться до 60 секунд', 6000);
+
+    const healthCheck = await apiGet(`?action=tbankHealthCheck`);
+
+    console.log('Health check response:', JSON.stringify(healthCheck));
+
+    if (!healthCheck || !healthCheck.success) {
+      const errorMsg = healthCheck?.message || 'Сервис Puppeteer недоступен';
+      console.error('Health check failed:', errorMsg, 'Full response:', healthCheck);
+      showPopup('DEBUG: ' + errorMsg, 8000);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Подключить Т-Банк';
+      }
+      return;
+    }
+
+    console.log('Health check successful:', healthCheck.message);
+  } catch (e) {
+    console.error('Health check exception:', e);
+    showPopup('DEBUG: Ошибка проверки: ' + e.message, 8000);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Подключить Т-Банк';
+    }
+    return;
+  }
+
+  if (btn) {
+    btn.textContent = 'Подключение...';
+  }
+
+  try {
+    const resp = await apiGet(
+      `?action=tbankLogin&username=${encodeURIComponent(username)}&phone=${encodeURIComponent('+' + phone)}`
+    );
+
+    console.log('tbankLogin response:', resp);
+
+    if (resp && resp.success) {
+      tbankSessionId = resp.sessionId;
+      console.log('[TBANK] Login successful! Session ID:', tbankSessionId);
+      console.log('[TBANK] Full login response:', resp);
+
+      if (!tbankSessionId) {
+        console.error('[TBANK] ERROR: sessionId is missing in response!');
+        showPopup('Ошибка: не получен sessionId');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Подключить Т-Банк';
+        }
+        return;
+      }
+
+      // Сохраняем Session ID в Google Sheets отдельным запросом
+      console.log('[TBANK] Saving Session ID to Google Sheets...');
+      apiGet(
+        `?action=tbankSaveSessionId&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}`
+      ).then(saveResp => {
+        if (saveResp && saveResp.success) {
+          console.log('[TBANK] ✅ Session ID saved to Google Sheets successfully');
+        } else {
+          console.error('[TBANK] ❌ Failed to save Session ID:', saveResp?.error);
+        }
+      }).catch(err => {
+        console.error('[TBANK] ❌ Error saving Session ID:', err);
+      });
+
+      // Start polling for required input
+      startTBankInputPolling();
+    } else {
+      console.error('tbankLogin failed:', resp);
+      showPopup('Ошибка подключения: ' + (resp?.error || 'Неизвестная ошибка'));
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Подключить Т-Банк';
+      }
+    }
+  } catch (e) {
+    console.error('tbankLogin exception:', e);
+    showPopup('Ошибка сети: ' + e.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Подключить Т-Банк';
+    }
+  }
+}
+
+function startTBankInputPolling() {
+  if (tbankPollingInterval) clearInterval(tbankPollingInterval);
+
+  // Reset connection handled flag when starting new polling session
+  tbankConnectionHandled = false;
+
+  console.log('[TBANK POLLING] Starting polling with sessionId:', tbankSessionId);
+
+  tbankPollingInterval = setInterval(async () => {
+    try {
+      console.log('[TBANK POLLING] Checking pending input...');
+      const resp = await apiGet(
+        `?action=tbankCheckPendingInput&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}`
+      );
+
+      console.log('[TBANK POLLING] Response:', resp);
+
+      if (resp && resp.success) {
+        if (resp.pendingType === 'sms') {
+          // SMS is now automated via MacroDroid - don't show to user
+          if (lastShownQuestion !== 'sms') {
+            console.log('[TBANK] SMS step automated, waiting for MacroDroid to submit code...');
+            lastShownQuestion = 'sms';
+          }
+        } else if (resp.pendingType === 'dynamic-question') {
+          // Dynamic question - extract question text and show appropriate input
+          const questionData = resp.pendingData;
+
+          // Only show if question changed
+          const questionKey = questionData?.question || '';
+          if (lastShownQuestion !== questionKey) {
+            console.log('[TBANK] Dynamic question received:', questionData);
+            if (questionData && questionData.question) {
+              // Show dynamic question step with the question text
+              showTBankStep('dynamic-question', questionData);
+              lastShownQuestion = questionKey;
+            }
+          }
+        } else if (resp.pendingType === 'card') {
+          // Legacy card type (backwards compatibility)
+          if (lastShownQuestion !== 'card') {
+            showTBankStep('card');
+            lastShownQuestion = 'card';
+          }
+        } else if (resp.pendingType === 'security-question') {
+          // Legacy security question (backwards compatibility)
+          const questionKey = resp.pendingData || '';
+          if (lastShownQuestion !== questionKey) {
+            showTBankStep('security-question', resp.pendingData);
+            lastShownQuestion = questionKey;
+          }
+        } else if (resp.pendingType === 'waiting') {
+          // Login in progress, keep polling
+          if (lastShownQuestion !== 'waiting') {
+            console.log('Login in progress, waiting for next step...');
+            lastShownQuestion = 'waiting';
+          }
+        } else if (resp.pendingType === 'error') {
+          // Login failed
+          stopTBankInputPolling();
+          showPopup('Ошибка входа в Т-Банк. Попробуйте снова.');
+          lastShownQuestion = null;
+        } else if ((resp.pendingType === 'completed' || resp.authenticated === true) && !tbankConnectionHandled) {
+          // Login complete (authenticated or explicitly marked as completed), fetch accounts (only once)
+          tbankConnectionHandled = true;
+          stopTBankInputPolling();
+          lastShownQuestion = null;
+          await onTBankConnected();
+        }
+      }
+    } catch (e) {
+      console.error('Polling error:', e);
+    }
+  }, 2000); // Poll every 2 seconds
+}
+
+function stopTBankInputPolling() {
+  if (tbankPollingInterval) {
+    clearInterval(tbankPollingInterval);
+    tbankPollingInterval = null;
+  }
+}
+
+async function submitTBankSMS() {
+  const input = document.getElementById('tbank2FACode');
+  const btn = document.getElementById('tbankVerifyBtn');
+  const code = input?.value;
+
+  if (!code) {
+    showPopup('Введите код из СМС');
+    return;
+  }
+
+  // Блокируем кнопку сразу после нажатия
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.style.cursor = 'not-allowed';
+  }
+
+  try {
+    const resp = await apiGet(
+      `?action=tbankSubmitInput&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}&value=${encodeURIComponent(code)}`
+    );
+
+    if (resp && resp.success) {
+      lastShownQuestion = null;
+      showPopup('Код принят');
+
+      // Скрываем форму и показываем загрузку
+      const stepSMS = document.getElementById('tbankStepSMS');
+      if (stepSMS) {
+        stepSMS.innerHTML = '<div style="text-align: center; padding: 20px;"><div class="spinner-big" aria-label="Загрузка"></div><p style="margin-top: 16px; color: var(--text-secondary); font-size: 13px;">Ожидание следующего шага...</p></div>';
+      }
+    } else {
+      showPopup('Ошибка отправки кода');
+      // Разблокируем кнопку при ошибке
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+      }
+    }
+  } catch (e) {
+    showPopup('Ошибка сети');
+    // Разблокируем кнопку при ошибке
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+    }
+  }
+}
+
+async function submitTBankCard() {
+  const input = document.getElementById('tbankCardNumber');
+  const btn = document.getElementById('tbankCardBtn');
+  const card = input?.value.replace(/\s/g, '');
+
+  if (!card || card.length < 16) {
+    showPopup('Введите номер карты');
+    return;
+  }
+
+  // Блокируем кнопку сразу после нажатия
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.style.cursor = 'not-allowed';
+  }
+
+  try {
+    const resp = await apiGet(
+      `?action=tbankSubmitInput&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}&value=${encodeURIComponent(card)}`
+    );
+
+    if (resp && resp.success) {
+      lastShownQuestion = null;
+      showPopup('Номер карты принят');
+
+      // Скрываем форму и показываем загрузку
+      const stepCard = document.getElementById('tbankStepCard');
+      if (stepCard) {
+        stepCard.innerHTML = '<div style="text-align: center; padding: 20px;"><div class="spinner-big" aria-label="Загрузка"></div><p style="margin-top: 16px; color: var(--text-secondary); font-size: 13px;">Ожидание следующего шага...</p></div>';
+      }
+    } else {
+      showPopup('Ошибка отправки номера карты');
+      // Разблокируем кнопку при ошибке
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+      }
+    }
+  } catch (e) {
+    showPopup('Ошибка сети');
+    // Разблокируем кнопку при ошибке
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+    }
+  }
+}
+
+async function submitTBankSecurityAnswer() {
+  const input = document.getElementById('tbankSecurityAnswer');
+  const btn = document.getElementById('tbankAnswerBtn');
+  const answer = input?.value.trim();
+
+  if (!answer) {
+    showPopup('Введите ответ на вопрос');
+    return;
+  }
+
+  // Блокируем кнопку сразу после нажатия
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.style.cursor = 'not-allowed';
+  }
+
+  try {
+    const resp = await apiGet(
+      `?action=tbankSubmitInput&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}&value=${encodeURIComponent(answer)}`
+    );
+
+    if (resp && resp.success) {
+      lastShownQuestion = null;
+      showPopup('Ответ принят');
+
+      // Скрываем форму и показываем загрузку
+      const stepQuestion = document.getElementById('tbankStepSecurityQuestion');
+      if (stepQuestion) {
+        stepQuestion.innerHTML = '<div style="text-align: center; padding: 20px;"><div class="spinner-big" aria-label="Загрузка"></div><p style="margin-top: 16px; color: var(--text-secondary); font-size: 13px;">Ожидание следующего шага...</p></div>';
+      }
+    } else {
+      showPopup('Ошибка отправки ответа');
+      // Разблокируем кнопку при ошибке
+      if (btn) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+      }
+    }
+  } catch (e) {
+    showPopup('Ошибка сети');
+    // Разблокируем кнопку при ошибке
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+    }
+  }
+}
+
+async function onTBankConnected() {
+  try {
+    const resp = await apiGet(
+      `?action=tbankGetAccounts&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}`
+    );
+
+    if (resp && resp.success && resp.accounts) {
+      tbankAccounts = resp.accounts;
+      tbankConnected = true;
+      showTBankStep('connected');
+      showPopup('Т-Банк успешно подключен!');
+      updateEveningPercentBtnState();
+    } else {
+      showPopup('Не удалось получить список счетов');
+    }
+  } catch (e) {
+    showPopup('Ошибка получения счетов');
+  }
+}
+
+async function disconnectTBank() {
+  if (!tbankSessionId) return;
+
+  try {
+    await apiGet(
+      `?action=tbankLogout&username=${encodeURIComponent(username)}&sessionId=${encodeURIComponent(tbankSessionId)}`
+    );
+  } catch (e) {
+    console.error('Error disconnecting T-Bank:', e);
+  } finally {
+    tbankSessionId = null;
+    tbankConnected = false;
+    tbankAccounts = [];
+    showTBankStep('step1');
+    updateEveningPercentBtnState();
+    showPopup('Т-Банк отключен');
+  }
+}
+
+/**
+ * Загрузка текущих настроек вечернего процента
+ */
+async function loadEveningPercentSettings() {
+  try {
+    const resp = await apiGet(
+      `?action=tbankGetTransferSchedule&username=${encodeURIComponent(username)}`
+    );
+
+    if (resp) {
+      // Load evening/morning times
+      if (resp.eveningTransferTime) {
+        const eveningHour = parseInt(resp.eveningTransferTime.split(':')[0]);
+        const eveningSlider = document.getElementById('eveningStartTime');
+        if (eveningSlider) {
+          eveningSlider.value = eveningHour;
+          updateEveningTimeDisplay();
+        }
+      }
+
+      if (resp.morningTransferTime) {
+        const morningHour = parseInt(resp.morningTransferTime.split(':')[0]);
+        const morningSlider = document.getElementById('eveningEndTime');
+        if (morningSlider) {
+          morningSlider.value = morningHour;
+          updateEveningTimeDisplay();
+        }
+      }
+    }
+
+    // Load timezone
+    const tzResp = await apiGet(
+      `?action=getUserTimezone&username=${encodeURIComponent(username)}`
+    );
+
+    if (tzResp && tzResp.timezone) {
+      const tzSelect = document.getElementById('userTimezone');
+      if (tzSelect) {
+        tzSelect.value = tzResp.timezone;
+      }
+    }
+  } catch (e) {
+    console.error('[EVENING_PERCENT] Error loading settings:', e);
+  }
+}
+
+async function applyEveningPercent() {
+  const agreeEl = document.getElementById('eveningPercentAgree');
+  const eveningTime = parseInt(document.getElementById('eveningStartTime').value);
+  const morningTime = parseInt(document.getElementById('eveningEndTime').value);
+  const timezoneEl = document.getElementById('userTimezone');
+
+  // Backend validation: check agreement
+  if (!agreeEl || !agreeEl.checked) {
+    showPopup('Необходимо согласиться с условиями');
+    return;
+  }
+
+  const btn = document.getElementById('eveningPercentApplyBtn');
+  if (btn) btn.disabled = true;
+
+  try {
+    // Форматируем время в HH:MM для сохранения в Google Sheets
+    const eveningTransferTime = String(eveningTime).padStart(2, '0') + ':00';
+    const morningTransferTime = String(morningTime).padStart(2, '0') + ':00';
+    const userTimezone = timezoneEl ? timezoneEl.value : 'Europe/Moscow';
+
+    // Сохраняем timezone
+    const tzResp = await apiGet(
+      `?action=saveUserTimezone&username=${encodeURIComponent(username)}&timezone=${encodeURIComponent(userTimezone)}`
+    );
+
+    if (!tzResp || !tzResp.success) {
+      console.error('[EVENING_PERCENT] Failed to save timezone:', tzResp);
+    }
+
+    // Сохраняем расписание переводов в Google Sheets (теперь с новыми полями)
+    const resp = await apiGet(
+      `?action=tbankSaveTransferSchedule&username=${encodeURIComponent(username)}&transferToTime=&transferFromTime=&eveningTransferTime=${encodeURIComponent(eveningTransferTime)}&morningTransferTime=${encodeURIComponent(morningTransferTime)}`
+    );
+
+    if (resp && resp.success) {
+      showPopup('График применён!');
+      closeModal('eveningPercent');
+
+      console.log('[EVENING_PERCENT] Transfer schedule saved:', {
+        eveningTransferTime,
+        morningTransferTime,
+        userTimezone
+      });
+    } else {
+      showPopup('Ошибка: ' + ((resp && resp.error) || 'unknown'));
+    }
+  } catch (e) {
+    console.error('[EVENING_PERCENT] Error saving transfer schedule:', e);
+    showPopup('Ошибка сети.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/**
+ * Тестовый перевод: Т-Банк → Альфа-Банк (вечерний)
+ */
+async function testTransferToAlfa() {
+  const btn = document.getElementById('testTransferToAlfaBtn');
+
+  if (btn) btn.disabled = true;
+
+  try {
+    showPopup('🌆 Выполняется вечерний перевод с Т-Банка на Альфа-Банк...');
+
+    const response = await fetch(`${TBANK_API_URL}/api/evening-transfer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username })
+    });
+
+    const resp = await response.json();
+
+    if (resp && resp.success) {
+      showPopup('✅ Вечерний перевод выполнен успешно!');
+      console.log('[EVENING_PERCENT] Evening transfer completed:', resp);
+    } else {
+      showPopup('❌ Ошибка: ' + ((resp && resp.error) || 'unknown'));
+    }
+  } catch (e) {
+    console.error('[EVENING_PERCENT] Error in evening transfer:', e);
+    showPopup('❌ Ошибка сети: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/**
+ * Тестовый перевод: Альфа-Банк → Т-Банк (утренний)
+ */
+async function testTransferFromAlfa() {
+  const btn = document.getElementById('testTransferFromAlfaBtn');
+
+  if (btn) btn.disabled = true;
+
+  try {
+    showPopup('🌅 Выполняется утренний перевод с Альфа-Банка на Т-Банк...');
+
+    const response = await fetch(`${TBANK_API_URL}/api/morning-transfer`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username })
+    });
+
+    const resp = await response.json();
+
+    if (resp && resp.success) {
+      showPopup('✅ Утренний перевод выполнен успешно!');
+      console.log('[EVENING_PERCENT] Morning transfer completed:', resp);
+    } else {
+      showPopup('❌ Ошибка: ' + ((resp && resp.error) || 'unknown'));
+    }
+  } catch (e) {
+    console.error('[EVENING_PERCENT] Error in morning transfer:', e);
+    showPopup('❌ Ошибка сети: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function testAlfaToTBank() {
+  const btn = document.getElementById('testAlfaToTBankBtn');
+
+  if (btn) btn.disabled = true;
+
+  try {
+    showPopup('🔄 Выполняется STAGE 2 (ALFA→TBANK) + STAGE 3 (Т-Банк шаги 19-23)...');
+
+    const response = await fetch(`${TBANK_API_URL}/api/alfa-to-tbank`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ username })
+    });
+
+    const resp = await response.json();
+
+    if (resp && resp.success) {
+      showPopup('✅ STAGE 2+3 выполнены успешно! Все шаги завершены.');
+      console.log('[EVENING_PERCENT] ALFA→TBANK + T-Bank steps completed:', resp);
+    } else {
+      showPopup('❌ Ошибка: ' + ((resp && resp.error) || 'unknown'));
+    }
+  } catch (e) {
+    console.error('[EVENING_PERCENT] Error in ALFA→TBANK + T-Bank steps:', e);
+    showPopup('❌ Ошибка сети: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// -------- INIT --------
+document.addEventListener('DOMContentLoaded', () => {
+  setupEventListeners();
+  initializeApp();
+});
