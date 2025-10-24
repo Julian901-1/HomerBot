@@ -1,35 +1,5 @@
-# Dependencies
-node_modules/
-package-lock.json
-yarn.lock
-
-# Environment variables
-.env
-
-# Logs
-logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Puppeteer cache
-.cache/
-.local-chromium/
-
-# Session data
-sessions/
-*.session
-
-# User data directories (Chrome profiles)
-user-data/
+google_sheets_sync.js
+google_sheets_sync.js
+*.md
+google_sheets_sync.js
