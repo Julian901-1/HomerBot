@@ -75,7 +75,6 @@
                 <div class="strategies-section">
                     <h2>Инвестиционные возможности</h2>
                     <div class="strategy-layout">
-                      <div class="left-strategies">
                         <div class="strategy-option" onclick="openModal('strategy16')">
                           <div class="rate-badge">16%</div>
                         </div>
@@ -85,15 +84,6 @@
                         <div class="strategy-option" onclick="openModal('strategy18')">
                           <div class="rate-badge">18%</div>
                         </div>
-                      </div>
-                      <div class="right-options">
-                        <div class="option-rectangle" onclick="openModal('eveningPercent')">
-                          <span>Вечерний процент</span>
-                        </div>
-                        <div class="option-rectangle">
-                          <span>Кэшбэк AUTO</span>
-                        </div>
-                      </div>
                     </div>
                 </div>
             </div>
@@ -484,96 +474,6 @@
         </div>
         <div style="font-size: 13px; color: var(--text-secondary); margin-top: 12px; padding: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px;">
           При включении автопродления инвестиции "Стабильный" и "Агрессивный" будут автоматически продлеваться на тот же срок после окончания периода заморозки. Заработанные проценты будут доступны к выводу. Вы получите уведомление в Telegram за день до продления.
-        </div>
-      </div>
-    </div>
-
-    <!-- Evening Percent Modal -->
-    <div id="modalEveningPercent" class="modal-overlay" role="dialog" aria-labelledby="evening-percent-title" aria-modal="true">
-      <div class="modal">
-        <div class="modal-header">
-          <h2 id="evening-percent-title" class="modal-title">Вечерний процент</h2>
-          <button class="close-btn" onclick="closeModal('eveningPercent')" aria-label="Закрыть вечерний процент">✕</button>
-        </div>
-
-        <div class="glass-card" style="margin-bottom: 16px;">
-          <p style="color: var(--text-secondary); font-size: 14px; line-height: 1.6;">
-            Ваши средства работают на вас даже ночью! Вечером деньги автоматически переводятся с Т-Банка на накопительный счёт Альфа-Банка с повышенной процентной ставкой, а утром возвращаются обратно. Настройте удобное для вас время, и система будет работать автоматически.
-          </p>
-        </div>
-
-        <!-- Time Configuration -->
-        <div id="timeConfigSection">
-          <div class="glass-card" style="margin-bottom: 16px;">
-            <h3 style="margin-bottom: 12px; font-size: 16px;">Настройки времени</h3>
-
-            <!-- Timezone Selector -->
-            <div style="margin-bottom: 16px;">
-              <label for="userTimezone" style="display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 14px;">Часовой пояс</label>
-              <select id="userTimezone" class="input-field" style="width: 100%; padding: 12px;">
-                <option value="Europe/Moscow">Москва (UTC+3)</option>
-                <option value="Europe/Kaliningrad">Калининград (UTC+2)</option>
-                <option value="Europe/Samara">Самара (UTC+4)</option>
-                <option value="Asia/Yekaterinburg">Екатеринбург (UTC+5)</option>
-                <option value="Asia/Omsk">Омск (UTC+6)</option>
-                <option value="Asia/Krasnoyarsk">Красноярск (UTC+7)</option>
-                <option value="Asia/Irkutsk">Иркутск (UTC+8)</option>
-                <option value="Asia/Yakutsk">Якутск (UTC+9)</option>
-                <option value="Asia/Vladivostok">Владивосток (UTC+10)</option>
-                <option value="Asia/Magadan">Магадан (UTC+11)</option>
-                <option value="Asia/Kamchatka">Камчатка (UTC+12)</option>
-              </select>
-            </div>
-
-            <div class="time-config-container">
-              <div class="time-selector">
-                <label for="eveningStartTime" style="display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 14px;">🌆 Вечером (перевод на Альфу)</label>
-                <input type="range" id="eveningStartTime" min="0" max="23" value="22" oninput="updateEveningTimeDisplay()">
-                <div id="eveningStartTimeDisplay" class="time-display">22:00</div>
-              </div>
-
-              <div class="time-separator">—</div>
-
-              <div class="time-selector">
-                <label for="eveningEndTime" style="display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 14px;">🌅 Утром (возврат на Т-Банк)</label>
-                <input type="range" id="eveningEndTime" min="0" max="23" value="6" oninput="updateEveningTimeDisplay()">
-                <div id="eveningEndTimeDisplay" class="time-display">06:00</div>
-              </div>
-            </div>
-
-            <div style="margin-top: 12px; padding: 10px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; font-size: 13px; color: var(--text-secondary);">
-              Фактическое время будет варьироваться ±20 минут для безопасности операций
-            </div>
-          </div>
-
-          <div class="agree-row" style="margin-bottom: 16px;">
-            <span>Я согласен с <a href="https://docs.google.com/document/d/1Rv3N2iTgwHXhTkSgv-BwKLrekVpZtoGfU_ct2lDw00g/edit?usp=sharing" target="_blank">условиями</a></span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="eveningPercentAgree" onchange="updateEveningPercentBtnState()">
-              <span class="slider"></span>
-            </label>
-          </div>
-
-          <button class="btn btn-primary" id="eveningPercentApplyBtn" style="width: 100%;" disabled onclick="applyEveningPercent()">
-            Применить график
-          </button>
-
-          <!-- Test Buttons -->
-          <div class="glass-card" style="margin-top: 16px; padding: 12px;">
-            <h4 style="margin-bottom: 12px; font-size: 14px; color: var(--text-secondary);">Тестовые переводы</h4>
-
-            <button class="btn" id="testTransferToAlfaBtn" style="width: 100%; margin-bottom: 8px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5);" onclick="testTransferToAlfa()">
-              🌆 Перевести с Т-Банка на Альфу
-            </button>
-
-            <button class="btn" id="testTransferFromAlfaBtn" style="width: 100%; margin-bottom: 8px; background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.5);" onclick="testTransferFromAlfa()">
-              🌅 Полный утренний перевод (2 этапа)
-            </button>
-
-            <button class="btn" id="testAlfaToTBankBtn" style="width: 100%; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.5);" onclick="testAlfaToTBank()">
-              🔄 Перевести с Альфы на Т-Банк (только Stage 2)
-            </button>
-          </div>
         </div>
       </div>
     </div>

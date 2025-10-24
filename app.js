@@ -239,11 +239,6 @@ function openModal(modalId) {
     if (autoRenewToggle) autoRenewToggle.checked = userPrefs.autoRenew !== false;
   }
 
-  // Special logic for "Evening Percent" - no authentication needed, working with fixed credentials
-  if (modalId === 'eveningPercent') {
-    // Load user's current settings if any
-    loadEveningPercentSettings();
-  }
 
         // Special logic for "Withdraw"
  if (modalId === 'withdraw') {
@@ -1655,23 +1650,6 @@ let tbankSessionId = null;
 let tbankConnected = false;
 let tbankAccounts = [];
 
-function updateEveningTimeDisplay() {
-  const startTime = parseInt(document.getElementById('eveningStartTime').value);
-  const endTime = parseInt(document.getElementById('eveningEndTime').value);
-
-  document.getElementById('eveningStartTimeDisplay').textContent =
-    `${String(startTime).padStart(2, '0')}:00`;
-  document.getElementById('eveningEndTimeDisplay').textContent =
-    `${String(endTime).padStart(2, '0')}:00`;
-}
-
-function updateEveningPercentBtnState() {
-  const agreeEl = document.getElementById('eveningPercentAgree');
-  const btn = document.getElementById('eveningPercentApplyBtn');
-  if (btn && agreeEl) {
-    btn.disabled = !agreeEl.checked;
-  }
-}
 
 function showTBankStep(step, data = null) {
   const step1 = document.getElementById('tbankStep1');
@@ -2106,7 +2084,6 @@ async function onTBankConnected() {
       tbankConnected = true;
       showTBankStep('connected');
       showPopup('Т-Банк успешно подключен!');
-      updateEveningPercentBtnState();
     } else {
       showPopup('Не удалось получить список счетов');
     }
@@ -2129,211 +2106,7 @@ async function disconnectTBank() {
     tbankConnected = false;
     tbankAccounts = [];
     showTBankStep('step1');
-    updateEveningPercentBtnState();
     showPopup('Т-Банк отключен');
-  }
-}
-
-/**
- * Загрузка текущих настроек вечернего процента
- */
-async function loadEveningPercentSettings() {
-  try {
-    const resp = await apiGet(
-      `?action=tbankGetTransferSchedule&username=${encodeURIComponent(username)}`
-    );
-
-    if (resp) {
-      // Load evening/morning times
-      if (resp.eveningTransferTime) {
-        const eveningHour = parseInt(resp.eveningTransferTime.split(':')[0]);
-        const eveningSlider = document.getElementById('eveningStartTime');
-        if (eveningSlider) {
-          eveningSlider.value = eveningHour;
-          updateEveningTimeDisplay();
-        }
-      }
-
-      if (resp.morningTransferTime) {
-        const morningHour = parseInt(resp.morningTransferTime.split(':')[0]);
-        const morningSlider = document.getElementById('eveningEndTime');
-        if (morningSlider) {
-          morningSlider.value = morningHour;
-          updateEveningTimeDisplay();
-        }
-      }
-    }
-
-    // Load timezone
-    const tzResp = await apiGet(
-      `?action=getUserTimezone&username=${encodeURIComponent(username)}`
-    );
-
-    if (tzResp && tzResp.timezone) {
-      const tzSelect = document.getElementById('userTimezone');
-      if (tzSelect) {
-        tzSelect.value = tzResp.timezone;
-      }
-    }
-  } catch (e) {
-    console.error('[EVENING_PERCENT] Error loading settings:', e);
-  }
-}
-
-async function applyEveningPercent() {
-  const agreeEl = document.getElementById('eveningPercentAgree');
-  const eveningTime = parseInt(document.getElementById('eveningStartTime').value);
-  const morningTime = parseInt(document.getElementById('eveningEndTime').value);
-  const timezoneEl = document.getElementById('userTimezone');
-
-  // Backend validation: check agreement
-  if (!agreeEl || !agreeEl.checked) {
-    showPopup('Необходимо согласиться с условиями');
-    return;
-  }
-
-  const btn = document.getElementById('eveningPercentApplyBtn');
-  if (btn) btn.disabled = true;
-
-  try {
-    // Форматируем время в HH:MM для сохранения в Google Sheets
-    const eveningTransferTime = String(eveningTime).padStart(2, '0') + ':00';
-    const morningTransferTime = String(morningTime).padStart(2, '0') + ':00';
-    const userTimezone = timezoneEl ? timezoneEl.value : 'Europe/Moscow';
-
-    // Сохраняем timezone
-    const tzResp = await apiGet(
-      `?action=saveUserTimezone&username=${encodeURIComponent(username)}&timezone=${encodeURIComponent(userTimezone)}`
-    );
-
-    if (!tzResp || !tzResp.success) {
-      console.error('[EVENING_PERCENT] Failed to save timezone:', tzResp);
-    }
-
-    // Сохраняем расписание переводов в Google Sheets (теперь с новыми полями)
-    const resp = await apiGet(
-      `?action=tbankSaveTransferSchedule&username=${encodeURIComponent(username)}&transferToTime=&transferFromTime=&eveningTransferTime=${encodeURIComponent(eveningTransferTime)}&morningTransferTime=${encodeURIComponent(morningTransferTime)}`
-    );
-
-    if (resp && resp.success) {
-      showPopup('График применён!');
-      closeModal('eveningPercent');
-
-      console.log('[EVENING_PERCENT] Transfer schedule saved:', {
-        eveningTransferTime,
-        morningTransferTime,
-        userTimezone
-      });
-    } else {
-      showPopup('Ошибка: ' + ((resp && resp.error) || 'unknown'));
-    }
-  } catch (e) {
-    console.error('[EVENING_PERCENT] Error saving transfer schedule:', e);
-    showPopup('Ошибка сети.');
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-/**
- * Тестовый перевод: Т-Банк → Альфа-Банк (вечерний)
- */
-async function testTransferToAlfa() {
-  const btn = document.getElementById('testTransferToAlfaBtn');
-
-  if (btn) btn.disabled = true;
-
-  try {
-    showPopup('🌆 Выполняется вечерний перевод с Т-Банка на Альфа-Банк...');
-
-    const response = await fetch(`${TBANK_API_URL}/api/evening-transfer`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ username })
-    });
-
-    const resp = await response.json();
-
-    if (resp && resp.success) {
-      showPopup('✅ Вечерний перевод выполнен успешно!');
-      console.log('[EVENING_PERCENT] Evening transfer completed:', resp);
-    } else {
-      showPopup('❌ Ошибка: ' + ((resp && resp.error) || 'unknown'));
-    }
-  } catch (e) {
-    console.error('[EVENING_PERCENT] Error in evening transfer:', e);
-    showPopup('❌ Ошибка сети: ' + e.message);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-/**
- * Тестовый перевод: Альфа-Банк → Т-Банк (утренний)
- */
-async function testTransferFromAlfa() {
-  const btn = document.getElementById('testTransferFromAlfaBtn');
-
-  if (btn) btn.disabled = true;
-
-  try {
-    showPopup('🌅 Выполняется утренний перевод с Альфа-Банка на Т-Банк...');
-
-    const response = await fetch(`${TBANK_API_URL}/api/morning-transfer`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ username })
-    });
-
-    const resp = await response.json();
-
-    if (resp && resp.success) {
-      showPopup('✅ Утренний перевод выполнен успешно!');
-      console.log('[EVENING_PERCENT] Morning transfer completed:', resp);
-    } else {
-      showPopup('❌ Ошибка: ' + ((resp && resp.error) || 'unknown'));
-    }
-  } catch (e) {
-    console.error('[EVENING_PERCENT] Error in morning transfer:', e);
-    showPopup('❌ Ошибка сети: ' + e.message);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function testAlfaToTBank() {
-  const btn = document.getElementById('testAlfaToTBankBtn');
-
-  if (btn) btn.disabled = true;
-
-  try {
-    showPopup('🔄 Выполняется STAGE 2 (ALFA→TBANK) + STAGE 3 (Т-Банк шаги 19-23)...');
-
-    const response = await fetch(`${TBANK_API_URL}/api/alfa-to-tbank`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ username })
-    });
-
-    const resp = await response.json();
-
-    if (resp && resp.success) {
-      showPopup('✅ STAGE 2+3 выполнены успешно! Все шаги завершены.');
-      console.log('[EVENING_PERCENT] ALFA→TBANK + T-Bank steps completed:', resp);
-    } else {
-      showPopup('❌ Ошибка: ' + ((resp && resp.error) || 'unknown'));
-    }
-  } catch (e) {
-    console.error('[EVENING_PERCENT] Error in ALFA→TBANK + T-Bank steps:', e);
-    showPopup('❌ Ошибка сети: ' + e.message);
-  } finally {
-    if (btn) btn.disabled = false;
   }
 }
 
